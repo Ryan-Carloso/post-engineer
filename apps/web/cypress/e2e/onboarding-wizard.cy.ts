@@ -23,7 +23,6 @@ describe('Onboarding wizard', () => {
 
     cy.intercept('GET', '/api/persona/list', { authenticated: true, personas: [] }).as('personas');
     cy.intercept('GET', '/api/account', { authenticated: true, accounts: [] }).as('accounts');
-    cy.intercept('GET', '/api/persona/video-generations*', { success: true, generations: [] }).as('generations');
     cy.intercept('GET', '/api/schedule', { success: true, schedules: [] }).as('schedules');
     cy.intercept('GET', '/api/schedule/status*', { success: true, upcoming: [], recent: [], slots: [] }).as('status');
     stubAccount({});

@@ -22,7 +22,7 @@ export const RescheduleSection = ({
   const [invalid, setInvalid] = useState(false);
 
   const canReschedule =
-    (slot.status === 'awaiting' || slot.status === 'ready') && publishMode === 'scheduled';
+    slot.status === 'ready' && publishMode === 'scheduled';
   const min = useMemo(
     () => utcToZonedInputValue(new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString(), timezone),
     [timezone],

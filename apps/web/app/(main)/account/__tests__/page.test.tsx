@@ -101,16 +101,15 @@ describe('app/(main)/account — AccountPage', () => {
     expect(panel.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('renders the shared account panel: user, tokens, version, locale, sign out', () => {
+  it('renders the shared account panel: user, version, locale, sign out', () => {
     render(<AccountPage />, { wrapper: createWrapper() });
     expect(screen.getByText('Page User')).toBeInTheDocument();
-    expect(screen.getByTestId('token-balance')).toBeInTheDocument();
+    expect(screen.queryByTestId('token-balance')).not.toBeInTheDocument();
     expect(screen.getByTestId('version-badge')).toHaveTextContent('BETA');
     expect(screen.getByRole('button', { name: 'PT' })).toBeInTheDocument();
     expect(screen.getByTitle('nav.signOut')).toBeInTheDocument();
     const apiKeysLink = screen.getByTestId('profile-api-keys-link');
     expect(apiKeysLink).toHaveAttribute('href', '/recipes');
-    const billingLink = screen.getByTestId('profile-billing-link');
-    expect(billingLink).toHaveAttribute('href', '/billing');
+    expect(screen.queryByTestId('profile-billing-link')).not.toBeInTheDocument();
   });
 });

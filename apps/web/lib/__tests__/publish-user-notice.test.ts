@@ -42,7 +42,7 @@ describe('noticesFromOutcomes', () => {
   it('surfaces a parked publish_unknown outcome as a user notice', () => {
     const notice =
       'Fanvue may already have published this video, but the publish record was lost. ' +
-      'Check Fanvue before posting it again: this slot will not retry on its own and the token was not refunded.';
+      'Check Fanvue before posting it again: this slot will not retry on its own.';
     const { userNotices, providerFailures } = noticesFromOutcomes([
       { provider: 'fanvue', accountId: 'f1', status: 'failed', code: 'publish_unknown', requiresUser: true, notice },
     ]);

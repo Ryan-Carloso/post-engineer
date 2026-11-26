@@ -1,23 +1,18 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-export const NO_ACTION_TOOLS = ['generate_video', 'cancel_video'];
+export const NO_ACTION_TOOLS = [];
 
 export const SPECS_TO_TOOL = {
   'intent-accounts.ts:ACCOUNTS_SPECS': 'accounts',
   'intent-content.ts:EXPERIMENTS_SPECS': 'experiments',
-  'intent-content.ts:MEDIA_SPECS': 'media',
-  'intent-content.ts:CHECK_SCRIPT_SPECS': 'check_script',
   'intent-content.ts:PUBLISH_SPECS': 'publish_video',
   'intent-library.ts:SCHEDULES_SPECS': 'schedules',
   'intent-library.ts:POSTS_SPECS': 'posts',
   'intent-library.ts:INSIGHTS_SPECS': 'insights',
-  'intent-library.ts:BILLING_SPECS': 'billing',
   'intent-personas.ts:PERSONAS_SPECS': 'personas',
   'intent-personas.ts:MEDIA_SPECS': 'persona_media',
   'intent-tool-config.ts:TOOL_CONFIG_SPECS': 'tool_config',
-  'intent-video.ts:VIDEO_TASKS_SPECS': 'video_tasks',
-  'intent-voices.ts:VOICES_SPECS': 'voices',
   'tools-prompts.ts:PROMPTS_SPECS': 'prompts',
 };
 

@@ -1,6 +1,5 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest';
-import { PUBLISH_NETWORKS, checkPublish } from '@/lib/draft-scoring';
 import { PROVIDER_LABELS, accountOption, scheduleAccountIds } from '@/lib/account-options';
 import { resolvePublishLinks } from '@/lib/publish-links';
 import { COUNTER_FETCHERS } from '@/lib/metrics/provider-counters';
@@ -13,11 +12,6 @@ describe('Fanvue across the shared surfaces', () => {
   it('reports every counter as unknown: Fanvue exposes no per-post metrics the collector can read', async () => {
     const counters = await COUNTER_FETCHERS.fanvue('u', { provider: 'fanvue', accountId: 'a', externalId: '1' }, { window: '7d', now: new Date() });
     expect(counters).toEqual({ views: null, likes: null, comments: null, saves: null });
-  });
-
-  it('joins the publish networks with no documented caption ceiling, so the default branch applies', () => {
-    expect(PUBLISH_NETWORKS).toContain('fanvue');
-    expect(checkPublish('a'.repeat(5000), 'fanvue').failures).toEqual([]);
   });
 
   it('links only the provider-supplied permalink: no Fanvue post URL can be derived from an id', () => {

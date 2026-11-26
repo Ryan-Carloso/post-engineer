@@ -15,9 +15,6 @@ vi.mock('@/lib/supabase/server', () => ({
 vi.mock('@/lib/supabase/service', () => ({
   createSupabaseServiceClient: vi.fn(),
 }));
-vi.mock('@/lib/schedule-progress-history', () => ({
-  recordProgressHistory: vi.fn(async () => undefined),
-}));
 vi.mock('@/lib/logger', () => ({
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
 }));
@@ -28,7 +25,6 @@ import { ListPostsInRangeResponseSchema, ListPostsResponseSchema, RANGE_STATUSES
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
-import { recordProgressHistory } from '@/lib/schedule-progress-history';
 import { logger } from '@/lib/logger';
 
 describe('parseStatusLimit', () => {
@@ -130,8 +126,8 @@ function mockScopedPostsClient(schedules: Array<{ id: string; persona_id: string
 }
 
 describe('GET auth', () => {
-  const upcoming = [{ id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'pending', title: 'Next', schedule_id: 's1', error: null, published_at: null, task_id: null}];
-  const recent = [{ id: 're-1', slot_at: '2026-09-20T10:00:00Z', status: 'published', title: 'Old', schedule_id: 's1', error: null, published_at: null, task_id: null}];
+  const upcoming = [{ id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'ready', title: 'Next', schedule_id: 's1', error: null, published_at: null}];
+  const recent = [{ id: 're-1', slot_at: '2026-09-20T10:00:00Z', status: 'published', title: 'Old', schedule_id: 's1', error: null, published_at: null}];
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -163,21 +159,10 @@ describe('GET auth', () => {
       success: true,
       upcoming: upcoming.map((slot) => ({
         ...slot,
-        status: 'awaiting',
-        progress: 0,
-        stage: null,
-        queuePosition: null,
-        queueTotal: null,
-        retryable: null,
         postUrl: `https://example.com/posts/${slot.id}`,
       })),
       recent: recent.map((slot) => ({
         ...slot,
-        progress: 100,
-        stage: 'done',
-        queuePosition: null,
-        queueTotal: null,
-        retryable: null,
         postUrl: `https://example.com/posts/${slot.id}`,
       })),
       hasAnyPost: true,
@@ -214,21 +199,10 @@ describe('GET auth', () => {
       success: true,
       upcoming: upcoming.map((slot) => ({
         ...slot,
-        status: 'awaiting',
-        progress: 0,
-        stage: null,
-        queuePosition: null,
-        queueTotal: null,
-        retryable: null,
         postUrl: `https://example.com/posts/${slot.id}`,
       })),
       recent: recent.map((slot) => ({
         ...slot,
-        progress: 100,
-        stage: 'done',
-        queuePosition: null,
-        queueTotal: null,
-        retryable: null,
         postUrl: `https://example.com/posts/${slot.id}`,
       })),
       hasAnyPost: true,
@@ -264,21 +238,10 @@ describe('GET auth', () => {
       success: true,
       upcoming: upcoming.map((slot) => ({
         ...slot,
-        status: 'awaiting',
-        progress: 0,
-        stage: null,
-        queuePosition: null,
-        queueTotal: null,
-        retryable: null,
         postUrl: `https://example.com/posts/${slot.id}`,
       })),
       recent: recent.map((slot) => ({
         ...slot,
-        progress: 100,
-        stage: 'done',
-        queuePosition: null,
-        queueTotal: null,
-        retryable: null,
         postUrl: `https://example.com/posts/${slot.id}`,
       })),
       hasAnyPost: true,
@@ -286,8 +249,8 @@ describe('GET auth', () => {
   });
 
   it('restricts a persona-scoped API key to its allowed schedules', async () => {
-    const allowedUpcoming = [{ id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'pending', title: 'Next', schedule_id: 's1', error: null, published_at: null, task_id: null}];
-    const allowedRecent = [{ id: 're-1', slot_at: '2026-09-20T10:00:00Z', status: 'published', title: 'Old', schedule_id: 's1', error: null, published_at: null, task_id: null}];
+    const allowedUpcoming = [{ id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'ready', title: 'Next', schedule_id: 's1', error: null, published_at: null}];
+    const allowedRecent = [{ id: 're-1', slot_at: '2026-09-20T10:00:00Z', status: 'published', title: 'Old', schedule_id: 's1', error: null, published_at: null}];
     const client = mockScopedPostsClient(
       [{ id: 's1', persona_id: 'p1' }],
       allowedUpcoming,
@@ -311,21 +274,10 @@ describe('GET auth', () => {
       success: true,
       upcoming: allowedUpcoming.map((slot) => ({
         ...slot,
-        status: 'awaiting',
-        progress: 0,
-        stage: null,
-        queuePosition: null,
-        queueTotal: null,
-        retryable: null,
         postUrl: `https://example.com/posts/${slot.id}`,
       })),
       recent: allowedRecent.map((slot) => ({
         ...slot,
-        progress: 100,
-        stage: 'done',
-        queuePosition: null,
-        queueTotal: null,
-        retryable: null,
         postUrl: `https://example.com/posts/${slot.id}`,
       })),
       hasAnyPost: true,
@@ -333,7 +285,7 @@ describe('GET auth', () => {
   });
 
   it('keeps a persona-less schedule visible to a scoped key', async () => {
-    const upcoming = [{ id: 'up-9', slot_at: '2026-09-24T10:00:00Z', status: 'pending', title: 'No persona', schedule_id: 's9', error: null, published_at: null, task_id: null}];
+    const upcoming = [{ id: 'up-9', slot_at: '2026-09-24T10:00:00Z', status: 'ready', title: 'No persona', schedule_id: 's9', error: null, published_at: null}];
     const client = mockScopedPostsClient(
       [{ id: 's9', persona_id: null }],
       upcoming,
@@ -355,7 +307,7 @@ describe('GET auth', () => {
   });
 
   it('drops a schedule whose persona is outside the key scope', async () => {
-    const upcoming = [{ id: 'up-8', slot_at: '2026-09-24T10:00:00Z', status: 'pending', title: 'Other persona', schedule_id: 's8', error: null, published_at: null, task_id: null}];
+    const upcoming = [{ id: 'up-8', slot_at: '2026-09-24T10:00:00Z', status: 'ready', title: 'Other persona', schedule_id: 's8', error: null, published_at: null}];
     const client = mockScopedPostsClient(
       [{ id: 's8', persona_id: 'p-other' }],
       upcoming,
@@ -421,449 +373,8 @@ describe('hasAnyPost', () => {
   });
 });
 
-describe('GET progress linkage', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
 
-  it('selects task_id on upcoming slots so callers can poll video_tasks (action: status)', async () => {
-    const upcoming = [
-      { id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'generating', title: 'Next', schedule_id: 's1', task_id: 'task-1', error: null, published_at: null},
-    ];
-    const client = mockPostsClient(upcoming, []);
-    mockAuthSession({ userId: USER_ID, accessToken: 'pe_test_key', isApiKey: true }, null);
-    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
 
-    const response = await GET(new Request('https://example.com/api/schedule/status'));
-    expect(response.status).toBe(200);
-    const selectCalls = client.chain.select.mock.calls.map((c) => String(c[0]));
-    expect(selectCalls.some((s) => s.includes('task_id'))).toBe(true);
-    const body = (await response.json()) as { upcoming: { task_id: string }[] };
-    expect(body.upcoming[0].task_id).toBe('task-1');
-  });
-});
-
-describe('GET slot progress (0–100)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
-    vi.stubEnv('MONEYPRINT_API_SECRET', 'secret');
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    vi.unstubAllEnvs();
-  });
-
-  function mockEngine(body: unknown, ok = true) {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => ({ ok, status: ok ? 200 : 502, json: async () => body })),
-    );
-  }
-
-  async function getStatus(upcoming: unknown[], recent: unknown[] = [], queue: unknown[] = []) {
-    const client = mockPostsClient(upcoming, recent, queue);
-    mockAuthSession({ userId: USER_ID, accessToken: 'pe_test_key', isApiKey: true }, null);
-    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
-    const response = await GET(new Request('https://example.com/api/schedule/status?limit=50'));
-    expect(response.status).toBe(200);
-    return (await response.json()) as {
-      upcoming: SlotPresentation[];
-      recent: SlotPresentation[];
-    };
-  }
-
-  interface SlotPresentation {
-    id: string;
-    status: string;
-    progress: number;
-    stage: string | null;
-    queuePosition: number | null;
-    queueTotal: number | null;
-    retryable: boolean | null;
-    error?: string;
-  }
-
-  it('pending → 0 sem chamar o engine', async () => {
-    mockEngine({ body: { progress: 99 } });
-    const body = await getStatus([
-      { id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'pending', title: 'Next', schedule_id: 's1', error: null, published_at: null, task_id: null},
-    ]);
-    expect(body.upcoming[0].progress).toBe(0);
-    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
-  });
-
-  it('generating → progresso live do engine via task_id', async () => {
-    mockEngine({ body: { progress: 45, state: 4 } });
-    const body = await getStatus([
-      { id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'generating', title: 'Next', schedule_id: 's1', task_id: 'task-1', error: null, published_at: null},
-    ]);
-    expect(body.upcoming[0].progress).toBe(45);
-    const url = vi.mocked(fetch).mock.calls[0][0] as string;
-    expect(url).toContain('/api/v1/tasks/task-1');
-  });
-
-  it('caps the engine fan-out and degrades past the cap to progress 0', async () => {
-    mockEngine({ body: { progress: 62, stage: 'lipsync' } });
-    const slots = Array.from({ length: 30 }, (_, i) => ({
-      id: `up-${i}`,
-      slot_at: '2026-09-24T10:00:00Z',
-      status: 'generating',
-      title: `Title ${i}`,
-      schedule_id: 's1',
-      task_id: `task-${i}`,
-      error: null, published_at: null}));
-    const body = await getStatus(slots);
-
-    expect(vi.mocked(fetch).mock.calls.length).toBe(25);
-    expect(body.upcoming.slice(0, 25).every((s) => s.progress === 62)).toBe(true);
-    expect(body.upcoming.slice(25).every((s) => s.progress === 0)).toBe(true);
-  });
-
-  it('generating sem task_id → 0 sem chamar o engine', async () => {
-    mockEngine({ body: { progress: 45 } });
-    const body = await getStatus([
-      { id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'generating', title: 'Next', schedule_id: 's1', error: null, published_at: null, task_id: null},
-    ]);
-    expect(body.upcoming[0].progress).toBe(0);
-    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
-  });
-
-  it('ready/publishing/published → 100', async () => {
-    mockEngine({ body: { progress: 10 } });
-    const body = await getStatus(
-      [
-        { id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'ready', title: 'A', schedule_id: 's1', error: null, published_at: null, task_id: null},
-        { id: 'up-2', slot_at: '2026-09-24T11:00:00Z', status: 'publishing', title: 'B', schedule_id: 's1', error: null, published_at: null, task_id: null},
-      ],
-      [{ id: 're-1', slot_at: '2026-09-20T10:00:00Z', status: 'published', title: 'C', schedule_id: 's1', error: null, published_at: null, task_id: null}],
-    );
-    expect(body.upcoming.map((s) => s.progress)).toEqual([100, 100]);
-    expect(body.recent[0].progress).toBe(100);
-    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
-  });
-
-  it('busca os progressos em concorrência, não em série', async () => {
-    let inFlight = 0;
-    let maxInFlight = 0;
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => {
-        inFlight++;
-        maxInFlight = Math.max(maxInFlight, inFlight);
-        await new Promise((r) => setTimeout(r, 10));
-        inFlight--;
-        return { ok: true, status: 200, json: async () => ({ body: { progress: 50 } }) };
-      }),
-    );
-    const upcoming = [1, 2, 3, 4].map((i) => ({
-      id: `up-${i}`, slot_at: '2026-09-24T10:00:00Z', status: 'generating',
-      title: 'T', schedule_id: 's1', task_id: `task-${i}`,
-      error: null, published_at: null}));
-    const body = await getStatus(upcoming);
-    expect(body.upcoming.map((s) => s.progress)).toEqual([50, 50, 50, 50]);
-    expect(maxInFlight).toBeGreaterThan(1);
-  });
-
-  it('mapeia pending do banco para "awaiting" com posição na fila', async () => {
-    mockEngine({ body: { progress: 99 } });
-    const queue = [
-      { id: 'up-1', schedule_id: 's1', slot_at: '2026-09-24T10:00:00Z' },
-      { id: 'up-2', schedule_id: 's1', slot_at: '2026-09-24T11:00:00Z' },
-    ];
-    const body = await getStatus(
-      [
-        { id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'pending', title: 'Next', schedule_id: 's1', error: null, published_at: null, task_id: null},
-        { id: 'up-2', slot_at: '2026-09-24T11:00:00Z', status: 'pending', title: 'After', schedule_id: 's1', error: null, published_at: null, task_id: null},
-      ],
-      [],
-      queue,
-    );
-    expect(body.upcoming[0].status).toBe('awaiting');
-    expect(body.upcoming[0].progress).toBe(0);
-    expect(body.upcoming[0].stage).toBeNull();
-    expect(body.upcoming[0].queuePosition).toBe(1);
-    expect(body.upcoming[0].queueTotal).toBe(2);
-    expect(body.upcoming[1].queuePosition).toBe(2);
-    expect(body.upcoming[1].queueTotal).toBe(2);
-    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
-  });
-
-  it('generating repassa o stage do engine e não expõe posição de fila', async () => {
-    mockEngine({ body: { progress: 45, stage: 'lipsync' } });
-    const queue = [
-      { id: 'gen-1', schedule_id: 's1', slot_at: '2026-09-24T10:00:00Z' },
-      { id: 'up-1', schedule_id: 's1', slot_at: '2026-09-24T11:00:00Z' },
-    ];
-    const body = await getStatus(
-      [
-        { id: 'gen-1', slot_at: '2026-09-24T10:00:00Z', status: 'generating', title: 'Now', schedule_id: 's1', task_id: 'task-1', error: null, published_at: null},
-        { id: 'up-1', slot_at: '2026-09-24T11:00:00Z', status: 'pending', title: 'Next', schedule_id: 's1', error: null, published_at: null, task_id: null},
-      ],
-      [],
-      queue,
-    );
-    expect(body.upcoming[0].status).toBe('generating');
-    expect(body.upcoming[0].progress).toBe(45);
-    expect(body.upcoming[0].stage).toBe('lipsync');
-    expect(body.upcoming[0].queuePosition).toBeNull();
-    expect(body.upcoming[0].queueTotal).toBeNull();
-    expect(body.upcoming[1].status).toBe('awaiting');
-    expect(body.upcoming[1].queuePosition).toBe(2);
-    expect(body.upcoming[1].queueTotal).toBe(2);
-  });
-
-  it('ready/publishing/published têm stage "done"', async () => {
-    const body = await getStatus(
-      [{ id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'ready', title: 'A', schedule_id: 's1', error: null, published_at: null, task_id: null}],
-      [{ id: 're-1', slot_at: '2026-09-20T10:00:00Z', status: 'published', title: 'B', schedule_id: 's1', error: null, published_at: null, task_id: null}],
-    );
-    expect(body.upcoming[0].stage).toBe('done');
-    expect(body.recent[0].stage).toBe('done');
-  });
-
-  it('failed mantém error, último progresso e retryable pela categoria', async () => {
-    mockEngine({ body: { progress: 80, state: -1 } });
-    const body = await getStatus(
-      [],
-      [
-        { id: 're-1', slot_at: '2026-09-20T10:00:00Z', status: 'failed', title: 'A', schedule_id: 's1', task_id: 'task-9', error: 'Video service is unavailable.' , published_at: null},
-        { id: 're-2', slot_at: '2026-09-19T10:00:00Z', status: 'failed', title: 'B', schedule_id: 's1', error: 'custom audio file is invalid' , published_at: null, task_id: null},
-      ],
-    );
-    expect(body.recent[0].status).toBe('failed');
-    expect(body.recent[0].progress).toBe(80);
-    expect(body.recent[0].error).toBe('Video service is unavailable.');
-    expect(body.recent[0].retryable).toBe(true);
-    expect(body.recent[0].stage).toBeNull();
-    expect(body.recent[1].progress).toBe(0);
-    expect(body.recent[1].retryable).toBe(false);
-  });
-
-  it('engine fora do ar degrada o slot sem falhar o request', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('down'); }));
-    const body = await getStatus(
-      [{ id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'generating', title: 'Next', schedule_id: 's1', task_id: 'task-1', error: null, published_at: null}],
-      [{ id: 're-1', slot_at: '2026-09-20T10:00:00Z', status: 'failed', title: 'Old', schedule_id: 's1', task_id: 'task-9', error: 'boom' , published_at: null}],
-    );
-    expect(body.upcoming[0].progress).toBe(0);
-    expect(body.upcoming[0].stage).toBeNull();
-    expect(body.recent[0].progress).toBe(0);
-    expect(body.recent[0].retryable).toBe(false);
-  });
-
-  function generatingSlots(count: number): Record<string, unknown>[] {
-    return Array.from({ length: count }, (_, i) => ({
-      id: `gen-${i}`, slot_at: '2026-09-24T10:00:00Z', status: 'generating',
-      title: `Live ${i}`, schedule_id: 's1', task_id: `task-${i}`,
-      error: null, published_at: null}));
-  }
-
-  it('engine unreachable: one engine call and one warning for the whole request', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('fetch failed'); }));
-    const body = await getStatus(generatingSlots(4), [
-      { id: 're-1', slot_at: '2026-09-20T10:00:00Z', status: 'failed', title: 'Old', schedule_id: 's1', task_id: 'task-9', error: 'boom' , published_at: null},
-    ]);
-
-    expect(vi.mocked(fetch).mock.calls.length).toBe(1);
-    expect(body.upcoming.every((s) => s.progress === 0 && s.stage === null)).toBe(true);
-    expect(body.recent[0].progress).toBe(0);
-    const warnings = vi.mocked(logger.warn).mock.calls.map((call) => call[0]);
-    expect(warnings.filter((m) => m.includes('engine unreachable'))).toHaveLength(1);
-    expect(warnings.filter((m) => m.includes('engine task progress unavailable'))).toHaveLength(0);
-  });
-
-  it('engine 503 trips the probe like a network failure', async () => {
-    mockEngine({}, false);
-    vi.mocked(fetch).mockImplementation(async () => ({ ok: false, status: 503, json: async () => ({}) }) as never);
-    await getStatus(generatingSlots(3));
-
-    expect(vi.mocked(fetch).mock.calls.length).toBe(1);
-  });
-
-  it('a 500 tied to one task does not stop the other lookups', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (url: string) =>
-        url.includes('/task-0')
-          ? { ok: false, status: 500, json: async () => ({}) }
-          : { ok: true, status: 200, json: async () => ({ body: { progress: 40 } }) },
-      ),
-    );
-    const body = await getStatus(generatingSlots(3));
-
-    expect(vi.mocked(fetch).mock.calls.length).toBe(3);
-    expect(body.upcoming.map((s) => s.progress)).toEqual([0, 40, 40]);
-    const warnings = vi.mocked(logger.warn).mock.calls.map((call) => call[0]);
-    expect(warnings.filter((m) => m.includes('engine task progress unavailable'))).toHaveLength(1);
-  });
-
-  it('engine answering a 404 for the first task keeps looking up the others', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (url: string) =>
-        url.includes('/task-0')
-          ? { ok: false, status: 404, json: async () => ({}) }
-          : { ok: true, status: 200, json: async () => ({ body: { progress: 70 } }) },
-      ),
-    );
-    const body = await getStatus(generatingSlots(3));
-
-    expect(vi.mocked(fetch).mock.calls.length).toBeGreaterThanOrEqual(3);
-    expect(body.upcoming.slice(1).map((s) => s.progress)).toEqual([70, 70]);
-  });
-
-  it('does not spend the engine cap on pending slots', async () => {
-    mockEngine({ body: { progress: 62, stage: 'lipsync' } });
-    const pending = Array.from({ length: 25 }, (_, i) => ({
-      id: `pend-${i}`, slot_at: '2026-09-24T10:00:00Z', status: 'pending',
-      title: `Title ${i}`, schedule_id: 's1',
-      error: null, published_at: null, task_id: null}));
-    const live = Array.from({ length: 5 }, (_, i) => ({
-      id: `gen-${i}`, slot_at: '2026-09-24T10:00:00Z', status: 'generating',
-      title: `Live ${i}`, schedule_id: 's1', task_id: `task-${i}`,
-      error: null, published_at: null}));
-    const body = await getStatus([...pending, ...live]);
-
-    expect(vi.mocked(fetch).mock.calls.length).toBe(5);
-    expect(body.upcoming.slice(25).every((s) => s.progress === 62)).toBe(true);
-  });
-
-  it('does not spend the engine cap on generating slots without a task id', async () => {
-    mockEngine({ body: { progress: 62, stage: 'lipsync' } });
-    const withoutTask = Array.from({ length: 25 }, (_, i) => ({
-      id: `notask-${i}`, slot_at: '2026-09-24T10:00:00Z', status: 'generating',
-      title: `Title ${i}`, schedule_id: 's1',
-      error: null, published_at: null, task_id: null}));
-    const live = Array.from({ length: 5 }, (_, i) => ({
-      id: `gen-${i}`, slot_at: '2026-09-24T10:00:00Z', status: 'generating',
-      title: `Live ${i}`, schedule_id: 's1', task_id: `task-${i}`,
-      error: null, published_at: null}));
-    const body = await getStatus([...withoutTask, ...live]);
-
-    expect(vi.mocked(fetch).mock.calls.length).toBe(5);
-    expect(body.upcoming.slice(0, 25).every((s) => s.progress === 0)).toBe(true);
-    expect(body.upcoming.slice(25).every((s) => s.progress === 62)).toBe(true);
-  });
-
-  it('does not spend the engine cap on non-live slots that carry a task id', async () => {
-    mockEngine({ body: { progress: 62, stage: 'lipsync' } });
-    const pending = Array.from({ length: 25 }, (_, i) => ({
-      id: `pend-${i}`, slot_at: '2026-09-24T10:00:00Z', status: 'pending',
-      title: `Title ${i}`, schedule_id: 's1', task_id: `stale-task-${i}`,
-      error: null, published_at: null}));
-    const live = Array.from({ length: 5 }, (_, i) => ({
-      id: `gen-${i}`, slot_at: '2026-09-24T10:00:00Z', status: 'generating',
-      title: `Live ${i}`, schedule_id: 's1', task_id: `task-${i}`,
-      error: null, published_at: null}));
-    const body = await getStatus([...pending, ...live]);
-
-    expect(vi.mocked(fetch).mock.calls.length).toBe(5);
-    expect(body.upcoming.slice(25).every((s) => s.progress === 62)).toBe(true);
-  });
-
-  it('caps the engine fan-out for failed slots too', async () => {
-    mockEngine({ body: { progress: 80, state: -1 } });
-    const failed = Array.from({ length: 30 }, (_, i) => ({
-      id: `fail-${i}`, slot_at: '2026-09-24T10:00:00Z', status: 'failed',
-      title: `Title ${i}`, schedule_id: 's1', task_id: `task-${i}`, error: 'boom',
-      published_at: null}));
-    const body = await getStatus([], failed);
-
-    expect(vi.mocked(fetch).mock.calls.length).toBe(25);
-    expect(body.recent.slice(0, 25).every((s) => s.progress === 80)).toBe(true);
-    expect(body.recent.slice(25).every((s) => s.progress === 0)).toBe(true);
-  });
-});
-
-describe('GET progress history recording', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
-    vi.stubEnv('MONEYPRINT_API_SECRET', 'secret');
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    vi.unstubAllEnvs();
-  });
-
-  function mockEngine(body: unknown) {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => ({ ok: true, status: 200, json: async () => body })),
-    );
-  }
-
-  async function getStatusWithClient(upcoming: unknown[], recent: unknown[] = []) {
-    const client = mockPostsClient(upcoming, recent);
-    mockAuthSession({ userId: USER_ID, accessToken: 'pe_test_key', isApiKey: true }, null);
-    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
-    const response = await GET(new Request('https://example.com/api/schedule/status'));
-    expect(response.status).toBe(200);
-    return client;
-  }
-
-  it('records observed progress for generating slots with a task id', async () => {
-    mockEngine({ body: { progress: 40, stage: 'subtitle' } });
-    const client = await getStatusWithClient([
-      { id: 'gen-1', slot_at: '2026-10-07T18:00:00Z', status: 'generating', title: 'T', schedule_id: 's1', task_id: 'task-1', error: null, published_at: null},
-    ]);
-
-    expect(recordProgressHistory).toHaveBeenCalledOnce();
-    expect(vi.mocked(recordProgressHistory)).toHaveBeenCalledWith(client, USER_ID, [
-      { postId: 'gen-1', progress: 40, stage: 'subtitle' },
-    ]);
-  });
-
-  it('records last-known progress for failed slots with a task id', async () => {
-    mockEngine({ body: { progress: 80, state: -1 } });
-    await getStatusWithClient([], [
-      { id: 'fail-1', slot_at: '2026-10-06T18:00:00Z', status: 'failed', title: 'T', schedule_id: 's1', task_id: 'task-9', error: 'boom' , published_at: null},
-    ]);
-
-    expect(vi.mocked(recordProgressHistory)).toHaveBeenCalledWith(expect.anything(), USER_ID, [
-      { postId: 'fail-1', progress: 80, stage: null },
-    ]);
-  });
-
-  it('records nothing when no live slot carries a task id', async () => {
-    mockEngine({ body: { progress: 40 } });
-    await getStatusWithClient([
-      { id: 'up-1', slot_at: '2026-10-07T18:00:00Z', status: 'pending', title: 'T', schedule_id: 's1', error: null, published_at: null, task_id: null},
-    ]);
-
-    expect(vi.mocked(recordProgressHistory)).toHaveBeenCalledWith(expect.anything(), USER_ID, []);
-  });
-
-  it('ignores pending slots even when they carry a task id', async () => {
-    mockEngine({ body: { progress: 40, stage: 'subtitle' } });
-    await getStatusWithClient([
-      { id: 'up-1', slot_at: '2026-10-07T18:00:00Z', status: 'pending', title: 'T', schedule_id: 's1', task_id: 'stale-task-1', error: null, published_at: null},
-    ]);
-
-    expect(vi.mocked(recordProgressHistory)).toHaveBeenCalledWith(expect.anything(), USER_ID, []);
-  });
-
-  it('ignores live slots with a non-string id', async () => {
-    mockEngine({ body: { progress: 40, stage: 'subtitle' } });
-    await getStatusWithClient([
-      { id: 42, slot_at: '2026-10-07T18:00:00Z', status: 'generating', title: 'T', schedule_id: 's1', task_id: 'task-1', error: null, published_at: null},
-    ]);
-
-    expect(vi.mocked(recordProgressHistory)).toHaveBeenCalledWith(expect.anything(), USER_ID, []);
-  });
-
-  it('ignores live slots with a non-string task id', async () => {
-    mockEngine({ body: { progress: 40, stage: 'subtitle' } });
-    await getStatusWithClient([
-      { id: 'gen-1', slot_at: '2026-10-07T18:00:00Z', status: 'generating', title: 'T', schedule_id: 's1', task_id: 42, error: null, published_at: null},
-    ]);
-
-    expect(vi.mocked(recordProgressHistory)).toHaveBeenCalledWith(expect.anything(), USER_ID, []);
-  });
-});
 
 describe('GET query contracts', () => {
   beforeEach(() => {
@@ -872,7 +383,7 @@ describe('GET query contracts', () => {
 
   async function getWithLimit(limitParam: string | null) {
     const upcoming = [
-      { id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'pending', title: 'Next', schedule_id: 's1', error: null, published_at: null, task_id: null},
+      { id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'ready', title: 'Next', schedule_id: 's1', error: null, published_at: null},
     ];
     const client = mockPostsClient(upcoming, []);
     mockAuthSession({ userId: USER_ID, accessToken: 'pe_test_key', isApiKey: true }, null);
@@ -891,34 +402,34 @@ describe('GET query contracts', () => {
     return calls.filter(([column]) => column === 'schedule_id');
   }
 
-  it('queries scheduled_posts five times, each scoped by the caller user id', async () => {
+  it('queries scheduled_posts four times, each scoped by the caller user id', async () => {
     const client = await getWithLimit(null);
     const fromCalls: unknown[][] = client.from.mock.calls;
-    expect(fromCalls).toHaveLength(5);
+    expect(fromCalls).toHaveLength(4);
     expect(fromCalls.every(([table]) => table === 'scheduled_posts')).toBe(true);
     const eqCalls: unknown[][] = client.chain.eq.mock.calls;
-    expect(eqCalls).toHaveLength(5);
+    expect(eqCalls).toHaveLength(4);
     expect(eqCalls.every(([column, value]) => column === 'user_id' && value === USER_ID)).toBe(true);
   });
 
-  it('filters upcoming, recent and queue queries by status', async () => {
+  it('filters upcoming, recent and publishing queries by status', async () => {
     const client = await getWithLimit(null);
     const inCalls = client.chain.in.mock.calls;
-    expect(inCalls).toContainEqual(['status', ['pending', 'generating', 'ready']]);
+    expect(inCalls).toContainEqual(['status', ['ready']]);
     expect(inCalls).toContainEqual(['status', ['published', 'failed']]);
     expect(inCalls).toContainEqual(['status', ['publishing']]);
-    expect(inCalls).toContainEqual(['status', ['pending', 'generating']]);
+    expect(inCalls.filter(([column]: unknown[]) => column === 'status')).toHaveLength(3);
   });
 
   it('selects the documented columns on every query', async () => {
     const client = await getWithLimit(null);
     expect(client.chain.select).toHaveBeenCalledWith(
-      'id, slot_at, status, title, error, published_at, schedule_id, task_id',
+      'id, slot_at, status, title, error, published_at, schedule_id',
     );
     expect(client.chain.select).toHaveBeenCalledWith(
-      'id, slot_at, status, title, error, published_at, schedule_id, task_id, publish_outcomes',
+      'id, slot_at, status, title, error, published_at, schedule_id, publish_outcomes',
     );
-    expect(client.chain.select).toHaveBeenCalledWith('id, schedule_id, slot_at');
+    expect(client.chain.select).toHaveBeenCalledWith('id');
   });
 
   it('orders upcoming ascending and recent descending by slot_at', async () => {
@@ -932,7 +443,7 @@ describe('GET query contracts', () => {
       ([column, options]) =>
         column === 'slot_at' && (options as { ascending?: boolean } | null)?.ascending === false,
     );
-    expect(ascending).toHaveLength(3);
+    expect(ascending).toHaveLength(2);
     expect(descending).toHaveLength(1);
   });
 
@@ -964,7 +475,7 @@ describe('GET query contracts', () => {
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
     const response = await GET(new Request('https://example.com/api/schedule/status'));
     expect(response.status).toBe(200);
-    expect(scheduleIdFilters(client.postsChain)).toHaveLength(5);
+    expect(scheduleIdFilters(client.postsChain)).toHaveLength(4);
     expect(client.schedulesChain.select).toHaveBeenCalledWith('id, persona_id');
   });
 
@@ -985,7 +496,7 @@ describe('GET query contracts', () => {
         requiresUser: true,
         notice,
       }],
-      error: null, published_at: null, task_id: null};
+      error: null, published_at: null};
     const chain = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
@@ -1026,11 +537,11 @@ describe('GET query contracts', () => {
   it('merges publishing slots into upcoming by slot_at and caps the list at the limit', async () => {
     const outcome = { provider: 'bluesky', accountId: 'b1', status: 'failed', code: 'token_expired', requiresUser: true, notice: 'n' };
     const upcomingRows = [
-      { id: 'up-1', slot_at: '2026-09-24T09:00:00Z', status: 'ready', title: 'A', schedule_id: 's1', error: null, published_at: null, task_id: null},
-      { id: 'up-2', slot_at: '2026-09-24T11:00:00Z', status: 'ready', title: 'B', schedule_id: 's1', error: null, published_at: null, task_id: null},
+      { id: 'up-1', slot_at: '2026-09-24T09:00:00Z', status: 'ready', title: 'A', schedule_id: 's1', error: null, published_at: null},
+      { id: 'up-2', slot_at: '2026-09-24T11:00:00Z', status: 'ready', title: 'B', schedule_id: 's1', error: null, published_at: null},
     ];
     const publishingRows = [
-      { id: 'pub-1', slot_at: '2026-09-24T10:00:00Z', status: 'publishing', title: 'P', schedule_id: 's1', publish_outcomes: [outcome], error: null, published_at: null, task_id: null},
+      { id: 'pub-1', slot_at: '2026-09-24T10:00:00Z', status: 'publishing', title: 'P', schedule_id: 's1', publish_outcomes: [outcome], error: null, published_at: null},
     ];
     let limitCalls = 0;
     const chain = {
@@ -1144,81 +655,6 @@ describe('GET failure handling', () => {
     expect(body).toEqual({ success: false, error: 'Failed to load schedule status.' });
   });
 
-  it('warns and degrades to null queue positions when the queue lookup fails', async () => {
-    const upcoming = [
-      { id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'pending', title: 'Next', schedule_id: 's1', error: null, published_at: null, task_id: null},
-      { id: 'up-2', slot_at: '2026-09-24T11:00:00Z', status: 'pending', title: 'After', schedule_id: 's1', error: null, published_at: null, task_id: null},
-    ];
-    const queue = [
-      { id: 'up-1', schedule_id: 's1', slot_at: '2026-09-24T10:00:00Z' },
-      { id: 'up-2', schedule_id: 's1', slot_at: '2026-09-24T11:00:00Z' },
-    ];
-    const { response } = await getWithFailures({ upcoming, queue, queueError: { message: 'db down' } });
-    expect(response.status).toBe(200);
-    expect(vi.mocked(logger.warn)).toHaveBeenCalledWith(
-      '[api/schedule/status] queue lookup failed',
-      expect.objectContaining({ error: { message: 'db down' } }),
-    );
-    const body = (await response.json()) as {
-      upcoming: { queuePosition: number | null; queueTotal: number | null }[];
-    };
-    expect(body.upcoming).toHaveLength(2);
-    expect(body.upcoming[0].queuePosition).toBeNull();
-    expect(body.upcoming[0].queueTotal).toBeNull();
-    expect(body.upcoming[1].queuePosition).toBeNull();
-    expect(body.upcoming[1].queueTotal).toBeNull();
-  });
-
-  it('does not warn when the queue lookup succeeds', async () => {
-    const upcoming = [
-      { id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'pending', title: 'Next', schedule_id: 's1', error: null, published_at: null, task_id: null},
-    ];
-    const queue = [{ id: 'up-1', schedule_id: 's1', slot_at: '2026-09-24T10:00:00Z' }];
-    const { response } = await getWithFailures({ upcoming, queue });
-    expect(response.status).toBe(200);
-    expect(vi.mocked(logger.warn)).not.toHaveBeenCalled();
-  });
-
-  it('ignores malformed queue rows instead of failing the request', async () => {
-    const upcoming = [
-      { id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'pending', title: 'Next', schedule_id: 's1', error: null, published_at: null, task_id: null},
-      { id: 'up-2', slot_at: '2026-09-24T11:00:00Z', status: 'pending', title: 'After', schedule_id: 's1', error: null, published_at: null, task_id: null},
-      { id: 'up-3', slot_at: '2026-09-24T12:00:00Z', status: 'pending', title: 'Later', schedule_id: 's1', error: null, published_at: null, task_id: null},
-    ];
-    const queue = [
-      { id: 'up-1', schedule_id: 's1', slot_at: '2026-09-24T10:00:00Z' },
-      null,
-      'not-an-object',
-      { id: 'up-2' },
-      { id: 42, schedule_id: 's1' },
-      { id: 'up-3', schedule_id: 's1', slot_at: '2026-09-24T12:00:00Z' },
-    ];
-    const { response } = await getWithFailures({ upcoming, queue });
-    expect(response.status).toBe(200);
-    const body = (await response.json()) as {
-      upcoming: { queuePosition: number | null; queueTotal: number | null }[];
-    };
-    expect(body.upcoming[0].queuePosition).toBe(1);
-    expect(body.upcoming[0].queueTotal).toBe(2);
-    expect(body.upcoming[1].queuePosition).toBeNull();
-    expect(body.upcoming[1].queueTotal).toBeNull();
-    expect(body.upcoming[2].queuePosition).toBe(2);
-    expect(body.upcoming[2].queueTotal).toBe(2);
-  });
-
-  it('treats a non-array queue payload as an empty queue', async () => {
-    const upcoming = [
-      { id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'pending', title: 'Next', schedule_id: 's1', error: null, published_at: null, task_id: null},
-    ];
-    const { response } = await getWithFailures({ upcoming, queue: { unexpected: 'shape' } });
-    expect(response.status).toBe(200);
-    const body = (await response.json()) as {
-      upcoming: { queuePosition: number | null; queueTotal: number | null }[];
-    };
-    expect(body.upcoming[0].queuePosition).toBeNull();
-    expect(body.upcoming[0].queueTotal).toBeNull();
-  });
-
   it('returns 500 when the scoped schedule lookup fails', async () => {
     const { response, client } = await getScopedWithScheduleResult({
       data: null,
@@ -1303,8 +739,8 @@ describe('GET range mode', () => {
 
   it('returns every status in [from, to) as slots, owner-scoped', async () => {
     const rows = [
-      { id: 'a', slot_at: '2026-11-02T10:00:00Z', status: 'pending', title: 'A', schedule_id: 's1', error: null, published_at: null, task_id: null},
-      { id: 'b', slot_at: '2026-11-03T10:00:00Z', status: 'published', title: 'B', schedule_id: 's1', error: null, published_at: null, task_id: null},
+      { id: 'a', slot_at: '2026-11-02T10:00:00Z', status: 'ready', title: 'A', schedule_id: 's1', error: null, published_at: null},
+      { id: 'b', slot_at: '2026-11-03T10:00:00Z', status: 'published', title: 'B', schedule_id: 's1', error: null, published_at: null},
     ];
     const client = mockRangeClient(rows);
     vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
@@ -1316,7 +752,7 @@ describe('GET range mode', () => {
     expect(ListPostsInRangeResponseSchema.safeParse(body).success).toBe(true);
     expect(body.truncated).toBe(false);
     expect(body.slots.map((s: { id: string; status: string }) => [s.id, s.status])).toEqual([
-      ['a', 'awaiting'],
+      ['a', 'ready'],
       ['b', 'published'],
     ]);
     expect(body.upcoming).toBeUndefined();
@@ -1329,7 +765,7 @@ describe('GET range mode', () => {
   it('flags truncation instead of silently cutting past the cap', async () => {
     const rows = Array.from({ length: 1001 }, (_, i) => ({
       id: `p${i}`, slot_at: '2026-11-02T10:00:00Z', status: 'published', title: null, schedule_id: 's1',
-      error: null, published_at: null, task_id: null}));
+      error: null, published_at: null}));
     const client = mockRangeClient(rows);
     vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
 

@@ -22,10 +22,6 @@ import { InstagramApiError } from '@/lib/errors';
 const COUNTERS = { views: 1200, likes: 80, comments: 9, saves: null };
 const NOW = new Date('2026-11-21T12:00:00.000Z');
 
-function post(id: string, collected: string[] = []): DailyDuePost {
-  return { id, userId: 'user-1', taskId: `task-${id}`, collectedKeys: new Set(collected) };
-}
-
 const YT_ENTRY = {
   provider: 'youtube',
   status: 'published',
@@ -34,10 +30,13 @@ const YT_ENTRY = {
 };
 const IG_ENTRY = { provider: 'instagram', status: 'published', accountId: 'ig-acct', postId: 'media-9' };
 
+function post(id: string, collected: string[] = [], outcomes: unknown[] = [YT_ENTRY, IG_ENTRY]): DailyDuePost {
+  return { id, userId: 'user-1', publishOutcomes: outcomes, collectedKeys: new Set(collected) };
+}
+
 function deps(overrides: Partial<PostMetricsDailyDeps> = {}): PostMetricsDailyDeps {
   return {
     listDuePosts: vi.fn(async () => [post('post-1')]),
-    fetchTaskSource: vi.fn(async () => ({ publishResults: [YT_ENTRY, IG_ENTRY] })),
     fetchCounters: vi.fn(async () => COUNTERS),
     resolveTarget: vi.fn(async (_userId: string, target: MetricsTarget) => target),
     saveReading: vi.fn(async () => undefined),
@@ -84,8 +83,8 @@ describe('collectPostMetricsDaily', () => {
     const report = await collectPostMetricsDaily(d);
     expect(report.truncated).toBe(true);
     expect(report.checked).toBe(MAX_DAILY_POSTS_PER_RUN);
-    expect(d.fetchTaskSource).toHaveBeenCalledTimes(MAX_DAILY_POSTS_PER_RUN);
-    expect(d.fetchTaskSource).not.toHaveBeenCalledWith(`task-p${MAX_DAILY_POSTS_PER_RUN}`, 'user-1');
+    expect(d.markAttempted).toHaveBeenCalledTimes(MAX_DAILY_POSTS_PER_RUN);
+    expect(d.markAttempted).not.toHaveBeenCalledWith(`p${MAX_DAILY_POSTS_PER_RUN}`, '2026-11-21');
   });
 
   it('is not truncated when exactly the cap is due', async () => {
@@ -98,17 +97,17 @@ describe('collectPostMetricsDaily', () => {
   it('stops at the time budget after the post that used it up and reports truncated', async () => {
     let elapsedMs = 0;
     const d = deps({
-      listDuePosts: vi.fn(async () => [post('a'), post('b')]),
-      fetchTaskSource: vi.fn(async () => {
+      listDuePosts: vi.fn(async () => [post('a', [], [IG_ENTRY]), post('b', [], [IG_ENTRY])]),
+      fetchCounters: vi.fn(async () => {
         elapsedMs = DAILY_RUN_TIME_BUDGET_MS + 1;
-        return { publishResults: [IG_ENTRY] };
+        return COUNTERS;
       }),
       now: () => new Date(NOW.getTime() + elapsedMs),
     });
     const report = await collectPostMetricsDaily(d);
     expect(report.truncated).toBe(true);
     expect(report.checked).toBe(1);
-    expect(d.fetchTaskSource).toHaveBeenCalledTimes(1);
+    expect(d.fetchCounters).toHaveBeenCalledTimes(1);
   });
 
   it('does not stop at exactly the time budget', async () => {
@@ -203,12 +202,10 @@ describe('collectPostMetricsDaily', () => {
 
   it('logs unknown providers and still reads the known ones', async () => {
     const d = deps({
-      fetchTaskSource: vi.fn(async () => ({
-        publishResults: [{ provider: 'myspace', status: 'published', accountId: 'x', postId: 'y' }, IG_ENTRY],
-      })),
+      listDuePosts: vi.fn(async () => [post('post-1', [], [{ provider: 'myspace', status: 'published', accountId: 'x', postId: 'y' }, IG_ENTRY])]),
     });
     const report = await collectPostMetricsDaily(d);
-    expect(logger.warn).toHaveBeenCalledWith('[post-metrics-daily] unknown provider in publish results', {
+    expect(logger.warn).toHaveBeenCalledWith('[post-metrics-daily] unknown provider in publish outcomes', {
       postId: 'post-1',
       provider: 'myspace',
     });
@@ -216,24 +213,8 @@ describe('collectPostMetricsDaily', () => {
     expect(report.recorded).toBe(1);
   });
 
-  it('logs unavailable publish results and moves on to the next post', async () => {
-    const fetchTaskSource = vi.fn(async (taskId: string) => {
-      if (taskId === 'task-a') throw new Error('engine down');
-      return { publishResults: [IG_ENTRY] };
-    });
-    const d = deps({ fetchTaskSource, listDuePosts: vi.fn(async () => [post('a'), post('b')]) });
-    const report = await collectPostMetricsDaily(d);
-    expect(logger.warn).toHaveBeenCalledWith('[post-metrics-daily] publish results unavailable', {
-      postId: 'a',
-      error: 'engine down',
-    });
-    expect(report.errors).toEqual(['a: publish results unavailable']);
-    expect(report.checked).toBe(2);
-    expect(report.recorded).toBe(1);
-  });
-
   it('reads a video listed twice in the publish results only once', async () => {
-    const d = deps({ fetchTaskSource: vi.fn(async () => ({ publishResults: [IG_ENTRY, IG_ENTRY] })) });
+    const d = deps({ listDuePosts: vi.fn(async () => [post('post-1', [], [IG_ENTRY, IG_ENTRY])]) });
     const report = await collectPostMetricsDaily(d);
     expect(report.recorded).toBe(1);
     expect(d.fetchCounters).toHaveBeenCalledTimes(1);
@@ -241,7 +222,7 @@ describe('collectPostMetricsDaily', () => {
 
   it('stores nulls as null, never as zero', async () => {
     const d = deps({
-      fetchTaskSource: vi.fn(async () => ({ publishResults: [IG_ENTRY] })),
+      listDuePosts: vi.fn(async () => [post('post-1', [], [IG_ENTRY])]),
       fetchCounters: vi.fn(async () => ({ views: null, likes: null, comments: null, saves: null })),
     });
     await collectPostMetricsDaily(d);
@@ -253,7 +234,7 @@ describe('collectPostMetricsDaily', () => {
   it('writes the same key on a same-day re-run so the upsert overwrites instead of duplicating', async () => {
     const writes: DailyReading[] = [];
     const d = deps({
-      fetchTaskSource: vi.fn(async () => ({ publishResults: [IG_ENTRY] })),
+      listDuePosts: vi.fn(async () => [post('post-1', [], [IG_ENTRY])]),
       saveReading: vi.fn(async (reading: DailyReading) => {
         writes.push(reading);
       }),
@@ -301,9 +282,7 @@ describe('attempt markers', () => {
 
   it('marks a post that only has unknown providers as attempted', async () => {
     const d = deps({
-      fetchTaskSource: vi.fn(async () => ({
-        publishResults: [{ provider: 'myspace', status: 'published', accountId: 'x', postId: 'y' }],
-      })),
+      listDuePosts: vi.fn(async () => [post('post-1', [], [{ provider: 'myspace', status: 'published', accountId: 'x', postId: 'y' }])]),
     });
     await collectPostMetricsDaily(d);
     expect(d.fetchCounters).not.toHaveBeenCalled();
@@ -346,16 +325,6 @@ describe('attempt markers', () => {
     expect(d.markAttempted).not.toHaveBeenCalled();
   });
 
-  it('leaves a post unmarked when its publish results are unavailable', async () => {
-    const d = deps({
-      fetchTaskSource: vi.fn(async () => {
-        throw new Error('engine down');
-      }),
-    });
-    await collectPostMetricsDaily(d);
-    expect(d.markAttempted).not.toHaveBeenCalled();
-  });
-
   it('skips videos already read today and reads only the missing one on a retry', async () => {
     const d = deps({ listDuePosts: vi.fn(async () => [post('post-1', ['youtube:abc123'])]) });
     const report = await collectPostMetricsDaily(d);
@@ -390,9 +359,8 @@ describe('attempt markers', () => {
     const first = await collectPostMetricsDaily(
       deps({
         listDuePosts: vi.fn(async (_now: Date, limit: number) =>
-          pool.filter((id) => !attempted.has(id)).slice(0, limit).map((id) => post(id)),
+          pool.filter((id) => !attempted.has(id)).slice(0, limit).map((id) => post(id, [], [IG_ENTRY])),
         ),
-        fetchTaskSource: vi.fn(async () => ({ publishResults: [IG_ENTRY] })),
         fetchCounters: vi.fn(async () => {
           throw GONE;
         }),
@@ -407,9 +375,8 @@ describe('attempt markers', () => {
     const second = await collectPostMetricsDaily(
       deps({
         listDuePosts: vi.fn(async (_now: Date, limit: number) =>
-          pool.filter((id) => !attempted.has(id)).slice(0, limit).map((id) => post(id)),
+          pool.filter((id) => !attempted.has(id)).slice(0, limit).map((id) => post(id, [], [IG_ENTRY])),
         ),
-        fetchTaskSource: vi.fn(async () => ({ publishResults: [IG_ENTRY] })),
         markAttempted: vi.fn(async (postId: string) => {
           attempted.add(postId);
         }),
@@ -427,16 +394,16 @@ describe('createPostMetricsDailyStore', () => {
   it('lists due posts through the definer function and drops malformed rows', async () => {
     const rpc = vi.fn(async () => ({
       data: [
-        { post_id: 'p1', user_id: 'u1', task_id: 't1', published_at: '2026-11-20T10:00:00Z', collected_keys: ['youtube:abc', 7] },
-        { post_id: 'p2', user_id: 'u1', task_id: null, published_at: null },
-        { post_id: 5, user_id: 'u1', task_id: 't3', published_at: null },
+        { post_id: 'p1', user_id: 'u1', publish_outcomes: [IG_ENTRY], published_at: '2026-11-20T10:00:00Z', collected_keys: ['youtube:abc', 7] },
+        { post_id: 'p2', user_id: null, publish_outcomes: [], published_at: null },
+        { post_id: 5, user_id: 'u1', publish_outcomes: 'junk', published_at: null },
       ],
       error: null,
     }));
     const store = createPostMetricsDailyStore({ rpc } as unknown as SupabaseClient);
     const posts = await store.listDuePosts(NOW, 51);
     expect(rpc).toHaveBeenCalledWith('find_post_metrics_daily_due', { p_now: NOW.toISOString(), p_limit: 51 });
-    expect(posts).toEqual([{ id: 'p1', userId: 'u1', taskId: 't1', collectedKeys: new Set(['youtube:abc']) }]);
+    expect(posts).toEqual([{ id: 'p1', userId: 'u1', publishOutcomes: [IG_ENTRY], collectedKeys: new Set(['youtube:abc']) }]);
   });
 
   it('throws when the due lookup fails', async () => {

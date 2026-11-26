@@ -27,7 +27,6 @@ export interface CoverageRowInput {
   postId: string;
   provider: SocialProvider;
   externalId: string;
-  scriptAngle: string | null;
 }
 
 const COVERAGE_ROWS_LIMIT = 5000;
@@ -51,13 +50,8 @@ export function computeCoverage(input: {
   const cutoff = now.getTime() - METRICS_WINDOW_LOOKBACK_HOURS * 60 * 60 * 1000;
 
   const collected = new Set<string>();
-  const postAngles = new Map<string, string | null>();
-  const postsWithRows = new Set<string>();
   for (const row of rows) {
     collected.add(`${row.postId}:${row.provider}:${row.externalId}`);
-    postsWithRows.add(row.postId);
-    if (row.scriptAngle !== null) postAngles.set(row.postId, row.scriptAngle);
-    else if (!postAngles.has(row.postId)) postAngles.set(row.postId, null);
   }
 
   const items: CoverageItem[] = [];
@@ -72,17 +66,6 @@ export function computeCoverage(input: {
       continue;
     }
     if (!postInPersonaScope(post.personaId, post.voiceover, scope)) continue;
-    const angleKnown = postsWithRows.has(post.id);
-    const angle = angleKnown ? (postAngles.get(post.id) ?? null) : null;
-    if (query.angle !== null) {
-      if (!angleKnown) continue;
-      if (query.angle === METRICS_NONE) {
-        if (angle !== null) continue;
-      } else if (angle !== query.angle) {
-        continue;
-      }
-    }
-
     const { opensAt, closesAt } = metricsWindowRange(query.window, new Date(published));
     const found = metricsTargets(post.outcomes);
     unknownProviders.push(...found.unknownProviders);
@@ -96,7 +79,6 @@ export function computeCoverage(input: {
         provider: target.provider,
         accountId: target.accountId,
         externalId: target.externalId,
-        scriptAngle: angle,
         reason: classifyReason(now, opensAt, closesAt, donePostIds.has(post.id)),
         publishedAt: post.publishedAt,
         windowOpensAt: opensAt.toISOString(),
@@ -122,7 +104,6 @@ export function computeCoverage(input: {
         provider: record.provider,
         accountId,
         externalId: null,
-        scriptAngle: angle,
         reason: 'publish-failed',
         publishedAt: post.publishedAt,
         windowOpensAt: opensAt.toISOString(),
@@ -210,7 +191,7 @@ export async function fetchCoverage(
 
   const { data: rowData, error: rowError } = await supabase
     .from('post_metrics')
-    .select('post_id, provider, external_id, script_angle')
+    .select('post_id, provider, external_id')
     .eq('user_id', userId)
     .eq('metrics_window', query.window)
     .in('post_id', postIds)
@@ -231,7 +212,6 @@ export async function fetchCoverage(
       postId: record.post_id,
       provider: record.provider,
       externalId: record.external_id,
-      scriptAngle: typeof record.script_angle === 'string' ? record.script_angle : null,
     });
   }
   if (Array.isArray(rowData) && rowData.length >= COVERAGE_ROWS_LIMIT) {

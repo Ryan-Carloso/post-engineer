@@ -16,7 +16,7 @@ describe('the MCP tool count is the same everywhere it is quoted', () => {
   it.each([
     ['apps/web/lib/mcp-install-prompt.ts', /\b(\d+) tools\b/g],
     ['apps/web/public/llms.txt', /^(\d+) intent tools/gm],
-    ['AGENTS.md', /\((\d+), most with an `action`\)/g],
+    ['AGENTS.md', /\((\d+), each with an `action`\)/g],
   ])('%s quotes the registered count', (path, pattern) => {
     const quoted = [...read(path).matchAll(pattern)].map((match) => Number(match[1]));
     expect(quoted.length).toBeGreaterThan(0);

@@ -6,12 +6,16 @@
 
 [🇬🇧 Read in English](README.md)
 
-Crie personas de vídeo com IA que geram e publicam vídeos curtos no piloto automático.
+Agende e publique automaticamente os vídeos e imagens que você faz, em todas as
+redes de uma vez.
 
-Dê a uma persona um nicho e uma voz; o Post Engineer escreve o roteiro, gera a
-narração, monta o vídeo e publica nas suas redes sociais conforme o cronograma.
-Gerencie tudo pelo painel web, controle programaticamente via API, ou deixe
-seu agente de IA operar pelo servidor MCP — tudo neste único monorepo.
+Faça a mídia com as suas próprias ferramentas, envie uma vez, e o Post
+Engineer publica nas suas redes sociais agora ou no horário que você escolher,
+tenta de novo uma conta que falhou e mede o desempenho de cada post. Personas
+agrupam as contas de publicação de uma marca ou personagem. Gerencie tudo pelo
+painel web, controle programaticamente via API, ou deixe seu agente de IA operar
+pelo servidor MCP — tudo neste único monorepo. O Post Engineer não gera mídia.
+Contas novas têm 7 dias de teste grátis.
 
 > Prefere a versão hospedada? A mesma plataforma roda em
 > [post-engineer.com](https://post-engineer.com) — você pode pular a
@@ -20,22 +24,21 @@ seu agente de IA operar pelo servidor MCP — tudo neste único monorepo.
 
 ## O que ele faz
 
-- **Personas de IA** — personagens persistentes com voz, rosto, idioma e nicho.
-  Clipes de introdução com sincronização labial opcionais para um apresentador
-  humanizado, além de uma biblioteca de imagens da persona para manter o rosto
-  consistente entre os vídeos.
-- **Geração automática de vídeos** — entra um tema, sai um vídeo curto em HD:
-  roteiro (LLM), narração (TTS), legendas, vídeos de banco de imagens e música
-  de fundo, montados em um vídeo finalizado.
+- **Personas** — agrupam as contas de publicação de uma marca ou personagem, com
+  um cartão de identidade opcional que gera prompts de imagem para a sua
+  ferramenta de imagem.
 - **Agendamento e publicação** — agende posts para YouTube, Instagram, LinkedIn,
   Bluesky, Threads, Facebook, Pinterest, 3Speak, Rumble, Fanvue e Telegram
   (canais e grupos); acompanhe
   posts futuros e passados com status por conta.
-- **Painel web** — personas, histórico de posts, contas sociais conectadas,
-  chaves de API e cobrança por tokens em um único app Next.js.
+- **Métricas e experimentos** — views e engajamento por post, retenção do
+  YouTube e comparação de prompts por conta.
+- **Painel web** — personas, calendário e histórico de posts, contas sociais
+  conectadas, métricas e chaves de API em um único app Next.js.
 - **Controle por agentes** — um servidor MCP ([`apps/mcp/`](apps/mcp/)) expõe
   as mesmas funcionalidades para agentes de IA (Claude, Cursor, Codex,
-  OpenCode): criar personas, gerar vídeos, checar status e agendar posts.
+  OpenCode): enviar e publicar mídia, agendar posts, gerenciar personas e ler
+  métricas.
 
 ## Estrutura do repositório
 
@@ -43,22 +46,22 @@ Este é um monorepo pnpm/Nx — web, engine e MCP vivem juntos:
 
 ```text
 apps/web/       Painel Next.js 15 + rotas de API (TypeScript)
-apps/engine/    Motor de geração de vídeo em Python/FastAPI
+apps/engine/    Worker de publicação em Python/FastAPI
 apps/mcp/       Servidor MCP para agentes de IA (pacote npm: post-engineer-mcp)
 ```
 
-O app web cuida de autenticação, personas, agendamento, OAuth, cobrança e da
-API. Ele chama o motor via HTTP (autenticado com um segredo compartilhado,
-`MONEYPRINT_API_SECRET`) para geração de vídeo, TTS e publicação. O servidor
+O app web cuida de autenticação, personas, agendamento, uploads, OAuth, do
+teste grátis e da API. O motor é o worker de publicação: a cada minuto publica
+os posts agendados que venceram, enviando cada um pela API de upload do web
+(autenticada com um segredo compartilhado, `MONEYPRINT_API_SECRET`). O servidor
 MCP fala com a API web usando uma chave de API do usuário. O Postgres (via
-Supabase) é o sistema de registro: personas, agendamentos, tokens OAuth
-(criptografados em repouso), chaves de API e saldos de tokens.
+Supabase) é o sistema de registro: personas, agendamentos, uploads, tokens OAuth
+(criptografados em repouso) e chaves de API.
 
 ## Pré-requisitos
 
 - **Node.js** 20+ e **pnpm** 10 (`npm install -g pnpm` ou via corepack)
 - **Python** 3.11–3.12 e **uv** (`curl -LsSf astral.sh/uv/install.sh | sh`)
-- **ffmpeg** no `PATH` (o motor o utiliza via moviepy)
 - Um projeto **Supabase** (hospedado em [supabase.com](https://supabase.com) ou
   self-hosted) com um banco Postgres
 - Chaves de API para os serviços externos que você pretende usar (veja a tabela
@@ -102,8 +105,8 @@ cp apps/engine/config.example.toml apps/engine/config.toml
 | Arquivo | Finalidade | Variáveis principais |
 |---|---|---|
 | `apps/web/.env` | App web + rotas de API | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (somente servidor), `R2_ACCOUNT_ID` + `R2_ACCESS_KEY_ID` + `R2_SECRET_ACCESS_KEY` (iguais aos do engine; Instagram/Threads/Facebook baixam o vídeo de uma URL assinada do R2), `TOKEN_ENCRYPTION_KEY` (gere com: `openssl rand -base64 32`), `MONEYPRINT_API_SECRET`, `MONEYPRINT_API_URL`, client ids/secrets de OAuth + redirect URIs, chaves do Stripe, `MCP_OAUTH_PRIVATE_KEY_PEM` |
-| `apps/engine/.env` | Runtime do motor | `MONEYPRINT_API_SECRET` (deve ser **idêntico** ao valor do web), `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (para o agendador de preenchimento in-process), obrigatórios `R2_ACCOUNT_ID` + `R2_ACCESS_KEY_ID` + `R2_SECRET_ACCESS_KEY` (arquivo dos vídeos finais), opcionais `DISCORD_WEBHOOK_URL`, `POSTHOG_API_KEY` (rastreamento de erros, funil de analytics e traces de AI observability) |
-| `apps/engine/config.toml` | Configuração de comportamento do motor | Chaves de provedores de LLM/TTS (OpenAI-compatible), `listen_port` (padrão `8080`) |
+| `apps/engine/.env` | Runtime do motor | `MONEYPRINT_API_SECRET` (deve ser **idêntico** ao valor do web), `MPT_UPLOAD_API_BASE_URL` (URL do web para onde o worker publica), `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (agendador de publicação), `DISCORD_WEBHOOK_URL` opcional, `RESEND_API_KEY` + `ACCOUNT_BREAK_FROM` opcionais, `POSTHOG_API_KEY` opcional |
+| `apps/engine/config.toml` | Configuração do servidor do motor | `listen_host`, `listen_port` (padrão `8080`), `log_level` |
 
 O app falha rapidamente em caso de variáveis ausentes (sem fallbacks silenciosos)
 — veja `apps/web/.env.example` para a lista completa documentada.
@@ -159,17 +162,7 @@ OAuth cujos **redirect URIs correspondam exatamente** aos valores em
   permissão do bot nesse chat. Sem OAuth, sem variáveis de ambiente. A Bot API
   em nuvem limita uploads a 50 MB e legendas a 1.024 caracteres.
 
-### 5. Configuração do Stripe (cobrança por tokens)
-
-1. Crie uma conta [Stripe](https://stripe.com) e obtenha as chaves secreta +
-   pública (`STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`).
-2. Crie os produtos de pacotes de tokens e coloque os price IDs em
-   `STRIPE_PRICE_PACK_10` / `_50` / `_100`.
-3. Adicione um endpoint de webhook apontando para `/api/billing/webhook` e
-   guarde o signing secret em `STRIPE_WEBHOOK_SECRET`. O handler do webhook
-   verifica a assinatura e é idempotente.
-
-### 6. Gere os segredos autogerenciados
+### 5. Gere os segredos autogerenciados
 
 Esses você mesmo cria — nada a registrar:
 
@@ -209,8 +202,8 @@ Detalhes por app: [apps/web/README.md](apps/web/README.md),
 
 O servidor MCP ([`apps/mcp/`](apps/mcp/), pacote npm
 [`post-engineer-mcp`](https://www.npmjs.com/package/post-engineer-mcp)) permite
-que agentes de IA criem personas, gerem vídeos, chequem o status da geração e
-agendem posts na sua conta. Você não precisa clonar este repositório para
+que agentes de IA enviem e publiquem mídia, agendem posts, gerenciem personas e
+leiam métricas na sua conta. Você não precisa clonar este repositório para
 usá-lo com a plataforma hospedada:
 
 ```json
@@ -243,13 +236,11 @@ lista completa de tools, dicas de timeout no OpenCode e desenvolvimento local).
 | App OAuth Google | Para publicar no YouTube | OAuth client id/secret | Google Cloud Console |
 | App Instagram (Meta) | Para publicar no Instagram | OAuth client id/secret | developers.facebook.com |
 | App LinkedIn | Para publicar no LinkedIn | OAuth client id/secret | developer.linkedin.com |
-| Stripe | Para cobrança por tokens | Chaves secretas/públicas, price IDs, webhook secret | stripe.com |
-| Chave de provedor LLM **ou** Ollama | Para geração de roteiros | Chave OpenAI-compatible, ou rode Ollama localmente | Seu provedor / ollama.com |
 | `MONEYPRINT_API_SECRET` | **Sim** | Autenticação web ↔ motor | Gere você mesmo (`openssl rand -hex 32`) |
 | `TOKEN_ENCRYPTION_KEY` | **Sim** | Criptografa tokens OAuth em repouso | Gere você mesmo (`openssl rand -base64 32`) |
 | `MCP_OAUTH_PRIVATE_KEY_PEM` | Para OAuth do servidor MCP | Assina tokens MCP | Gere você mesmo (chave EC, veja acima) |
 | Chave de projeto PostHog (`NEXT_PUBLIC_POSTHOG_KEY`) | Opcional | Rastreamento de erros + analytics de produto | Configurações do projeto PostHog |
-| Webhook do Discord | Opcional | Notificações de preenchimento de agenda | Configurações do canal do Discord |
+| Webhook do Discord | Opcional | Notificações do agendador de publicação | Configurações do canal do Discord |
 | `ZAI_API_KEY` | Somente CI | Workflow de code-review com IA | Não é dependência de runtime |
 
 ## Suporte e contato
@@ -266,7 +257,6 @@ Licenciado sob a [Apache License, Version 2.0](LICENSE) — veja
 
 ## Créditos
 
-Motor de vídeo derivado de
+O motor é derivado de
 [MoneyPrinterTurbo](https://github.com/harry0703/MoneyPrinterTurbo)
-(MIT © 2024 Harry), estendido com lip-sync de personas, catálogo de música de
-fundo, fila em lote, agendamento e publicação.
+(MIT © 2024 Harry). Hoje ele só agenda e publica.

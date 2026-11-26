@@ -41,7 +41,7 @@ async function getHandler(request: Request): Promise<NextResponse> {
   let select = supabase
     .from('post_metrics')
     .select(
-      'post_id, persona_id, provider, account_id, external_id, script_angle, views, likes, comments, saves, collected_at, analytics_status, analytics_views, engaged_views, average_view_duration_seconds, average_view_percentage, content_type, analytics_end_date',
+      'post_id, persona_id, provider, account_id, external_id, views, likes, comments, saves, collected_at, analytics_status, analytics_views, engaged_views, average_view_duration_seconds, average_view_percentage, content_type, analytics_end_date',
     )
     .eq('user_id', auth.userId)
     .eq('metrics_window', query.window);
@@ -56,8 +56,6 @@ async function getHandler(request: Request): Promise<NextResponse> {
   else if (query.personaId !== null) select = select.eq('persona_id', query.personaId);
   if (query.accountId !== null) select = select.eq('account_id', query.accountId);
   if (query.provider !== null) select = select.eq('provider', query.provider);
-  if (query.angle === METRICS_NONE) select = select.is('script_angle', null);
-  else if (query.angle !== null) select = select.eq('script_angle', query.angle);
 
   const { data, error } = await select
     .order('collected_at', { ascending: false })
@@ -111,7 +109,6 @@ async function getHandler(request: Request): Promise<NextResponse> {
       provider: record.provider,
       accountId: record.account_id,
       externalId: record.external_id,
-      scriptAngle: record.script_angle,
       publishedAt,
       views: record.views,
       likes: record.likes,

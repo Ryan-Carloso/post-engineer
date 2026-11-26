@@ -33,10 +33,6 @@ vi.mock('../metrics/post-metrics-daily', () => ({
 vi.mock('../metrics/provider-counters', () => ({ fetchProviderCounters: vi.fn() }));
 vi.mock('../metrics/youtube-account-resolution', () => ({ resolveYouTubeMetricsTarget: vi.fn() }));
 vi.mock('../engine-tasks', () => ({ fetchEnginePostMetricsSource: vi.fn() }));
-vi.mock('../billing/reconcile', () => ({
-  runBillingReconciliation: vi.fn().mockResolvedValue({ errors: [] }),
-  createReconcileStore: vi.fn(() => ({ reconcile: true })),
-}));
 vi.mock('../analytics', () => ({ trackApiEvent: vi.fn() }));
 vi.mock('../posthog-server', () => ({ flushPostHog: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../logger', () => ({
@@ -76,7 +72,6 @@ import { notifyAccountBreak } from '../owner-alert-mail';
 import { isUnauthorizedError } from '../account-break';
 import { collectPostMetrics, createPostMetricsStore } from '../metrics/post-metrics';
 import { collectPostMetricsDaily } from '../metrics/post-metrics-daily';
-import { runBillingReconciliation, createReconcileStore } from '../billing/reconcile';
 import { logger } from '../logger';
 import {
   createSupabaseVideoUploadStorage,
@@ -104,7 +99,6 @@ beforeEach(() => {
   schedulerHandle.start.mockClear();
   vi.mocked(collectPostMetrics).mockClear();
   vi.mocked(collectPostMetricsDaily).mockClear();
-  vi.mocked(runBillingReconciliation).mockClear();
   vi.mocked(flushPostHog).mockClear();
   vi.mocked(logger.error).mockClear();
   vi.mocked(logger.info).mockClear();
@@ -150,7 +144,7 @@ describe('startInternalScheduler', () => {
     expect(createPostMetricsStore).toHaveBeenCalledWith({});
     expect(collectPostMetrics).toHaveBeenCalledTimes(1);
     const args = vi.mocked(collectPostMetrics).mock.calls[0][0];
-    expect(args).toMatchObject({ store: true, fetchTaskSource: expect.anything() });
+    expect(args).toMatchObject({ store: true, fetchCounters: expect.anything() });
     expect((args as { now: () => Date }).now()).toBeInstanceOf(Date);
     expect(flushPostHog).toHaveBeenCalledTimes(1);
     expect(logger.error).not.toHaveBeenCalled();
@@ -194,7 +188,7 @@ describe('startInternalScheduler', () => {
 
     expect(order).toEqual(['window', 'daily']);
     const args = vi.mocked(collectPostMetricsDaily).mock.calls[0][0];
-    expect(args).toMatchObject({ dailyStore: true, fetchTaskSource: expect.anything() });
+    expect(args).toMatchObject({ dailyStore: true, fetchCounters: expect.anything() });
     expect(args.budgetMs).toBeGreaterThan(0);
     expect(args.budgetMs).toBeLessThanOrEqual(45_000);
   });
@@ -216,19 +210,6 @@ describe('startInternalScheduler', () => {
       { errors: ['daily boom'] },
     );
     expect(flushPostHog).toHaveBeenCalledTimes(1);
-  });
-
-  it('billing-reconcile tick runs the reconciliation', async () => {
-    process.env.SCHEDULER_ENABLED = 'true';
-    startInternalScheduler();
-    const deps = createdDeps[0] as {
-      jobs: Array<{ name: string; run: () => Promise<void> }>;
-    };
-    await deps.jobs.find((j) => j.name === 'billing-reconcile')!.run();
-
-    expect(createReconcileStore).toHaveBeenCalledWith({});
-    expect(runBillingReconciliation).toHaveBeenCalledTimes(1);
-    expect(logger.error).not.toHaveBeenCalled();
   });
 
   it('video-upload sweep tick removes expired uploads through the store seam', async () => {
@@ -259,31 +240,6 @@ describe('startInternalScheduler', () => {
     expect(logger.info).toHaveBeenCalledWith('[scheduler/video-upload-sweep] removed expired uploads', {
       removed: 2,
     });
-  });
-
-  it('billing-reconcile tick logs when the report carries errors', async () => {
-    vi.mocked(runBillingReconciliation).mockResolvedValueOnce({
-      zombiesRefunded: [],
-      zombiesAlreadySettled: [],
-      stuckAutoRefunded: [],
-      stuckSkippedValueDelivered: [],
-      stuckCompletedBackfilled: [],
-      stuckDeferred: [],
-      errors: [{ scope: 'zombie_refund', ref: 'z1', message: 'refund failed' }],
-    });
-    process.env.SCHEDULER_ENABLED = 'true';
-    startInternalScheduler();
-    const deps = createdDeps[0] as {
-      jobs: Array<{ name: string; run: () => Promise<void> }>;
-    };
-    await deps.jobs.find((j) => j.name === 'billing-reconcile')!.run();
-    expect(logger.error).toHaveBeenCalledWith(
-      expect.stringContaining('completed with errors'),
-      null,
-      {
-        errors: [{ scope: 'zombie_refund', ref: 'z1', message: 'refund failed' }],
-      },
-    );
   });
 
   it('acquireLease wiring acquires the lease and reads the persisted last success', async () => {

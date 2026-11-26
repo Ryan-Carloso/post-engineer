@@ -29,11 +29,11 @@ function mcpEvents(): Array<Record<string, unknown>> {
 }
 
 function apiKeyRequest(): Request {
-  return new Request('https://post-engineer.test/api/videos/generate-and-schedule', {
+  return new Request('https://post-engineer.test/api/media/publish-existing', {
     method: 'POST',
     headers: {
       authorization: 'Bearer pe_live_1234567890abcdef1234567890abcdef',
-      'x-mcp-tool': 'generate_video',
+      'x-mcp-tool': 'publish_video',
       'x-mcp-call-id': CALL_ID,
     },
   });
@@ -55,7 +55,7 @@ beforeEach(() => {
 
 describe('mcp_tool_called through auth and withApiErrorReporting', () => {
   function wrap(status: number) {
-    return withApiErrorReporting('POST /api/videos/generate-and-schedule', async (request) => {
+    return withApiErrorReporting('POST /api/media/publish-existing', async (request) => {
       const { error } = await requireSupabaseSession(request);
       if (error) return error;
       return NextResponse.json({ success: status < 400 }, { status });
@@ -67,11 +67,11 @@ describe('mcp_tool_called through auth and withApiErrorReporting', () => {
     expect(response.status).toBe(200);
     expect(mcpEvents()).toEqual([
       expect.objectContaining({
-        tool: 'generate_video',
+        tool: 'publish_video',
         call_id: CALL_ID,
         auth_method: 'api_key',
         method: 'POST',
-        path: '/api/videos/generate-and-schedule',
+        path: '/api/media/publish-existing',
         status: 200,
         ok: true,
       }),
@@ -88,13 +88,13 @@ describe('mcp_tool_called through auth and withApiErrorReporting', () => {
   });
 
   it('records status 500 when the handler throws, and the error still propagates', async () => {
-    const wrapped = withApiErrorReporting('POST /api/videos/generate-and-schedule', async (request) => {
+    const wrapped = withApiErrorReporting('POST /api/media/publish-existing', async (request) => {
       await requireSupabaseSession(request);
       throw new Error('engine down');
     });
     await expect(wrapped(apiKeyRequest())).rejects.toThrow('engine down');
     expect(mcpEvents()).toEqual([
-      expect.objectContaining({ tool: 'generate_video', status: 500, ok: false, auth_method: 'api_key' }),
+      expect.objectContaining({ tool: 'publish_video', status: 500, ok: false, auth_method: 'api_key' }),
     ]);
   });
 
@@ -123,7 +123,7 @@ describe('mcp_tool_called through auth and withApiErrorReporting', () => {
 
   it('records one event when auth runs again while the success event is reported', async () => {
     const wrapped = withApiErrorReporting(
-      'POST /api/videos/generate-and-schedule',
+      'POST /api/media/publish-existing',
       async (request) => {
         await requireSupabaseSession(request);
         await requireSupabaseSession(request);
@@ -133,7 +133,7 @@ describe('mcp_tool_called through auth and withApiErrorReporting', () => {
     );
     await wrapped(apiKeyRequest());
     await vi.waitFor(() => {
-      expect(captureAs.mock.calls.some((call) => call[1] === 'generate_and_schedule_started')).toBe(true);
+      expect(captureAs.mock.calls.some((call) => call[1] === 'publish_existing_started')).toBe(true);
     });
     expect(mcpEvents()).toHaveLength(1);
     expect(mcpEvents()[0]).toMatchObject({ status: 200, ok: true });

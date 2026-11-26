@@ -28,7 +28,6 @@ function interceptShellData(): void {
     statusCode: 200,
     body: { authenticated: true, accounts: [], message: 'ok' },
   });
-  cy.intercept('GET', '/api/billing/tokens', { statusCode: 200, body: { success: true, balance: 100 } });
   cy.intercept('GET', '/api/schedule', { statusCode: 200, body: { success: true, schedules: [] } });
   cy.intercept('GET', '/api/schedule/status**', { statusCode: 200, body: { success: true, upcoming: [], recent: [] } });
   cy.intercept('GET', '/api/persona/list', {

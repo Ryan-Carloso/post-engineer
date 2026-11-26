@@ -15,9 +15,7 @@ import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
 import { useI18n } from '@/lib/i18n/provider';
 import {
   SparklesIcon,
-  MicIcon,
   PlusIcon,
-  GlobeIcon,
   TrashIcon,
 } from '@/lib/ui';
 
@@ -157,7 +155,6 @@ const PersonaCard = ({
           <PersonaAvatar
             avatarUrl={persona.avatarUrl}
             photoUrl={persona.photoUrl}
-            libraryUrl={persona.libraryUrl}
             name={persona.name}
             size={56}
           />
@@ -167,25 +164,6 @@ const PersonaCard = ({
         </div>
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold text-ink">{persona.name}</div>
-          <span className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-sunken px-2.5 py-1 text-xs font-medium text-muted-text [&_svg]:size-3.5">
-            <MicIcon />
-            {persona.voiceAudioUrl ? t('personas.voiceOwn') : t('personas.voiceHouse')}
-          </span>
-          {(persona.language || persona.videoAspect) && (
-            <div className="mt-1.5 flex items-center gap-1.5">
-              {persona.language && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-info-soft px-2.5 py-1 text-xs font-medium text-info [&_svg]:size-3">
-                  <GlobeIcon />
-                  {persona.language}
-                </span>
-              )}
-              {persona.videoAspect && (
-                <span className="inline-flex items-center rounded-full bg-sunken px-2.5 py-1 text-xs font-medium text-ink-soft">
-                  {persona.videoAspect}
-                </span>
-              )}
-            </div>
-          )}
           {boundProviders.length > 0 ? (
             <div
               className="mt-1.5 flex flex-wrap items-center gap-1"

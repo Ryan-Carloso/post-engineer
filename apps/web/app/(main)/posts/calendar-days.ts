@@ -107,6 +107,5 @@ export function countMonthPosts(slotsByDay: Map<string, unknown[]>, year: number
 export interface PersonaPhoto {
   avatarUrl?: string;
   photoUrl?: string;
-  libraryUrl?: string;
   name: string;
 }

@@ -117,11 +117,6 @@ describe('rate-limit', () => {
       expect(body.error).toBe('Too many requests. Please wait before trying again.');
     });
 
-    it('limits video task status polls to one per minute', () => {
-      expect(RATE_LIMITS.taskStatusPoll).toMatchObject({ name: 'task-status-poll', limit: 1, windowMs: 60_000 });
-      expect(RATE_LIMITS.taskStatusPoll.message).toContain('at most once per minute');
-    });
-
     it('tracks identifiers independently', async () => {
       const profile = { name: 'test-id', limit: 1, windowMs: 60_000 };
       await applyRateLimit(makeRequest(), profile, 'ip-d');
@@ -131,22 +126,8 @@ describe('rate-limit', () => {
 
     it('exposes RATE_LIMITS profiles with sane values', () => {
       expect(RATE_LIMITS.youtubeUpload.limit).toBeGreaterThan(0);
-      expect(RATE_LIMITS.mediaUpload.windowMs).toBeGreaterThan(0);
+      expect(RATE_LIMITS.youtubeUpload.windowMs).toBeGreaterThan(0);
       expect(RATE_LIMITS.instagramPost.name).toBe('instagram-post');
-    });
-
-    it('gives video downloads their own bucket with more headroom than uploads', () => {
-      expect(RATE_LIMITS.videoDownload.name).toBe('video-download');
-      expect(RATE_LIMITS.videoDownload.name).not.toBe(RATE_LIMITS.mediaUpload.name);
-      expect(RATE_LIMITS.videoDownload.limit).toBeGreaterThan(RATE_LIMITS.mediaUpload.limit);
-    });
-
-    it('caps cloned-voice previews at 10 per user per day', () => {
-      expect(RATE_LIMITS.voiceClonePreview).toEqual({
-        name: 'voice-clone-preview',
-        limit: 10,
-        windowMs: 24 * 60 * 60 * 1000,
-      });
     });
 
     it('exposes the auth/credential profiles added for the public release', () => {
@@ -155,8 +136,6 @@ describe('rate-limit', () => {
         'oauthRegister',
         'apiKeyManage',
         'blueskyConnect',
-        'billingCheckout',
-        'videoJob',
         'connectUrl',
         'oauthStart',
       ] as const) {

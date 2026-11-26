@@ -2,13 +2,14 @@ import { NextResponse } from 'next/server';
 
 import { apiErrorResponse } from '@/lib/api-error';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
-import { isPersonaAllowed } from '@/lib/api-keys';
+import { isPersonaAllowed, isScopedApiKey } from '@/lib/api-keys';
 import { trackApiEvent } from '@/lib/analytics';
 import { ERROR_CODES, formatErrorMessage } from '@/lib/error-codes';
 import { PUBLISH_EXISTING_NAMESPACE, resolveIdempotency } from '@/lib/idempotency';
 import { logger } from '@/lib/logger';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { requireSupabaseSession } from '@/lib/request-auth';
+import { assertTrialActive } from '@/lib/trial';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import {
   VideoUploadError,
@@ -21,15 +22,16 @@ import {
   assertUploadNotScheduled,
   uploadAlreadyScheduledError,
 } from '@/lib/videos/upload-slot-reference';
-import { scheduleAccountColumns } from '../../videos/generate-and-schedule/account-columns';
+import { scheduleAccountColumns } from './account-columns';
 import {
   SCHEDULE_PK_CONSTRAINT,
   violatedConstraint,
-} from '../../videos/generate-and-schedule/constraint-violations';
-import { rejectInvalidRequest } from '../../videos/generate-and-schedule/request-validation';
-import { buildSlotRows } from '../../videos/generate-and-schedule/slot-rows';
+} from './constraint-violations';
+import { rejectInvalidRequest } from './invalid-request';
+import { checkPromptVersion } from './prompt-version';
+import { buildSlotRows } from './slot-rows';
 import { resolvePublishAccounts } from './resolve-accounts';
-import { invalid } from '../../videos/generate-and-schedule/validation-issues';
+import { invalid } from './validation-issues';
 import {
   asapReplayResponse,
   asapScopeKey,
@@ -49,10 +51,8 @@ import {
 } from './schema';
 import {
   ExistingMediaError,
-  fetchScopedEngineTask,
   loadReadyVideoUpload,
   storeScheduledImage,
-  type EngineTaskRecord,
 } from './media-resolve';
 import { replaySchedule, toSlotSummaries } from './replay';
 import { resolvePublishAtSlot } from './schedule-slot';
@@ -76,16 +76,13 @@ async function scheduleExistingMedia(ctx: PublishExistingContext): Promise<NextR
   const idem = resolveIdempotency(userId, input.idempotencyKey, ctx.request, PUBLISH_EXISTING_NAMESPACE);
   const scheduleId = idem.scheduleId;
 
-  let taskId: string | null = null;
   let mediaKindValue: ScheduledMediaKind | null = null;
   let mediaRef: string | null = null;
   let mediaContentType: string | null = null;
   let storedImagePath: string | null = null;
   const uploadStore = createSupabaseVideoUploadStore();
   try {
-    if (ctx.taskRecord !== null) {
-      taskId = ctx.input.media.kind === 'task' ? ctx.input.media.taskId : null;
-    } else if (ctx.uploadRow !== null) {
+    if (ctx.uploadRow !== null) {
       mediaKindValue = 'upload';
       mediaRef = ctx.uploadRow.id;
       mediaContentType = ctx.uploadRow.declared_content_type ?? ctx.uploadRow.detected_content_type ?? 'video/mp4';
@@ -128,18 +125,6 @@ async function scheduleExistingMedia(ctx: PublishExistingContext): Promise<NextR
     scheduled_at: null,
     active: true,
     publish_mode: 'scheduled',
-    post_voice_id: null,
-    post_voice_audio_url: null,
-    post_cta_type: null,
-    post_cta_url: null,
-    post_cta_instruction: null,
-    post_niche: null,
-    post_language: null,
-    post_video_aspect: null,
-    post_video_layout: null,
-    post_hook_panel: null,
-    post_paragraph_number: null,
-    post_face_quality: null,
   });
   if (scheduleError) {
     if (storedImagePath !== null) {
@@ -165,13 +150,10 @@ async function scheduleExistingMedia(ctx: PublishExistingContext): Promise<NextR
     description: input.description,
     scheduleId,
     userId,
-    videoType: 'voiceover',
-    chargedTokens: 0,
-    segments: undefined,
+    promptVersionId: input.promptVersionId,
   }).map((row) => ({
     ...row,
     status: 'ready',
-    task_id: taskId,
     media_kind: mediaKindValue,
     media_ref: mediaRef,
     media_content_type: mediaContentType,
@@ -237,6 +219,8 @@ async function postHandler(request: Request): Promise<NextResponse> {
 
   const limited = await applyRateLimit(request, RATE_LIMITS.publishExisting, userId);
   if (limited) return limited;
+  const trialBlocked = await assertTrialActive(userId, { route: ROUTE });
+  if (trialBlocked) return trialBlocked;
 
   const supabase = createSupabaseServiceClient();
   const { personaId } = input;
@@ -246,6 +230,27 @@ async function postHandler(request: Request): Promise<NextResponse> {
       code: ERROR_CODES.PERSONA_SCOPE_DENIED,
       field: 'personaId',
     });
+  }
+
+  if (input.promptVersionId !== undefined) {
+    const version = await checkPromptVersion(supabase, {
+      versionId: input.promptVersionId,
+      userId,
+      allowOwn: !isScopedApiKey(auth),
+    });
+    if (version === 'error') {
+      return apiErrorResponse(500, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR), {
+        route: ROUTE,
+        code: ERROR_CODES.INTERNAL_ERROR,
+      });
+    }
+    if (version === 'not_found') {
+      return apiErrorResponse(404, 'Unknown promptVersionId: pass the versionId returned with a prompt you can read.', {
+        route: ROUTE,
+        code: ERROR_CODES.PROMPT_NOT_FOUND,
+        field: 'promptVersionId',
+      });
+    }
   }
 
   const resolved = await resolvePublishAccounts(
@@ -293,34 +298,20 @@ async function postHandler(request: Request): Promise<NextResponse> {
 }
 
 interface VerifiedMedia {
-  taskRecord: EngineTaskRecord | null;
   uploadRow: VideoUploadRow | null;
   image: { buffer: Buffer; contentType: ImageContentType } | null;
 }
 
 async function verifyMedia(
   supabase: PublishExistingContext['supabase'],
-  auth: Parameters<typeof fetchScopedEngineTask>[1],
+  auth: { userId: string },
   input: PublishExistingContext['input'],
 ): Promise<VerifiedMedia | NextResponse> {
   const { userId } = auth;
-  let taskRecord: EngineTaskRecord | null = null;
   let uploadRow: VideoUploadRow | null = null;
   let image: { buffer: Buffer; contentType: ImageContentType } | null = null;
   try {
-    if (input.media.kind === 'task') {
-      taskRecord = await fetchScopedEngineTask(supabase, auth, input.media.taskId);
-      if (taskRecord === null) {
-        return apiErrorResponse(404, 'Video not found.', { route: ROUTE, code: 'MEDIA_NOT_FOUND', field: 'media.taskId' });
-      }
-      if (taskRecord.state !== 1 || (taskRecord.videos.length === 0 && !taskRecord.hasArchive)) {
-        return apiErrorResponse(400, 'Video has not finished generating yet.', {
-          route: ROUTE,
-          code: 'MEDIA_NOT_READY',
-          field: 'media.taskId',
-        });
-      }
-    } else if (input.media.kind === 'upload') {
+    if (input.media.kind === 'upload') {
       uploadRow = await loadReadyVideoUpload(createSupabaseVideoUploadStore(), userId, input.media.uploadId, new Date());
       assertUploadFitsProviders(uploadRow, input.publishing.providers);
       await assertUploadNotScheduled(supabase, userId, input.media.uploadId);
@@ -339,7 +330,7 @@ async function verifyMedia(
       code: ERROR_CODES.INTERNAL_ERROR,
     });
   }
-  return { taskRecord, uploadRow, image };
+  return { uploadRow, image };
 }
 
 export const POST = withApiErrorReporting(ROUTE, postHandler, { getUserId: resolveReportingUserId });

@@ -37,10 +37,10 @@ describe('generate-llms-full', () => {
       buildLlmsFull({
         llms,
         apiDocs,
-        toolNames: toolNames.filter((name) => name !== 'billing'),
+        toolNames: toolNames.filter((name) => name !== 'experiments'),
         toolActions,
       }),
-    ).toThrow(/billing/);
+    ).toThrow(/experiments/);
   });
 
   it('takes the action list of each tool from the MCP specs', () => {
@@ -48,10 +48,10 @@ describe('generate-llms-full', () => {
       llms,
       apiDocs,
       toolNames,
-      toolActions: { ...toolActions, billing: ['balance', 'transactions', 'refund'] },
+      toolActions: { ...toolActions, experiments: ['results', 'summary', 'export'] },
     });
 
-    expect(output).toContain('Actions: `balance`, `transactions`, `refund`.');
+    expect(output).toContain('Actions: `results`, `summary`, `export`.');
   });
 
   it('counts the tools in the section intro from the registered tools', () => {

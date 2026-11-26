@@ -47,8 +47,8 @@ function migratedFunctions(): Set<string> {
 describe('supabase rpc names', () => {
   it('finds the rpc calls and the migrated functions', () => {
     expect(rpcNames().size).toBeGreaterThan(5);
-    expect(migratedFunctions().has('refund_batch_tokens')).toBe(true);
-    expect(rpcNames().has('refund_batch_tokens')).toBe(true);
+    expect(migratedFunctions().has('delete_slot_if_not_last')).toBe(true);
+    expect(rpcNames().has('delete_slot_if_not_last')).toBe(true);
   });
 
   it('lists outside-the-chain functions only while 001_schema.sql still names them', () => {

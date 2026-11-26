@@ -2,8 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { AccountNeedsReconnectWarning } from '@/lib/account-needs-reconnect';
 import type { VideoUploadRow } from '@/lib/videos/signed-upload';
-import type { Provider } from '../../videos/generate-and-schedule/providers-validation';
-import type { EngineTaskRecord } from './media-resolve';
+import type { Provider } from './providers-validation';
 import type { ExistingMediaFormFields } from './publish-form';
 import type { ImageContentType, PublishExistingRequest } from './schema';
 
@@ -15,7 +14,6 @@ export interface PublishExistingContext {
   input: PublishExistingRequest;
   accountIds: Record<Provider, string[]>;
   reconnectWarning: AccountNeedsReconnectWarning | null;
-  taskRecord: EngineTaskRecord | null;
   uploadRow: VideoUploadRow | null;
   image: { buffer: Buffer; contentType: ImageContentType } | null;
   logId: string;

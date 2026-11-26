@@ -21,13 +21,9 @@ export const RECIPE_NUDGE_SURFACES: ReadonlySet<string> = new Set([
   'personas_create',
   'personas_list',
   'accounts_list',
-  'billing_balance',
-  'check_script_validate',
-  'generate_video',
 ]);
 const TRANSPORTS: ReadonlySet<string> = new Set(['stdio', 'http']);
 const FOLLOWED_PROMPT_LABEL = 'prompt';
-const SCRIPT_REJECTIONS = /^\d{1,3}$/;
 const CALL_REQUEST = /^[1-9]\d{0,5}$/;
 
 function headerInSet(request: Request, name: string, allowed: ReadonlySet<string>): string | undefined {
@@ -55,8 +51,6 @@ function recipeAdoptionProperties(request: Request): Record<string, unknown> {
   if (recipesKnown === 'true' || recipesKnown === 'false') properties.recipes_known = recipesKnown === 'true';
   const recipeFetched = recipeHeader(request, 'x-mcp-recipe-fetched', true);
   if (recipeFetched !== undefined) properties.recipe_fetched = recipeFetched;
-  const rejections = headerMatching(request, 'x-mcp-script-rejections', SCRIPT_REJECTIONS);
-  if (rejections !== undefined) properties.script_rejections = Number(rejections);
   const recipe = recipeHeader(request, 'x-mcp-recipe', false);
   if (recipe !== undefined) properties.recipe = recipe;
   return properties;

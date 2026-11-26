@@ -30,22 +30,6 @@ vi.mock('@/lib/api-error-reporting', async (importOriginal) => {
   };
 });
 
-vi.mock('@/lib/schedule-slot-presentation', () => ({
-  enrichSlot: vi.fn(async () => ({
-    status: 'generating',
-    progress: 42,
-    stage: 'video',
-    queuePosition: null,
-    queueTotal: null,
-    retryable: null,
-  })),
-}));
-
-vi.mock('@/lib/engine-tasks', () => ({
-  fetchEnginePublishResults: vi.fn(async () => ({})),
-  fetchEngineTaskProgress: vi.fn(async () => ({ gone: false, progress: 67, stage: 'audio' })),
-}));
-
 vi.mock('@/lib/publish-links', () => ({
   resolvePublishLinks: vi.fn(() => []),
 }));
@@ -108,7 +92,6 @@ interface DbCall {
 }
 
 interface DbRows {
-  generation?: Record<string, unknown> | null;
   slot?: boolean;
   slotRow?: Record<string, unknown>;
   schedule?: Record<string, unknown> | null;
@@ -147,11 +130,6 @@ function mockDb(rows: DbRows) {
           data: null,
           error: { code: '22P02', message: 'invalid input syntax for type uuid' },
         };
-      }
-      if (table === 'video_generations') {
-        return rows.generation
-          ? { data: rows.generation, error: null }
-          : { data: null, error: { code: 'PGRST116', message: 'zero rows' } };
       }
       if (table === 'scheduled_posts') {
         return rows.slot === true
@@ -215,8 +193,8 @@ describe('GET /api/posts/[id] slot id normalization', () => {
     const client = install({ slot: true });
     const response = await get(BATCH_KEY);
     expect(response.status).toBe(200);
-    const body = (await response.json()) as { kind: string; slot: { id: string } };
-    expect(body.kind).toBe('slot');
+    const body = (await response.json()) as { success: boolean; slot: { id: string } };
+    expect(body.success).toBe(true);
     expect(body.slot.id).toBe(SLOT_ID);
     expect(slotIdFilters(client.calls)).toEqual([SLOT_ID]);
   });
@@ -269,9 +247,9 @@ describe('GET /api/posts/[id] slot id normalization', () => {
     );
     const response = await get(SLOT_ID);
     expect(response.status).toBe(200);
-    const body = (await response.json()) as { kind: string; generation: { prompt: unknown } };
-    expect(body.kind).toBe('slot');
-    expect(body.generation.prompt).toEqual({ slug: 'community-hook', title: 'Community hook', version: 2, source: 'user' });
+    const body = (await response.json()) as { slot: { id: string }; prompt: unknown };
+    expect(body.slot.id).toBe(SLOT_ID);
+    expect(body.prompt).toEqual({ slug: 'community-hook', title: 'Community hook', version: 2, source: 'user' });
     expect(sessionClient.calls.filter((call) => call.table === 'prompt_versions')).toEqual([]);
     expect(serviceClient.calls.filter((call) => call.table === 'prompt_versions' && call.op === 'eq')).toEqual([
       { table: 'prompt_versions', op: 'eq', args: ['id', versionId] },
@@ -325,10 +303,9 @@ describe('GET /api/posts/[id] slot id normalization', () => {
       );
       const response = await get(SLOT_ID);
       expect(response.status).toBe(200);
-      const body = (await response.json()) as { kind: string; slot: { id: string }; generation: { prompt: unknown } };
-      expect(body.kind).toBe('slot');
+      const body = (await response.json()) as { slot: { id: string }; prompt: unknown };
       expect(body.slot.id).toBe(SLOT_ID);
-      expect(body.generation.prompt).toBeNull();
+      expect(body.prompt).toBeNull();
       expect(logger.error).toHaveBeenCalledWith(
         '[prompt-versions] post prompt lookup failed',
         { code: 'XX000', message: 'down' },
@@ -337,56 +314,10 @@ describe('GET /api/posts/[id] slot id normalization', () => {
     });
   });
 
-  it('looks up a plain slot uuid after the generation miss', async () => {
+  it('looks up a plain slot uuid', async () => {
     const client = install({ slot: true });
     const response = await get(SLOT_ID);
     expect(response.status).toBe(200);
     expect(slotIdFilters(client.calls)).toEqual([SLOT_ID]);
-  });
-
-  it('returns a direct generation and does not query scheduled_posts', async () => {
-    const client = install({
-      generation: {
-        id: 'vg-1',
-        generation_id: 'gen-direct-1',
-        engine_task_id: 'task-1',
-        persona_name: 'Viva Leve',
-        video_subject: 'myth busting',
-        status: 'running',
-        error_code: null,
-        tokens_refunded: false,
-        created_at: '2026-10-17T10:00:00.000Z',
-        completed_at: null,
-      },
-    });
-    const response = await get('gen-direct-1');
-    expect(response.status).toBe(200);
-    const body = (await response.json()) as { kind: string; generation: { progress: number } };
-    expect(body.kind).toBe('generation');
-    expect(body.generation.progress).toBe(67);
-    expect(client.calls.filter((call) => call.table === 'scheduled_posts')).toEqual([]);
-  });
-
-  it('prefers a generation row when the id is itself a batch key', async () => {
-    const client = install({
-      slot: true,
-      generation: {
-        id: 'vg-batch',
-        generation_id: BATCH_KEY,
-        engine_task_id: null,
-        persona_name: 'Viva Leve',
-        video_subject: 'myth busting',
-        status: 'completed',
-        error_code: null,
-        tokens_refunded: false,
-        created_at: '2026-10-17T10:00:00.000Z',
-        completed_at: '2026-10-17T10:02:00.000Z',
-      },
-    });
-    const response = await get(BATCH_KEY);
-    expect(response.status).toBe(200);
-    const body = (await response.json()) as { kind: string };
-    expect(body.kind).toBe('generation');
-    expect(client.calls.filter((call) => call.table === 'scheduled_posts')).toEqual([]);
   });
 });

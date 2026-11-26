@@ -7,8 +7,6 @@ const here = dirname(fileURLToPath(import.meta.url));
 const apiDir = join(here, '..', '..', 'app', 'api');
 
 const ANONYMOUS_ROUTES = new Set([
-  'billing/check-tokens/route.ts',
-  'billing/webhook/route.ts',
   'coverage/route.ts',
   'google-oauth/callback/route.ts',
   'google-oauth/start/route.ts',

@@ -2,10 +2,25 @@ import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { AccountNeedsReconnectWarning } from '@/lib/account-needs-reconnect';
-import { resolvePublishingAccounts } from '../../videos/generate-and-schedule/persona-prep';
-import type { Provider } from '../../videos/generate-and-schedule/providers-validation';
-import { validateAccounts } from '../../videos/generate-and-schedule/validate-accounts';
+import { getPersonaDefaultAccounts, type PersonaDefaultAccounts } from '@/lib/persona-publishing-accounts';
+import type { Provider } from './providers-validation';
+import { validateAccounts } from './validate-accounts';
 import { loadPublishBinding } from './bound-accounts';
+
+export async function resolvePublishingAccounts(
+  supabase: SupabaseClient,
+  personaId: string | null,
+  explicitAccounts: Record<string, string[] | undefined> | undefined,
+  bound: PersonaDefaultAccounts | undefined,
+  userId: string,
+): Promise<Record<string, string[] | undefined>> {
+  const accounts = explicitAccounts ?? {};
+  if (Object.keys(accounts).length === 0 && personaId !== null) {
+    if (bound !== undefined) return bound;
+    return getPersonaDefaultAccounts(supabase, personaId, userId);
+  }
+  return accounts;
+}
 
 export async function resolvePublishAccounts(
   supabase: SupabaseClient,

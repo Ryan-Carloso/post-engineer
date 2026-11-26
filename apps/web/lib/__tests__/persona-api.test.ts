@@ -5,14 +5,11 @@ import { createElement, type ReactNode } from 'react';
 
 import {
   createPersona,
-  generatePersonaAvatar,
-  fetchVoices,
   fetchPersonaList,
   deletePersona,
   fetchDeletePreview,
   updatePersona,
   useUpdatePersonaMutation,
-  usePersonaImagesQuery,
 } from '@/lib/api';
 
 const jsonResponse = (body: unknown, status = 200): Response =>
@@ -71,86 +68,8 @@ describe('lib/api — persona', () => {
       expect(result.success).toBe(false);
     });
 
-    it('passes through imageIds and warnings string arrays', async () => {
-      fetchMock.mockResolvedValue(
-        jsonResponse({
-          success: true,
-          personaId: 'p-1',
-          imageIds: ['img-1'],
-          warnings: ['primary_swap_failed'],
-        }),
-      );
-
-      const result = await createPersona(new FormData());
-
-      expect(result.imageIds).toEqual(['img-1']);
-      expect(result.warnings).toEqual(['primary_swap_failed']);
-    });
-
-    it('keeps the valid entries of a mixed imageIds/warnings array instead of dropping it', async () => {
-      fetchMock.mockResolvedValue(
-        jsonResponse({
-          success: true,
-          personaId: 'p-1',
-          imageIds: ['img-1', 42],
-          warnings: ['primary_swap_failed', null],
-        }),
-      );
-
-      const result = await createPersona(new FormData());
-
-      expect(result.imageIds).toEqual(['img-1']);
-      expect(result.warnings).toEqual(['primary_swap_failed']);
-    });
-
-    it('drops imageIds/warnings that are not arrays at all', async () => {
-      fetchMock.mockResolvedValue(
-        jsonResponse({
-          success: true,
-          personaId: 'p-1',
-          imageIds: 'img-1',
-          warnings: 'primary_swap_failed',
-        }),
-      );
-
-      const result = await createPersona(new FormData());
-
-      expect(result.imageIds).toBeUndefined();
-      expect(result.warnings).toBeUndefined();
-    });
   });
 
-  describe('generatePersonaAvatar', () => {
-    it('sends the prompt as JSON to /api/persona/avatar and returns the image', async () => {
-      fetchMock.mockResolvedValue(
-        jsonResponse({
-          success: true,
-          imageUrl: 'data:image/png;base64,MOCK',
-        }),
-      );
-
-      const result = await generatePersonaAvatar('avatar de um robô fofo');
-
-      expect(fetchMock).toHaveBeenCalledWith('/api/persona/avatar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: 'avatar de um robô fofo' }),
-      });
-      expect(result.success).toBe(true);
-      expect(result.imageUrl).toBe('data:image/png;base64,MOCK');
-    });
-
-    it('returns an error when generation fails', async () => {
-      fetchMock.mockResolvedValue(
-        jsonResponse({ success: false, error: 'gerador indisponível' }, 500),
-      );
-
-      const result = await generatePersonaAvatar('qualquer');
-
-      expect(result.success).toBe(false);
-      expect(result.error).toBe('gerador indisponível');
-    });
-  });
 
   describe('fetchPersonaList', () => {
     it('fetches /api/persona/list and returns the persona list', async () => {
@@ -170,50 +89,6 @@ describe('lib/api — persona', () => {
     });
   });
 
-  describe('fetchVoices', () => {
-    const CATALOG = [
-      { id: 'chatterbox:kokoro_af_heart', label: 'Heart', provider: 'kokoro', gender: 'female', accent: 'us', kind: 'standard', description: 'American female voice.' },
-      { id: 'chatterbox:phonon_azgorath', label: 'Azgorath', provider: 'phonon', gender: 'male', accent: null, kind: 'character', description: 'An enormous ancient demon.' },
-    ];
-
-    it('fetches /api/persona/voices and returns the voice list', async () => {
-      fetchMock.mockResolvedValue(
-        jsonResponse({
-          voices: CATALOG,
-        }),
-      );
-
-      const voices = await fetchVoices();
-
-      expect(fetchMock).toHaveBeenCalledWith('/api/persona/voices');
-      expect(voices).toEqual(CATALOG);
-    });
-
-    it('throws the API error instead of returning undefined', async () => {
-      fetchMock.mockResolvedValue(
-        jsonResponse(
-          { success: false, error: 'Voices service unreachable.' },
-          502,
-        ),
-      );
-
-      await expect(fetchVoices()).rejects.toThrow(
-        'Voices service unreachable.',
-      );
-    });
-
-    it('rejects a voice without catalog metadata', async () => {
-      fetchMock.mockResolvedValue(jsonResponse({ voices: [{ id: 'chatterbox:kokoro_af_heart' }] }));
-
-      await expect(fetchVoices()).rejects.toThrow('Invalid voices response.');
-    });
-
-    it('rejects a success payload without a voice list', async () => {
-      fetchMock.mockResolvedValue(jsonResponse({ success: true }));
-
-      await expect(fetchVoices()).rejects.toThrow('Invalid voices response.');
-    });
-  });
 
   describe('deletePersona', () => {
     it('sends DELETE to /api/persona with the encoded id and returns the result', async () => {
@@ -382,40 +257,4 @@ describe('lib/api — persona', () => {
     });
   });
 
-  describe('usePersonaImagesQuery', () => {
-    function renderImagesQuery() {
-      const queryClient = new QueryClient();
-      function Wrapper({ children }: { children: ReactNode }) {
-        return createElement(
-          QueryClientProvider,
-          { client: queryClient },
-          children,
-        );
-      }
-      Wrapper.displayName = 'PersonaImagesWrapper';
-      return renderHook(() => usePersonaImagesQuery('p-1'), { wrapper: Wrapper });
-    }
-
-    it('drops malformed image records instead of passing them to the UI', async () => {
-      fetchMock.mockResolvedValue(
-        jsonResponse({
-          success: true,
-          images: [
-            { id: 'img-1', image_url: 'https://signed/1', tag: null, description: null, is_primary: true, created_at: 'x' },
-            { id: 42, image_url: 'https://signed/2' },
-            { image_url: 'https://signed/3' },
-            { id: 'img-4', image_url: 42 },
-            { id: 'img-5', image_url: 'https://signed/5', is_primary: 'yes' },
-            { id: 'img-6', image_url: 'https://signed/6', is_primary: true, tag: 42 },
-            { id: 'img-7', image_url: 'https://signed/7', is_primary: true, description: {} },
-          ],
-        }),
-      );
-      const { result } = renderImagesQuery();
-      await waitFor(() => {
-        expect(result.current.isSuccess).toBe(true);
-      });
-      expect(result.current.data?.map((image) => image.id)).toEqual(['img-1']);
-    });
-  });
 });

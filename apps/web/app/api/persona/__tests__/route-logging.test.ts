@@ -10,9 +10,6 @@ vi.mock('@/lib/supabase/service', () => ({
 vi.mock('@/lib/request-auth', () => ({
   requireSupabaseSession: vi.fn(),
 }));
-vi.mock('@/lib/voice-catalog-fetch', () => ({
-  fetchPersonaVoiceCatalogIds: vi.fn(async () => undefined),
-}));
 vi.mock('@/lib/logger', () => ({
   logger: {
     info: vi.fn(),
@@ -70,8 +67,6 @@ describe('POST /api/persona insert failure', () => {
     const res = await POST(
       formRequest({
         name: 'Canal Teste',
-        avatarUrl: 'data:image/png;base64,IA',
-        voiceId: 'chatterbox:kokoro_af_heart',
         publishingAccounts: JSON.stringify({ youtube: ['acct-1'] }),
       }),
     );

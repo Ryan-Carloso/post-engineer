@@ -7,42 +7,23 @@ import { buildPersonaInsertRow } from '../create-row';
 function values(overrides: Partial<ParsedPersonaForm['values']> = {}): ParsedPersonaForm['values'] {
   return {
     name: '  Maria  ',
-    avatarUrl: null,
-    voiceId: 'voice-1',
-    language: 'en-US',
-    videoAspect: '9:16',
-    videoLayout: 'standard',
-    hookPanel: null,
-    scriptPrompt: null,
-    ctaType: 'follow',
-    ctaUrl: null,
-    ctaInstruction: null,
-    paragraphNumber: null,
-    niche: 'travel',
-    faceQuality: 'ok',
-    videoSubject: null,
     identityCard: null,
     publishingAccounts: emptyPersonaDefaultAccounts(),
     ...overrides,
   };
 }
 
-const base = { personaId: 'p1', userId: 'u1', photoPath: 'u1/p1/photo.png', avatarUrl: null };
+const base = { personaId: 'p1', userId: 'u1', photoPath: 'u1/p1/photo.png' };
 
 describe('buildPersonaInsertRow', () => {
-  it('builds the insert row with the identifiers, trimmed name and preference columns', () => {
+  it('builds the insert row with the identifiers, the trimmed name, the photo and the card only', () => {
     const row = buildPersonaInsertRow({ ...base, values: values() });
-    expect(row).toMatchObject({
+    expect(row).toEqual({
       id: 'p1',
       user_id: 'u1',
       name: 'Maria',
       photo_path: 'u1/p1/photo.png',
-      avatar_url: null,
-      voice_id: 'voice-1',
-      language: 'en-US',
-      niche: 'travel',
-      hook_panel: true,
-      recent_image_ids: [],
+      identity_card: null,
     });
   });
 
@@ -52,9 +33,5 @@ describe('buildPersonaInsertRow', () => {
 
   it('stores the card when one is given', () => {
     expect(buildPersonaInsertRow({ ...base, values: values({ identityCard: FIXTURE_CARD }) }).identity_card).toEqual(FIXTURE_CARD);
-  });
-
-  it('falls back to an empty name when the form carried none', () => {
-    expect(buildPersonaInsertRow({ ...base, values: values({ name: null }) }).name).toBe('');
   });
 });

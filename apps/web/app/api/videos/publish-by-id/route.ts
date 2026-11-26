@@ -6,6 +6,7 @@ import { ValidationError } from '@/lib/errors';
 import { logger } from '@/lib/logger';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { requireSupabaseSession } from '@/lib/request-auth';
+import { assertTrialActive } from '@/lib/trial';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { buildUploadErrorResponse } from '@/lib/upload/handlers';
 import { parsePublishBody, publishUploadedVideo } from '@/lib/videos/publish-uploaded';
@@ -27,6 +28,8 @@ async function postHandler(request: Request): Promise<NextResponse> {
 
   const limited = await applyRateLimit(request, RATE_LIMITS.publishById, auth.userId);
   if (limited) return limited;
+  const trialBlocked = await assertTrialActive(auth.userId, { route: ROUTE });
+  if (trialBlocked) return trialBlocked;
 
   let body: unknown;
   try {

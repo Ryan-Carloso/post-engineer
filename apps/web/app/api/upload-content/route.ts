@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { assertTrialActive } from '@/lib/trial';
 import { logger } from '@/lib/logger';
 import { ValidationError } from '@/lib/errors';
 import { requireSupabaseSession } from '@/lib/request-auth';
@@ -87,6 +88,10 @@ async function postHandler(request: NextRequest) {
           : RATE_LIMITS.instagramPost;
     const limited = await applyRateLimit(request, rateProfile, userId);
     if (limited) return limited;
+    if (upload.kind === 'session') {
+      const trialBlocked = await assertTrialActive(userId, { route: 'POST /api/upload-content' });
+      if (trialBlocked) return trialBlocked;
+    }
 
     logger.info('[upload-content] request recebido', {
       logId,

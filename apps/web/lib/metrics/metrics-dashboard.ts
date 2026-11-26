@@ -39,7 +39,6 @@ function parseCoverageItem(value: unknown): CoverageItem | null {
     || !isSocialProvider(item.provider)
     || typeof item.accountId !== 'string'
     || (typeof item.externalId !== 'string' && item.externalId !== null)
-    || (typeof item.scriptAngle !== 'string' && item.scriptAngle !== null)
     || !isCoverageReason(item.reason)
     || typeof item.publishedAt !== 'string'
     || typeof item.windowOpensAt !== 'string'
@@ -53,7 +52,6 @@ function parseCoverageItem(value: unknown): CoverageItem | null {
     provider: item.provider,
     accountId: item.accountId,
     externalId: item.externalId,
-    scriptAngle: item.scriptAngle,
     reason: item.reason,
     publishedAt: item.publishedAt,
     windowOpensAt: item.windowOpensAt,
@@ -95,7 +93,7 @@ export async function fetchMetrics(query: MetricsQuery): Promise<MetricsFetchRes
 
 export function useMetricsQuery(query: MetricsQuery): UseQueryResult<MetricsFetchResult, Error> {
   return useQuery<MetricsFetchResult, Error>({
-    queryKey: ['metrics', query.window, query.personaId, query.accountId, query.provider, query.angle],
+    queryKey: ['metrics', query.window, query.personaId, query.accountId, query.provider],
     queryFn: () => fetchMetrics(query),
     staleTime: 60_000,
   });

@@ -10,7 +10,6 @@ vi.mock('@/lib/supabase/service', () => ({
 }));
 vi.mock('@/lib/request-auth', () => ({
   requireSupabaseSession: vi.fn(),
-  engineAuthHeaders: vi.fn(() => ({ Authorization: 'Bearer test', 'x-user-id': 'u' })),
 }));
 vi.mock('@/lib/analytics', () => ({
   trackApiEvent: vi.fn(),
@@ -50,8 +49,8 @@ type Row = Record<string, unknown>;
 function baseTables(): Record<string, Row[]> {
   return {
     personas: [
-      { id: PERSONA_ID, name: 'Ryan', user_id: USER_ID, photo_path: null, voice_audio_path: null },
-      { id: OTHER_PERSONA, name: 'Other', user_id: OTHER_USER, photo_path: null, voice_audio_path: null },
+      { id: PERSONA_ID, name: 'Ryan', user_id: USER_ID, photo_path: 'user-uuid-1/persona-uuid-1/photo.png' },
+      { id: OTHER_PERSONA, name: 'Other', user_id: OTHER_USER, photo_path: null },
     ],
     schedules: [
       { id: 'sched-1', persona_id: PERSONA_ID, user_id: USER_ID },
@@ -63,15 +62,6 @@ function baseTables(): Record<string, Row[]> {
       { id: 'slot-2', schedule_id: 'sched-1', user_id: USER_ID },
       { id: 'slot-3', schedule_id: 'sched-2', user_id: USER_ID },
       { id: 'slot-9', schedule_id: 'sched-9', user_id: OTHER_USER },
-    ],
-    video_generations: [
-      { id: 'gen-1', persona_id: PERSONA_ID, user_id: USER_ID, engine_task_id: 'task-aaa' },
-      { id: 'gen-2', persona_id: PERSONA_ID, user_id: USER_ID, engine_task_id: null },
-      { id: 'gen-9', persona_id: OTHER_PERSONA, user_id: OTHER_USER, engine_task_id: 'task-zzz' },
-    ],
-    persona_images: [
-      { id: 'img-1', persona_id: PERSONA_ID, image_path: 'uid/img1.png', user_id: USER_ID },
-      { id: 'img-9', persona_id: OTHER_PERSONA, image_path: 'uid/img9.png', user_id: 'user-uuid-2' },
     ],
   };
 }
@@ -169,25 +159,11 @@ function setup(
   return { tables: t, deletes, removed, client };
 }
 
-const engineDeletes: string[] = [];
-
 beforeEach(() => {
   vi.clearAllMocks();
-  engineDeletes.length = 0;
-  vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.internal:8080');
-  vi.stubEnv('MONEYPRINT_API_SECRET', 'test-secret');
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async (url: string, init?: { method?: string }) => {
-      if (init?.method === 'DELETE') engineDeletes.push(url);
-      return { ok: true, status: 200, json: async () => ({}) };
-    }),
-  );
 });
 
 afterEach(() => {
-  vi.unstubAllGlobals();
-  vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
 
@@ -230,19 +206,18 @@ describe('DELETE /api/persona cascade', () => {
     expect(service.deletes).toEqual([
       'scheduled_posts',
       'schedules',
-      'video_generations',
       'personas',
     ]);
   });
 
-  it('deletes slots, schedules, generations and the persona — in that order', async () => {
+  it('deletes slots, schedules and the persona — in that order', async () => {
     const { deletes } = setup();
     const res = await del(PERSONA_ID);
     const body = (await res.json()) as { success: boolean };
 
     expect(res.status).toBe(200);
     expect(body.success).toBe(true);
-    expect(deletes).toEqual(['scheduled_posts', 'schedules', 'video_generations', 'personas']);
+    expect(deletes).toEqual(['scheduled_posts', 'schedules', 'personas']);
   });
 
   it('logs storage cleanup failures on the after() path without failing the delete', async () => {
@@ -264,7 +239,6 @@ describe('DELETE /api/persona cascade', () => {
     expect(tables.personas.some((r) => r.id === PERSONA_ID)).toBe(false);
     expect(tables.schedules.some((r) => r.persona_id === PERSONA_ID)).toBe(false);
     expect(tables.scheduled_posts.some((r) => ['slot-1', 'slot-2', 'slot-3'].includes(r.id as string))).toBe(false);
-    expect(tables.video_generations.some((r) => r.persona_id === PERSONA_ID)).toBe(false);
   });
 
   it('leaves another user\u2019s data untouched', async () => {
@@ -274,15 +248,21 @@ describe('DELETE /api/persona cascade', () => {
     expect(tables.personas.some((r) => r.id === OTHER_PERSONA)).toBe(true);
     expect(tables.schedules.some((r) => r.id === 'sched-9')).toBe(true);
     expect(tables.scheduled_posts.some((r) => r.id === 'slot-9')).toBe(true);
-    expect(tables.video_generations.some((r) => r.id === 'gen-9')).toBe(true);
   });
 
-  it('never touches the token ledger', async () => {
+  it('never touches the user profile', async () => {
     const { client } = setup();
     await del(PERSONA_ID);
     const touchedTables = vi.mocked(client.from).mock.calls.map((c) => c[0]);
-    expect(touchedTables).not.toContain('token_transactions');
     expect(touchedTables).not.toContain('user_profiles');
+  });
+
+  it('removes the persona photo from storage after the rows are gone', async () => {
+    const { removed } = setup();
+    const res = await del(PERSONA_ID);
+    expect(res.status).toBe(200);
+    await flushAfterCallbacks();
+    expect(removed).toEqual([['user-uuid-1/persona-uuid-1/photo.png']]);
   });
 
   it('emits persona_deleted with counts and no sensitive data', async () => {
@@ -295,63 +275,10 @@ describe('DELETE /api/persona cascade', () => {
         personaId: PERSONA_ID,
         schedulesDeleted: 2,
         slotsDeleted: 3,
-        videosDeleted: 2,
       }),
     );
     const props = vi.mocked(trackApiEvent).mock.calls[0][1] as Record<string, unknown>;
-    expect(JSON.stringify(props)).not.toContain('task-aaa');
-  });
-
-  it('best-effort deletes engine task dirs for the persona\u2019s tasks', async () => {
-    setup();
-    await del(PERSONA_ID);
-    await flushAfterCallbacks();
-    expect(engineDeletes).toContain('https://engine.internal:8080/api/v1/tasks/task-aaa');
-    expect(engineDeletes).not.toContain(
-      expect.stringContaining('task-zzz'),
-    );
-  });
-
-  it('skips unsafe engine task ids instead of interpolating them', async () => {
-    const tables = baseTables();
-    tables.video_generations.push({
-      id: 'gen-evil',
-      persona_id: PERSONA_ID,
-      user_id: USER_ID,
-      engine_task_id: '../../etc/passwd',
-    });
-    setup(tables);
-    await del(PERSONA_ID);
-    await flushAfterCallbacks();
-    expect(engineDeletes).toContain('https://engine.internal:8080/api/v1/tasks/task-aaa');
-    expect(engineDeletes).not.toContain(expect.stringContaining('etc'));
-    expect(engineDeletes).not.toContain(expect.stringContaining('..'));
-  });
-
-  it('stops engine cleanup once the aggregate budget is spent', async () => {
-    const tables = baseTables();
-    tables.video_generations.push(
-      { id: 'gen-3', persona_id: PERSONA_ID, user_id: USER_ID, engine_task_id: 'task-bbb' },
-      { id: 'gen-4', persona_id: PERSONA_ID, user_id: USER_ID, engine_task_id: 'task-ccc' },
-    );
-    setup(tables);
-    let now = 1_000_000;
-    vi.spyOn(Date, 'now').mockImplementation(() => now);
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (url: string, init?: { method?: string }) => {
-        if (init?.method === 'DELETE') {
-          engineDeletes.push(url);
-          now += 15_000;
-        }
-        return { ok: true, status: 200, json: async () => ({}) };
-      }),
-    );
-    await del(PERSONA_ID);
-    await flushAfterCallbacks();
-    expect(engineDeletes).toContain('https://engine.internal:8080/api/v1/tasks/task-aaa');
-    expect(engineDeletes).toContain('https://engine.internal:8080/api/v1/tasks/task-bbb');
-    expect(engineDeletes).not.toContain(expect.stringContaining('task-ccc'));
+    expect(JSON.stringify(props)).not.toContain('photo.png');
   });
 
   it('uses the service client for OAuth callers (no cookie session)', async () => {

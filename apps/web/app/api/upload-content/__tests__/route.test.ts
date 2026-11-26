@@ -17,6 +17,11 @@ const { mockRequireSupabaseSession, mockApplyRateLimit, mockHandleYoutubeUpload,
   };
 });
 
+const { mockAssertTrialActive } = vi.hoisted(() => ({ mockAssertTrialActive: vi.fn() }));
+vi.mock('@/lib/trial', () => ({
+  assertTrialActive: (...args: unknown[]) => mockAssertTrialActive(...args),
+}));
+
 vi.mock('@/lib/api-error-reporting', () => ({
   withApiErrorReporting: (...args: unknown[]) => {
     apiErrorReportingCalls.push(args);
@@ -122,6 +127,7 @@ describe('POST /api/upload-content', () => {
       error: null,
     });
     mockApplyRateLimit.mockResolvedValue(null);
+    mockAssertTrialActive.mockResolvedValue(null);
     mockHandleYoutubeUpload.mockResolvedValue({ success: true, provider: 'youtube', results: [] });
     mockHandleInstagramUpload.mockResolvedValue({ success: true, provider: 'instagram', results: [] });
     mockHandleBlueskyUpload.mockResolvedValue({ success: true, provider: 'bluesky', results: [] });
@@ -160,6 +166,29 @@ describe('POST /api/upload-content', () => {
       success: true,
       logId: 'log-1',
     });
+  });
+
+  it('answers 402 and publishes nothing for a session caller whose free trial has ended', async () => {
+    mockAssertTrialActive.mockResolvedValueOnce(
+      NextResponse.json({ success: false, code: 'TRIAL_EXPIRED' }, { status: 402 }),
+    );
+
+    const res = await POST(await makeRequest());
+
+    expect(res.status).toBe(402);
+    expect(mockAssertTrialActive).toHaveBeenCalledWith(USER_ID, { route: 'POST /api/upload-content' });
+    expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
+  });
+
+  it('does not run the trial gate for the engine publish-back secret', async () => {
+    mockRequireSupabaseSession.mockResolvedValue({
+      auth: null,
+      error: NextResponse.json({ success: false }, { status: 401 }),
+    });
+    const res = await POST(await makeRequest({ authorization: `Bearer ${API_SECRET}`, userId: USER_ID }));
+
+    expect(res.status).toBe(200);
+    expect(mockAssertTrialActive).not.toHaveBeenCalled();
   });
 
   it('accepts the shared secret (engine publish-back) with userId in the form', async () => {

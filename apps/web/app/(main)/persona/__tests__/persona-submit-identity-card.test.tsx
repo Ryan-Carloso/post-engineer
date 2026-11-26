@@ -49,8 +49,6 @@ function Wrapper({ children }: { children: ReactNode }) {
 function fillRequiredFields(): void {
   const store = usePersonaStore.getState();
   store.setName('Maria');
-  store.setAvatarUrl('https://example.com/a.png');
-  store.setVoiceId('voice-1');
   store.setPublishingAccounts({ ...emptyPersonaDefaultAccounts(), youtube: ['UC1'] });
 }
 

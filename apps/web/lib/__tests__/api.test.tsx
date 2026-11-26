@@ -350,93 +350,6 @@ describe('api', () => {
     );
   });
 
-  it('uploadPersonaImage surfaces server warnings instead of discarding them', async () => {
-    vi.mocked(fetch).mockResolvedValue(
-      jsonResponse({
-        success: true,
-        image: { id: 'img-1' },
-        warnings: ['primary_swap_failed'],
-      }),
-    );
-    const { uploadPersonaImage } = await import('@/lib/api');
-    const result = await uploadPersonaImage('p-1', {
-      file: new File(['x'], 'a.png', { type: 'image/png' }),
-    });
-    expect(result.success).toBe(true);
-    expect(result.warnings).toEqual(['primary_swap_failed']);
-  });
-
-  it('uploadPersonaImage drops a malformed warnings payload instead of crashing', async () => {
-    vi.mocked(fetch).mockResolvedValue(
-      jsonResponse({ success: true, image: { id: 'img-1' }, warnings: 'not-an-array' }),
-    );
-    const { uploadPersonaImage } = await import('@/lib/api');
-    const result = await uploadPersonaImage('p-1', {
-      file: new File(['x'], 'a.png', { type: 'image/png' }),
-    });
-    expect(result.success).toBe(true);
-    expect(result.warnings ?? []).toHaveLength(0);
-  });
-
-  it('useUpdatePersonaImageMutation requires personaId like the upload hook', async () => {
-    const { useUpdatePersonaImageMutation } = await import('@/lib/api');
-    const { result } = renderHook(() => useUpdatePersonaImageMutation(null), {
-      wrapper: createWrapper(),
-    });
-    await expect(
-      result.current.mutateAsync({ id: 'img-1', tag: 'x' }),
-    ).rejects.toThrow('personaId is required.');
-    expect(fetch).not.toHaveBeenCalled();
-  });
-
-  it('useDeletePersonaImageMutation requires personaId like the upload hook', async () => {
-    const { useDeletePersonaImageMutation } = await import('@/lib/api');
-    const { result } = renderHook(() => useDeletePersonaImageMutation(null), {
-      wrapper: createWrapper(),
-    });
-    await expect(result.current.mutateAsync('img-1')).rejects.toThrow('personaId is required.');
-    expect(fetch).not.toHaveBeenCalled();
-  });
-
-  it('updatePersonaImage rejects isPrimary:false without a network call', async () => {
-    const { updatePersonaImage } = await import('@/lib/api');
-    await expect(
-      updatePersonaImage({ id: 'img-1', isPrimary: false as unknown as true }),
-    ).rejects.toThrow('isPrimary cannot be false');
-    expect(fetch).not.toHaveBeenCalled();
-  });
-
-  it('useScheduleStatusQuery exposes the numeric slot progress', async () => {
-    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.startsWith('/api/schedule/status')) {
-        return jsonResponse({
-          success: true,
-          upcoming: [
-            { id: 'up-1', schedule_id: 's-1', slot_at: '2026-09-24T10:00:00Z', status: 'awaiting', title: 'T', task_id: 'task-1', progress: 45, stage: null, queuePosition: 2, queueTotal: 3, retryable: null },
-          ],
-          recent: [
-            { id: 're-1', schedule_id: 's-1', slot_at: '2026-09-20T10:00:00Z', status: 'failed', title: 'O', progress: 80, stage: null, queuePosition: null, queueTotal: null, retryable: true, error: 'boom' },
-          ],
-        });
-      }
-      return jsonResponse({});
-    });
-    const { useScheduleStatusQuery } = await import('@/lib/api');
-    const { result } = renderHook(() => useScheduleStatusQuery(), {
-      wrapper: createWrapper(),
-    });
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data?.upcoming[0]?.progress).toBe(45);
-    expect(result.current.data?.upcoming[0]?.status).toBe('awaiting');
-    expect(result.current.data?.upcoming[0]?.taskId).toBe('task-1');
-    expect(result.current.data?.upcoming[0]?.queuePosition).toBe(2);
-    expect(result.current.data?.upcoming[0]?.queueTotal).toBe(3);
-    expect(result.current.data?.recent[0]?.progress).toBe(80);
-    expect(result.current.data?.recent[0]?.retryable).toBe(true);
-  });
-
   it('updateSlotTitle PATCHes /api/schedule/slots/:id with the title', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ success: true, title: 'Novo tema' }));
     const { updateSlotTitle } = await import('@/lib/api');
@@ -509,15 +422,13 @@ describe('api', () => {
   it('fetchPostDetail GETs /api/posts/:id and maps a slot payload', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({
       success: true,
-      kind: 'slot',
-      slot: { id: 'slot-1', scheduleId: 's1', slotAt: '2030-06-01T10:00:00.000Z', status: 'awaiting', title: 'T', error: null, publishedAt: null, taskId: null, progress: 0, stage: null, retryable: null },
+      slot: { id: 'slot-1', scheduleId: 's1', slotAt: '2030-06-01T10:00:00.000Z', status: 'ready', title: 'T', error: null, publishedAt: null },
       schedule: { id: 's1', personaId: 'p1', providers: ['youtube'], youtubeAccountIds: ['ch1'], instagramAccountIds: [], linkedinAccountIds: [] },
       persona: { id: 'p1', name: 'Viva Leve' },
     }));
     const { fetchPostDetail } = await import('@/lib/api');
     const detail = await fetchPostDetail('slot-1');
-    expect(detail?.kind).toBe('slot');
-    if (detail?.kind !== 'slot') throw new Error('expected slot');
+    if (detail === null) throw new Error('expected slot');
     expect(detail.slot.id).toBe('slot-1');
     expect(detail.persona?.name).toBe('Viva Leve');
     expect(fetch).toHaveBeenCalledWith('/api/posts/slot-1', expect.objectContaining({ method: 'GET' }));
@@ -536,44 +447,9 @@ describe('api', () => {
     await expect(fetchPostDetail('slot-1')).rejects.toThrow('boom');
   });
 
-  it('fetchPostDetail carries the script angle through and narrows missing or blank ones to null', async () => {
-    const { fetchPostDetail } = await import('@/lib/api');
-    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({
-      success: true,
-      kind: 'slot',
-      slot: { id: 'slot-1', status: 'ready', scriptAngle: 'The myth that keeps coming back' },
-      schedule: { id: 's1' },
-      persona: null,
-    }));
-    const slotDetail = await fetchPostDetail('slot-1');
-    if (slotDetail?.kind !== 'slot') throw new Error('expected slot');
-    expect(slotDetail.slot.scriptAngle).toBe('The myth that keeps coming back');
-
-    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({
-      success: true,
-      kind: 'slot',
-      slot: { id: 'slot-1', status: 'ready' },
-      schedule: { id: 's1' },
-      persona: null,
-    }));
-    const legacySlot = await fetchPostDetail('slot-1');
-    if (legacySlot?.kind !== 'slot') throw new Error('expected slot');
-    expect(legacySlot.slot.scriptAngle).toBeNull();
-
-    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({
-      success: true,
-      kind: 'generation',
-      generation: { id: 'vg-1', generationId: 'gen-1', status: 'completed', scriptAngle: '  ' },
-    }));
-    const generation = await fetchPostDetail('gen-1');
-    if (generation?.kind !== 'generation') throw new Error('expected generation');
-    expect(generation.generation.scriptAngle).toBeNull();
-  });
-
   it('fetchPostDetail carries the published links through', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({
       success: true,
-      kind: 'slot',
       slot: {
         id: 'slot-1',
         status: 'published',
@@ -584,7 +460,7 @@ describe('api', () => {
     }));
     const { fetchPostDetail } = await import('@/lib/api');
     const detail = await fetchPostDetail('slot-1');
-    if (detail?.kind !== 'slot') throw new Error('expected slot');
+    if (detail === null) throw new Error('expected slot');
     expect(detail.slot.publishLinks).toEqual([
       { provider: 'youtube', url: 'https://www.youtube.com/watch?v=abc' },
     ]);
@@ -593,7 +469,6 @@ describe('api', () => {
   it('fetchPostDetail drops publish links with an unknown provider', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({
       success: true,
-      kind: 'slot',
       slot: {
         id: 'slot-1',
         status: 'published',
@@ -607,7 +482,7 @@ describe('api', () => {
     }));
     const { fetchPostDetail } = await import('@/lib/api');
     const detail = await fetchPostDetail('slot-1');
-    if (detail?.kind !== 'slot') throw new Error('expected slot');
+    if (detail === null) throw new Error('expected slot');
     expect(detail.slot.publishLinks).toEqual([
       { provider: 'youtube', url: 'https://www.youtube.com/watch?v=abc' },
     ]);
@@ -616,96 +491,31 @@ describe('api', () => {
   it('fetchPostDetail defaults missing or malformed publishLinks to an empty list', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({
       success: true,
-      kind: 'slot',
       slot: { id: 'slot-1', status: 'published' },
       schedule: { id: 's1' },
       persona: null,
     }));
     const { fetchPostDetail } = await import('@/lib/api');
     const detail = await fetchPostDetail('slot-1');
-    if (detail?.kind !== 'slot') throw new Error('expected slot');
+    if (detail === null) throw new Error('expected slot');
     expect(detail.slot.publishLinks).toEqual([]);
 
     vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({
       success: true,
-      kind: 'slot',
       slot: { id: 'slot-1', publishLinks: 'not-an-array' },
       schedule: { id: 's1' },
       persona: null,
     }));
     const second = await fetchPostDetail('slot-1');
-    if (second?.kind !== 'slot') throw new Error('expected slot');
+    if (second === null) throw new Error('expected slot');
     expect(second.slot.publishLinks).toEqual([]);
-  });
-
-  it('fetchPostDetail carries the progress history through and narrows malformed entries', async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({
-      success: true,
-      kind: 'slot',
-      slot: {
-        id: 'slot-1',
-        status: 'generating',
-        progressHistory: [
-          { progress: 40, stage: 'subtitle', recordedAt: '2026-10-05T22:10:00.000Z' },
-          { progress: 0, stage: 'music_mood', recordedAt: '2026-10-05T22:12:00.000Z' },
-          { progress: 'lots', stage: 'x', recordedAt: '2026-10-05T22:13:00.000Z' },
-          { progress: 50, recordedAt: '2026-10-05T22:14:00.000Z' },
-          null,
-        ],
-      },
-      schedule: { id: 's1' },
-      persona: null,
-    }));
-    const { fetchPostDetail } = await import('@/lib/api');
-    const detail = await fetchPostDetail('slot-1');
-    if (detail?.kind !== 'slot') throw new Error('expected slot');
-    expect(detail.slot.progressHistory).toEqual([
-      { progress: 40, stage: 'subtitle', recordedAt: '2026-10-05T22:10:00.000Z' },
-      { progress: 0, stage: 'music_mood', recordedAt: '2026-10-05T22:12:00.000Z' },
-      { progress: 50, stage: null, recordedAt: '2026-10-05T22:14:00.000Z' },
-    ]);
-  });
-
-  it('fetchPostDetail defaults a missing progressHistory to an empty list', async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({
-      success: true,
-      kind: 'slot',
-      slot: { id: 'slot-1', status: 'awaiting' },
-      schedule: { id: 's1' },
-      persona: null,
-    }));
-    const { fetchPostDetail } = await import('@/lib/api');
-    const detail = await fetchPostDetail('slot-1');
-    if (detail?.kind !== 'slot') throw new Error('expected slot');
-    expect(detail.slot.progressHistory).toEqual([]);
-  });
-
-  it('fetchPostDetail maps a generation payload with live progress, null on 404', async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({
-      success: true,
-      kind: 'generation',
-      generation: { id: 'row-1', generationId: 'gen-3', engineTaskId: 'task-3', personaName: 'Viva Leve', videoSubject: 'Launch recap', status: 'pending', errorCode: null, tokensRefunded: false, createdAt: '2026-09-23T12:00:00.000Z', completedAt: null, progress: 67, stage: 'audio' },
-    }));
-    const { fetchPostDetail } = await import('@/lib/api');
-    const detail = await fetchPostDetail('gen-3');
-    expect(detail?.kind).toBe('generation');
-    if (detail?.kind !== 'generation') throw new Error('expected generation');
-    expect(detail.generation.engineTaskId).toBe('task-3');
-    expect(detail.generation.progress).toBe(67);
-    expect(detail.generation.stage).toBe('audio');
-    expect(fetch).toHaveBeenCalledWith('/api/posts/gen-3', expect.objectContaining({ method: 'GET' }));
-
-    vi.mocked(fetch).mockResolvedValueOnce(
-      jsonResponse({ success: false, error: 'Post not found.' }, false, 404),
-    );
-    await expect(fetchPostDetail('missing')).resolves.toBeNull();
   });
 
   it('detail queries are keyed by id and disabled without one', async () => {
     vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url === '/api/posts/slot-1') {
-        return jsonResponse({ success: true, kind: 'slot', slot: { id: 'slot-1' }, schedule: { id: 's1' }, persona: null });
+        return jsonResponse({ success: true, slot: { id: 'slot-1' }, schedule: { id: 's1' }, persona: null });
       }
       return jsonResponse({});
     });
@@ -728,7 +538,7 @@ describe('api', () => {
     try {
       vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
         if (String(input) === '/api/posts/slot-1') {
-          return jsonResponse({ success: true, kind: 'slot', slot: { id: 'slot-1' }, schedule: { id: 's1' }, persona: null });
+          return jsonResponse({ success: true, slot: { id: 'slot-1' }, schedule: { id: 's1' }, persona: null });
         }
         return jsonResponse({});
       });
@@ -758,151 +568,6 @@ describe('api', () => {
     } finally {
       vi.useRealTimers();
     }
-  });
-
-  it('fetchPostDetail narrows the generation facts from the route payload', async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(
-      jsonResponse({
-        success: true,
-        kind: 'slot',
-        slot: { id: 'slot-1' },
-        schedule: { id: 's1' },
-        persona: null,
-        generation: {
-          prompt: { slug: 'story-first', title: 'Story first', version: 3, source: 'official' },
-          voiceover: true,
-          language: 'pt-BR',
-          voiceId: 'ana_neural',
-          videoAspect: '9:16',
-          niche: 'cooking',
-          paragraphNumber: 5,
-          faceQuality: 'high',
-        },
-      }),
-    );
-    const { fetchPostDetail } = await import('@/lib/api');
-    const payload = await fetchPostDetail('slot-1');
-    if (payload?.kind !== 'slot') throw new Error('expected slot');
-    expect(payload.generation).toEqual({
-      prompt: { slug: 'story-first', title: 'Story first', version: 3, source: 'official' },
-      voiceover: true,
-      language: 'pt-BR',
-      voiceId: 'ana_neural',
-      videoAspect: '9:16',
-      videoLayout: null,
-      niche: 'cooking',
-      paragraphNumber: 5,
-      faceQuality: 'high',
-    });
-  });
-
-  it('fetchPostDetail narrows the hook photo from the route payload', async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(
-      jsonResponse({
-        success: true,
-        kind: 'slot',
-        slot: {
-          id: 'slot-1',
-          hookPhoto: {
-            url: 'https://e.com/hook.jpg',
-            source: 'segment',
-            segmentIndex: 0,
-            imageIndex: 0,
-          },
-        },
-        schedule: { id: 's1' },
-        persona: null,
-      }),
-    );
-    const { fetchPostDetail } = await import('@/lib/api');
-    const payload = await fetchPostDetail('slot-1');
-    if (payload?.kind !== 'slot') throw new Error('expected slot');
-    expect(payload.slot.hookPhoto).toEqual({
-      url: 'https://e.com/hook.jpg',
-      source: 'segment',
-      segmentIndex: 0,
-      imageIndex: 0,
-    });
-  });
-
-  it('fetchPostDetail falls back to the none hook photo when the route omits it', async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(
-      jsonResponse({
-        success: true,
-        kind: 'slot',
-        slot: { id: 'slot-1' },
-        schedule: { id: 's1' },
-        persona: null,
-      }),
-    );
-    const { fetchPostDetail } = await import('@/lib/api');
-    const payload = await fetchPostDetail('slot-1');
-    if (payload?.kind !== 'slot') throw new Error('expected slot');
-    expect(payload.slot.hookPhoto).toEqual({
-      url: null,
-      source: 'none',
-      segmentIndex: null,
-      imageIndex: null,
-    });
-  });
-
-  it('fetchPostDetail falls back to null leaves when generation is malformed', async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(
-      jsonResponse({
-        success: true,
-        kind: 'slot',
-        slot: { id: 'slot-1' },
-        schedule: { id: 's1' },
-        persona: null,
-        generation: {
-          prompt: { slug: 'story-first', title: 'Story first', version: '3', source: 'official' },
-          voiceover: 'yes',
-          language: 42,
-          voiceId: null,
-          paragraphNumber: Number.NaN,
-        },
-      }),
-    );
-    const { fetchPostDetail } = await import('@/lib/api');
-    const payload = await fetchPostDetail('slot-1');
-    if (payload?.kind !== 'slot') throw new Error('expected slot');
-    expect(payload.generation).toEqual({
-      prompt: null,
-      voiceover: false,
-      language: null,
-      voiceId: null,
-      videoAspect: null,
-      videoLayout: null,
-      niche: null,
-      paragraphNumber: null,
-      faceQuality: null,
-    });
-  });
-
-  it('fetchPostDetail defaults generation when the route omits it', async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(
-      jsonResponse({
-        success: true,
-        kind: 'slot',
-        slot: { id: 'slot-1' },
-        schedule: { id: 's1' },
-        persona: null,
-      }),
-    );
-    const { fetchPostDetail } = await import('@/lib/api');
-    const payload = await fetchPostDetail('slot-1');
-    if (payload?.kind !== 'slot') throw new Error('expected slot');
-    expect(payload.generation).toEqual({
-      prompt: null,
-      voiceover: false,
-      language: null,
-      voiceId: null,
-      videoAspect: null,
-      videoLayout: null,
-      niche: null,
-      paragraphNumber: null,
-      faceQuality: null,
-    });
   });
 
   describe('fetchScheduleStatus', () => {

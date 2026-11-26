@@ -10,17 +10,15 @@ import { describeImageSource } from '@/lib/image-source';
 export interface PersonaAvatarProps {
   avatarUrl?: string;
   photoUrl?: string;
-  libraryUrl?: string;
   name: string;
   className?: string;
   size?: number;
 }
 
-function displayCandidates(avatarUrl?: string, photoUrl?: string, libraryUrl?: string): string[] {
+function displayCandidates(avatarUrl?: string, photoUrl?: string): string[] {
   const urls: string[] = [];
   if (typeof avatarUrl === 'string' && avatarUrl.length > 0) urls.push(avatarUrl);
   if (typeof photoUrl === 'string' && photoUrl.length > 0) urls.push(photoUrl);
-  if (typeof libraryUrl === 'string' && libraryUrl.length > 0) urls.push(libraryUrl);
   return urls;
 }
 
@@ -32,19 +30,18 @@ function personaInitials(name: string): string {
 export default function PersonaAvatar({
   avatarUrl,
   photoUrl,
-  libraryUrl,
   name,
   className,
   size = 48,
 }: PersonaAvatarProps) {
-  const candidates = displayCandidates(avatarUrl, photoUrl, libraryUrl);
+  const candidates = displayCandidates(avatarUrl, photoUrl);
   const initials = personaInitials(name);
   const [failedCount, setFailedCount] = useState(0);
   const loggedEmptyChain = useRef(false);
   useEffect(() => {
     setFailedCount(0);
     loggedEmptyChain.current = false;
-  }, [avatarUrl, photoUrl, libraryUrl]);
+  }, [avatarUrl, photoUrl]);
   const imageUrl = candidates[failedCount];
   const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
   const imageFailed = failedCount >= candidates.length;

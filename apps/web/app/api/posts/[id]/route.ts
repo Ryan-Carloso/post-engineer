@@ -4,7 +4,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { apiErrorResponse } from '@/lib/api-error';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
-import { getGenerationPost, getSlotPost, personaScopeOf } from '@/lib/post-detail';
+import { getSlotPost, personaScopeOf } from '@/lib/post-detail';
 import { resolveSlotUuid } from '@/lib/schedule-slot-id';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
@@ -26,14 +26,10 @@ async function getHandler(
   const personaScope = personaScopeOf(auth);
 
   try {
-    const generation = await getGenerationPost(supabase, id, auth.userId, personaScope);
-    if (generation) {
-      return NextResponse.json({ success: true, kind: 'generation', generation });
-    }
     const slotUuid = resolveSlotUuid(id);
     const slotDetail = slotUuid === null ? null : await getSlotPost(supabase, slotUuid, auth.userId, personaScope);
     if (slotDetail) {
-      return NextResponse.json({ success: true, kind: 'slot', ...slotDetail });
+      return NextResponse.json({ success: true, ...slotDetail });
     }
   } catch (error) {
     logger.error('[api/posts] post detail lookup failed', error, { id });

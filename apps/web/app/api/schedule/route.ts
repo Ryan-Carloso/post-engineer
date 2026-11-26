@@ -3,7 +3,6 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
-import { trackApiEvent } from '@/lib/analytics';
 import { isPersonaAllowed } from '@/lib/api-keys';
 import { apiErrorResponse } from '@/lib/api-error';
 import {
@@ -12,10 +11,7 @@ import {
   attachApiErrorProperties,
 } from '@/lib/api-error-reporting';
 import { logger } from '@/lib/logger';
-import { batchChargeId } from '@/lib/billing/batch-discount';
-import { emitRefundIssued, refundSlotTokens } from '@/lib/billing/refund-tokens';
 import { scrubSecrets } from '@/lib/scrub';
-import { CANCEL_REFUND_REASON, refundsAfterClawback } from './batch-clawback';
 import { parseCancelScheduleQuery } from '@/lib/contracts/schedule';
 import { isUuid } from '@/lib/schedule-slot-id';
 import { removeCancelledMediaImages } from './cancel-media-cleanup';
@@ -23,10 +19,8 @@ import {
   CANCELLABLE_SLOT_STATUSES,
   isCancellableStatus,
   narrowCancelSlot,
-  neverGenerated,
   type ScheduleCancelSlot,
 } from './cancel-slots';
-import { cancelRemovedEngineTasks } from './cancel-engine-tasks';
 import { applyRateLimit, CALLER_RATE_LIMITS, profileForCaller, RATE_LIMITS } from '@/lib/rate-limit';
 
 
@@ -96,21 +90,6 @@ async function getHandler(request: Request): Promise<NextResponse> {
   return NextResponse.json({ success: true, schedules });
 }
 
-interface CancelRefund {
-  slotId: string;
-  refunded: boolean;
-  alreadyRefunded: boolean;
-  reason: CancelRefundReason;
-}
-
-type CancelRefundReason =
-  | 'not_generated'
-  | 'already_generated'
-  | 'already_refunded'
-  | 'not_charged'
-  | 'refund_failed'
-  | 'discount_withheld';
-
 async function deleteHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
@@ -136,7 +115,7 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
 
   const { data: slotData, error: slotsError } = await supabase
     .from('scheduled_posts')
-    .select('id, status, charged_tokens, batch_id, task_id, media_kind, media_ref')
+    .select('id, status, media_kind, media_ref')
     .eq('schedule_id', scheduleId)
     .eq('user_id', user.id);
   if (slotsError) {
@@ -174,22 +153,17 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
 
   const { data: remainingData, error: remainingError } = await supabase
     .from('scheduled_posts')
-    .select('id, status, charged_tokens, batch_id, task_id, media_kind, media_ref')
+    .select('id, status, media_kind, media_ref')
     .eq('schedule_id', scheduleId)
     .eq('user_id', user.id);
   if (remainingError) {
-    logger.error('[api/schedule] cancel could not re-read slots after delete; refunds skipped', remainingError, {
+    logger.error('[api/schedule] cancel could not re-read slots after delete', remainingError, {
       scheduleId,
-      userId: user.id,
-    });
-    trackApiEvent('cancel_refund_skipped', {
-      scheduleId,
-      reason: 'slots_reread_failed',
       userId: user.id,
     });
     return errorResponse(
       500,
-      'Unpublished slots were removed but could not be confirmed, so prepaid tokens were not refunded.',
+      'Unpublished slots were removed but could not be confirmed.',
       'DELETE /api/schedule',
       undefined,
       { cause: remainingError },
@@ -203,126 +177,6 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
   const removed = cancellable.filter((slot) => !remainingIds.has(slot.id));
 
   await removeCancelledMediaImages(createSupabaseServiceClient(), removed, user.id);
-
-  await cancelRemovedEngineTasks(removed, scheduleId, user.id);
-
-  const refundable = removed.filter(neverGenerated);
-  const clawback = await refundsAfterClawback(createSupabaseServiceClient(), user.id, refundable, scheduleId);
-  if (!clawback.ok) {
-    logger.error('[api/schedule] cancel could not re-check the batch discount; refunds skipped', clawback.error, {
-      scheduleId,
-      userId: user.id,
-    });
-    trackApiEvent('cancel_refund_skipped', {
-      scheduleId,
-      reason: 'batch_recheck_failed',
-      userId: user.id,
-    });
-    return errorResponse(
-      500,
-      'Unpublished slots were removed but could not be confirmed, so prepaid tokens were not refunded.',
-      'DELETE /api/schedule',
-      undefined,
-      { cause: clawback.error },
-    );
-  }
-
-  const refunds: CancelRefund[] = [];
-  let refundedTokens = 0;
-  const batchGenerationId = batchChargeId(scheduleId);
-  for (const slot of removed) {
-    if (!neverGenerated(slot)) {
-      refunds.push({ slotId: slot.id, refunded: false, alreadyRefunded: false, reason: 'already_generated' });
-      continue;
-    }
-    if (clawback.settledSlotIds.has(slot.id)) {
-      if (slot.chargedTokens === 0) {
-        refunds.push({ slotId: slot.id, refunded: false, alreadyRefunded: false, reason: 'not_charged' });
-        continue;
-      }
-      const net = clawback.refundBySlot.get(slot.id) ?? 0;
-      const outcome = clawback.settledBySlot.get(slot.id);
-      if (outcome === undefined) {
-        logger.error('[api/schedule] cancel refund missing settlement outcome', {
-          scheduleId,
-          slotId: slot.id,
-          userId: user.id,
-        });
-        refunds.push({ slotId: slot.id, refunded: false, alreadyRefunded: false, reason: 'refund_failed' });
-        continue;
-      }
-      if (net === 0) {
-        refunds.push({
-          slotId: slot.id,
-          refunded: false,
-          alreadyRefunded: outcome.alreadyRefunded,
-          reason: 'discount_withheld',
-        });
-        continue;
-      }
-      if (!outcome.refunded && !outcome.alreadyRefunded) {
-        logger.error('[api/schedule] cancel refund failed', outcome, {
-          scheduleId,
-          slotId: slot.id,
-          userId: user.id,
-        });
-        refunds.push({ slotId: slot.id, refunded: false, alreadyRefunded: false, reason: 'refund_failed' });
-        continue;
-      }
-      if (outcome.refunded) {
-        refundedTokens += net;
-        emitRefundIssued(user.id, {
-          kind: 'schedule_cancelled',
-          amount: net,
-          reason: CANCEL_REFUND_REASON,
-          batchGenerationId,
-          scheduleId,
-          slotId: slot.id,
-          engineTaskId: slot.taskId,
-        });
-      }
-      refunds.push({
-        slotId: slot.id,
-        refunded: outcome.refunded,
-        alreadyRefunded: outcome.alreadyRefunded,
-        reason: outcome.refunded ? 'not_generated' : 'already_refunded',
-      });
-      continue;
-    }
-    const amount = clawback.refundBySlot.get(slot.id) ?? slot.chargedTokens;
-    if (amount === 0) {
-      refunds.push({ slotId: slot.id, refunded: false, alreadyRefunded: false, reason: 'not_charged' });
-      continue;
-    }
-    const { refunded, alreadyRefunded, error: refundError } = await refundSlotTokens({
-      supabase: createSupabaseServiceClient(),
-      userId: user.id,
-      scheduleId,
-      slotId: slot.id,
-      amount,
-      reason: CANCEL_REFUND_REASON,
-      kind: 'schedule_cancelled',
-      engineTaskId: slot.taskId,
-    });
-    if (refundError || (!refunded && !alreadyRefunded)) {
-      logger.error('[api/schedule] cancel refund failed', refundError ?? { refunded, already_refunded: alreadyRefunded }, {
-        scheduleId,
-        slotId: slot.id,
-        userId: user.id,
-      });
-      refunds.push({ slotId: slot.id, refunded: false, alreadyRefunded: false, reason: 'refund_failed' });
-      continue;
-    }
-    if (refunded) {
-      refundedTokens += amount;
-    }
-    refunds.push({
-      slotId: slot.id,
-      refunded,
-      alreadyRefunded,
-      reason: refunded ? 'not_generated' : 'already_refunded',
-    });
-  }
 
   const { error: deleteError } = await service
     .from('schedules')
@@ -342,13 +196,8 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
   const response = NextResponse.json({
     success: true,
     cancelledSlotIds: removed.map((slot) => slot.id),
-    refunds,
-    batchDiscountWithheld: removed.reduce(
-      (sum, slot) => sum + slot.chargedTokens - (clawback.refundBySlot.get(slot.id) ?? slot.chargedTokens),
-      0,
-    ),
   });
-  attachApiErrorProperties(response, scrubSecrets({ scheduleId, refunded: refundedTokens }));
+  attachApiErrorProperties(response, scrubSecrets({ scheduleId }));
   return response;
 }
 

@@ -71,7 +71,7 @@ function sourceFiles(dir: string): string[] {
   });
 }
 
-const BRAND_FIXED = ['agent-logos.tsx', 'whatsapp-button.tsx', 'insufficient-tokens-dialog.tsx', 'checkout-cancel-dialog.tsx'];
+const BRAND_FIXED = ['agent-logos.tsx', 'whatsapp-button.tsx'];
 
 describe('shared UI uses theme tokens only', () => {
   const files = sourceFiles(join(webRoot, 'components', 'ui')).filter(

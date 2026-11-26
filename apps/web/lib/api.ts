@@ -5,25 +5,15 @@ import { createSupabaseClient } from '@/lib/supabase/client';
 import { useUploadStore } from '@/lib/store';
 import { mapSchedule, type ScheduleConfig, type ScheduleRow } from '@/lib/schedule-row';
 import { fetchScheduleStatus, type ScheduledSlot } from '@/lib/schedule-status';
-import type {
-  CreatePersonaResult,
-  GeneratePersonaAvatarResult,
-  SocialProvider,
-  VoiceOption,
-} from '@/lib/types';
-import { isVoiceOption } from './voice-catalog';
+import type { CreatePersonaResult, SocialProvider } from '@/lib/types';
 import { HttpStatusError } from '@/lib/errors';
 import { notifyIfSessionExpired } from '@/lib/session-expiry';
 import type { PublishLink } from '@/lib/publish-links';
-import type { VideoGenerationRow as VideoGeneration } from '@/lib/contracts/video-tasks';
 import type { PublishProviderFailure, PublishUserNotice } from '@/lib/publish-user-notice';
-import { narrowGeneration, narrowProgressHistory, narrowPublishLinks, type GenerationFacts, type ProgressHistoryEntry } from './slot-detail';
-import { narrowScriptAngle } from './script-angle';
-import { narrowHookPhoto, type HookPhoto } from './hook-photo';
+import { narrowPostPrompt, narrowPublishLinks, type PostPromptFacts } from './slot-detail';
 import { parseJsonBody, throwForBadResponse } from './api-response';
 import type { PersonaRecord } from './persona-record';
 
-export type { ProgressHistoryEntry };
 export type { PersonaRecord };
 
 export {
@@ -41,57 +31,7 @@ export type { BlueskyAccountResponse, ProviderAccountsResponse } from './social-
 async function createPersona(formData: FormData): Promise<CreatePersonaResult> {
   const response = await fetch('/api/persona', { method: 'POST', body: formData });
   notifyIfSessionExpired(response);
-  const data = (await parseJsonBody<CreatePersonaResult>(response)) ?? { success: false };
-  return {
-    ...data,
-    imageIds: toStringArray(data.imageIds),
-    warnings: toStringArray(data.warnings),
-  };
-}
-
-function toStringArray(value: unknown): string[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  const entries = value.filter((entry): entry is string => typeof entry === 'string');
-  return entries.length > 0 ? entries : undefined;
-}
-
-async function generatePersonaAvatar(prompt: string): Promise<GeneratePersonaAvatarResult> {
-  const response = await fetch('/api/persona/avatar', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt }),
-  });
-  notifyIfSessionExpired(response);
-  const data: GeneratePersonaAvatarResult = await response.json();
-  return data;
-}
-
-async function fetchVoices(): Promise<VoiceOption[]> {
-  const response = await fetch('/api/persona/voices');
-  const data: unknown = await response.json().catch(() => null);
-
-  if (!response.ok) {
-    const message =
-      typeof data === 'object' &&
-      data !== null &&
-      'error' in data &&
-      typeof data.error === 'string'
-        ? data.error
-        : 'Failed to fetch voices.';
-    throw new HttpStatusError(message, response.status);
-  }
-
-  if (
-    typeof data !== 'object' ||
-    data === null ||
-    !('voices' in data) ||
-    !Array.isArray(data.voices) ||
-    !data.voices.every(isVoiceOption)
-  ) {
-    throw new Error('Invalid voices response.');
-  }
-
-  return data.voices;
+  return (await parseJsonBody<CreatePersonaResult>(response)) ?? { success: false };
 }
 
 async function fetchPersonaList(): Promise<PersonaRecord[]> {
@@ -118,13 +58,6 @@ export interface DeletePersonaResult {
   code?: string;
 }
 
-export interface DeletePreviewVideo {
-  taskId: string | null;
-  title: string | null;
-  status: string;
-  downloadUrl: string | null;
-}
-
 export interface DeletePreview {
   success: boolean;
   persona?: { id: string; name: string };
@@ -133,12 +66,7 @@ export interface DeletePreview {
     upcomingSlots: number;
     publishedSlots: number;
     failedSlots: number;
-    generatedVideos: number;
-    personaImages: number;
   };
-  videos?: DeletePreviewVideo[];
-  videosTruncated?: boolean;
-  linksIncomplete?: boolean;
   error?: string;
   code?: string;
 }
@@ -239,172 +167,6 @@ export function usePersonaListQuery() {
   });
 }
 
-export interface PersonaImageRecord {
-  id: string;
-  tag: string | null;
-  description: string | null;
-  is_primary: boolean;
-  created_at: string;
-  image_url: string | null;
-  image_url_error?: true;
-}
-
-async function fetchPersonaImages(personaId: string): Promise<PersonaImageRecord[]> {
-  const response = await fetch(
-    `/api/persona/images?personaId=${encodeURIComponent(personaId)}`,
-  );
-  const data: { success: boolean; images: PersonaImageRecord[]; error?: string } | null =
-    await response.json().catch(() => null);
-  const serverError = data && typeof data.error === 'string' ? data.error : null;
-  if (!response.ok) {
-    throw new HttpStatusError(serverError ?? `Persona images request failed with status ${response.status}`, response.status);
-  }
-  if (!data || data.success !== true || !Array.isArray(data.images)) {
-    throw new Error(serverError ?? 'Persona images request returned an unexpected payload.');
-  }
-  return data.images.filter(
-    (image): image is PersonaImageRecord =>
-      typeof image?.id === 'string' &&
-      (image.image_url === null || typeof image.image_url === 'string') &&
-      typeof image?.is_primary === 'boolean' &&
-      (image.tag === null ||
-        image.tag === undefined ||
-        typeof image.tag === 'string') &&
-      (image.description === null ||
-        image.description === undefined ||
-        typeof image.description === 'string'),
-  );
-}
-
-export function usePersonaImagesQuery(personaId: string | null) {
-  return useQuery<PersonaImageRecord[]>({
-    queryKey: ['persona-images', personaId],
-    queryFn: () => {
-      if (personaId === null) throw new Error('personaId is required.');
-      return fetchPersonaImages(personaId);
-    },
-    enabled: personaId !== null,
-    staleTime: 30_000,
-  });
-}
-
-export interface UploadPersonaImageInput {
-  file: File;
-  tag?: string;
-  description?: string;
-  isPrimary?: true;
-}
-
-export interface ImageMutationResult {
-  success: boolean;
-  error?: string;
-  warnings?: string[];
-}
-
-async function parseImageMutationResult(
-  response: Response,
-): Promise<ImageMutationResult> {
-  const data: { success?: unknown; error?: unknown; warnings?: unknown } | null =
-    await response.json().catch(() => null);
-  if (!response.ok || !data || data.success !== true) {
-    if (!response.ok) notifyIfSessionExpired(response);
-    return {
-      success: false,
-      error:
-        (data && typeof data.error === 'string' && data.error) ||
-        `Request failed with status ${response.status}.`,
-    };
-  }
-  const warnings = Array.isArray(data.warnings)
-    ? data.warnings.filter((warning): warning is string => typeof warning === 'string')
-    : [];
-  return { success: true, ...(warnings.length > 0 ? { warnings } : {}) };
-}
-
-export async function uploadPersonaImage(
-  personaId: string,
-  input: UploadPersonaImageInput,
-): Promise<ImageMutationResult> {
-  const formData = new FormData();
-  formData.append('personaId', personaId);
-  formData.append('image', input.file);
-  if (input.tag) formData.append('tag', input.tag);
-  if (input.description) formData.append('description', input.description);
-  if (input.isPrimary !== undefined) formData.append('isPrimary', String(input.isPrimary));
-  const response = await fetch('/api/persona/images', { method: 'POST', body: formData });
-  return parseImageMutationResult(response);
-}
-
-export interface UpdatePersonaImageInput {
-  id: string;
-  tag?: string;
-  description?: string;
-  isPrimary?: true;
-}
-
-export async function updatePersonaImage(
-  input: UpdatePersonaImageInput,
-): Promise<ImageMutationResult> {
-  if ((input.isPrimary as boolean | undefined) === false) {
-    throw new Error('isPrimary cannot be false: mark another image as primary instead.');
-  }
-  const response = await fetch('/api/persona/images', {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(input),
-  });
-  return parseImageMutationResult(response);
-}
-
-export async function deletePersonaImage(id: string): Promise<ImageMutationResult> {
-  const response = await fetch(
-    `/api/persona/images?id=${encodeURIComponent(id)}`,
-    { method: 'DELETE' },
-  );
-  return parseImageMutationResult(response);
-}
-
-function useInvalidatePersonaImages(personaId: string | null) {
-  const queryClient = useQueryClient();
-  return () => {
-    void queryClient.invalidateQueries({ queryKey: ['persona-images', personaId] });
-  };
-}
-
-function usePersonaImageMutation<TInput>(
-  personaId: string | null,
-  mutationFn: (personaId: string, input: TInput) => Promise<ImageMutationResult>,
-) {
-  const invalidate = useInvalidatePersonaImages(personaId);
-  return useMutation({
-    mutationFn: (input: TInput) => {
-      if (personaId === null) throw new Error('personaId is required.');
-      return mutationFn(personaId, input);
-    },
-    onSuccess: (result) => {
-      if (result.success) invalidate();
-    },
-  });
-}
-
-export function useUploadPersonaImageMutation(personaId: string | null) {
-  return usePersonaImageMutation<UploadPersonaImageInput>(personaId, uploadPersonaImage);
-}
-
-export function useUpdatePersonaImageMutation(personaId: string | null) {
-  return usePersonaImageMutation<UpdatePersonaImageInput>(
-    personaId,
-    (_personaId, input) => updatePersonaImage(input),
-  );
-}
-
-export function useDeletePersonaImageMutation(personaId: string | null) {
-  return usePersonaImageMutation<string>(
-    personaId,
-    (_personaId, id) => deletePersonaImage(id),
-  );
-}
-
 interface SupabaseSessionUser {
   id: string;
   email?: string;
@@ -468,16 +230,6 @@ export function useSessionQuery() {
   });
 }
 
-export function useVoicesQuery() {
-  return useQuery<VoiceOption[]>({
-    queryKey: ['persona-voices'],
-    queryFn: fetchVoices,
-    retry: false,
-    staleTime: 5 * 60_000,
-  });
-}
-
-
 export type { ScheduleConfig };
 
 async function fetchSchedules(): Promise<ScheduleConfig[]> {
@@ -512,27 +264,6 @@ export function useScheduleStatusQuery(limit?: number) {
   return useQuery<{ upcoming: ScheduledSlot[]; recent: ScheduledSlot[]; hasAnyPost: boolean }>({
     queryKey: ['fill-schedule-status', limit ?? 'default'],
     queryFn: () => fetchScheduleStatus(limit),
-    refetchInterval: 60_000,
-  });
-}
-
-export type { VideoGeneration };
-
-async function fetchVideoGenerations(limit?: number): Promise<VideoGeneration[]> {
-  const url =
-    typeof limit === 'number'
-      ? `/api/persona/video-generations?limit=${limit}`
-      : '/api/persona/video-generations';
-  const response = await fetch(url);
-  const data: { success?: boolean; generations?: VideoGeneration[] } | null = await response.json().catch(() => null);
-  if (!response.ok || !data?.success) throw new HttpStatusError('Failed to fetch video generations', response.status);
-  return data.generations ?? [];
-}
-
-export function useVideoGenerationsQuery(limit?: number) {
-  return useQuery<VideoGeneration[]>({
-    queryKey: ['video-generations', limit ?? 'default'],
-    queryFn: () => fetchVideoGenerations(limit),
     refetchInterval: 60_000,
   });
 }
@@ -589,16 +320,7 @@ export interface SlotDetailPayload {
     title: string | null;
     error: string | null;
     publishedAt: string | null;
-    taskId: string | null;
-    progress: number;
-    stage: string | null;
-    retryable: boolean | null;
-    queuePosition: number | null;
-    queueTotal: number | null;
-    scriptAngle: string | null;
     publishLinks: PublishLink[];
-    hookPhoto: HookPhoto;
-    progressHistory: ProgressHistoryEntry[];
     userNotices?: PublishUserNotice[];
     providerFailures?: PublishProviderFailure[];
   };
@@ -622,12 +344,10 @@ export interface SlotDetailPayload {
     publishMode: 'scheduled' | 'asap';
   };
   persona: { id: string; name: string } | null;
-  generation: GenerationFacts;
+  prompt: PostPromptFacts | null;
 }
 
-export type PostDetail =
-  | (SlotDetailPayload & { kind: 'slot' })
-  | { kind: 'generation'; generation: VideoGeneration & { progress: number; stage: string | null; scriptAngle: string | null } };
+export type PostDetail = SlotDetailPayload;
 
 export async function fetchPostDetail(id: string): Promise<PostDetail | null> {
   const response = await fetch(`/api/posts/${encodeURIComponent(id)}`, {
@@ -635,34 +355,17 @@ export async function fetchPostDetail(id: string): Promise<PostDetail | null> {
   });
   if (response.status === 404) return null;
   if (!response.ok) await throwForBadResponse(response, 'Failed to load post.');
-  const data = await parseJsonBody<{ success: boolean; kind?: string; error?: string } & Record<string, unknown>>(response);
+  const data = await parseJsonBody<{ success: boolean; error?: string } & Record<string, unknown>>(response);
   if (!data?.success) throw new Error(data?.error ?? 'Failed to load post.');
-  if (data.kind === 'generation') {
-    const record = (typeof data.generation === 'object' && data.generation !== null ? data.generation : {}) as Record<string, unknown>;
-    const progress = typeof record.progress === 'number' ? record.progress : 0;
-    const stage = typeof record.stage === 'string' ? record.stage : null;
-    const scriptAngle = narrowScriptAngle(record.scriptAngle);
-    return { kind: 'generation', generation: { ...(record as unknown as VideoGeneration), progress, stage, scriptAngle } };
-  }
-  if (data.kind === 'slot') {
-    const payload = data as unknown as SlotDetailPayload;
-    if (!payload.slot || !payload.schedule) throw new Error('Failed to load post.');
-    const rawSchedule = payload.schedule as SlotDetailPayload['schedule'] & { publishMode?: unknown };
-    return {
-      kind: 'slot',
-      slot: {
-        ...payload.slot,
-        scriptAngle: narrowScriptAngle((payload.slot as { scriptAngle?: unknown }).scriptAngle),
-        hookPhoto: narrowHookPhoto((payload.slot as { hookPhoto?: unknown }).hookPhoto),
-        publishLinks: narrowPublishLinks(payload.slot.publishLinks),
-        progressHistory: narrowProgressHistory(payload.slot.progressHistory),
-      },
-      schedule: { ...payload.schedule, publishMode: rawSchedule.publishMode === 'asap' ? 'asap' : 'scheduled' },
-      persona: payload.persona ?? null,
-      generation: narrowGeneration(payload.generation),
-    };
-  }
-  throw new Error('Failed to load post.');
+  const payload = data as unknown as SlotDetailPayload;
+  if (!payload.slot || !payload.schedule) throw new Error('Failed to load post.');
+  const rawSchedule = payload.schedule as SlotDetailPayload['schedule'] & { publishMode?: unknown };
+  return {
+    slot: { ...payload.slot, publishLinks: narrowPublishLinks(payload.slot.publishLinks) },
+    schedule: { ...payload.schedule, publishMode: rawSchedule.publishMode === 'asap' ? 'asap' : 'scheduled' },
+    persona: payload.persona ?? null,
+    prompt: narrowPostPrompt((data as Record<string, unknown>).prompt),
+  };
 }
 
 export function usePostDetailQuery(id: string) {
@@ -676,13 +379,7 @@ export function usePostDetailQuery(id: string) {
 }
 
 
-export {
-  fetchSession,
-  createPersona,
-  generatePersonaAvatar,
-  fetchVoices,
-  fetchPersonaList,
-};
+export { fetchSession, createPersona, fetchPersonaList };
 export { fetchYouTubeAccounts, fetchInstagramAccounts } from './social-accounts-queries';
 
 export type { SupabaseSessionUser };

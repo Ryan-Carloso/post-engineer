@@ -355,7 +355,7 @@ describe('image uploads', () => {
     await expect(claimUploadForPublish(store, storage, USER, 'upload-1', NOW, ['instagram', 'rumble'])).rejects.toMatchObject({
       status: 400,
       code: 'IMAGE_PROVIDER_UNSUPPORTED',
-      message: 'This upload is an image: rumble publishes video only. Images go to youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, telegram.',
+      message: 'This upload is an image: rumble publishes video only. Images go to instagram, bluesky, linkedin, threads, facebook, pinterest, telegram.',
     });
     expect(store.rows.get('upload-1')?.status).toBe('ready');
     expect(storage.removed).toEqual([]);
@@ -363,7 +363,7 @@ describe('image uploads', () => {
 
   it('claims an image upload for image networks', async () => {
     const store = makeStore([row({ status: 'ready', declared_content_type: 'image/jpeg', detected_content_type: 'image/jpeg' })]);
-    const claimed = await claimUploadForPublish(store, makeStorage(JPEG), USER, 'upload-1', NOW, ['bluesky', 'pinterest', 'youtube']);
+    const claimed = await claimUploadForPublish(store, makeStorage(JPEG), USER, 'upload-1', NOW, ['bluesky', 'pinterest', 'instagram']);
     expect(claimed.contentType).toBe('image/jpeg');
     expect(store.rows.get('upload-1')?.status).toBe('consumed');
   });

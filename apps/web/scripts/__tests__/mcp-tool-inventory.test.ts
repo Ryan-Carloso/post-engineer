@@ -50,7 +50,7 @@ describe('mcp tool inventory reader', () => {
       expect.arrayContaining(['list', 'get', 'create', 'update', 'delete', 'versions', 'restore']),
     );
     expect(actions.insights).toContain('retention_curve');
-    expect(actions.generate_video).toEqual([]);
+    expect(actions.persona_media).toEqual(['get_card', 'render_prompt']);
   });
 
   it('accepts single and double quoted tool names and walks subdirectories', () => {

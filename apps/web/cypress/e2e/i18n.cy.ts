@@ -30,26 +30,9 @@ describe('i18n — troca de idioma via UI', () => {
       body: { success: true, upcoming: [], recent: [] },
     }).as('getScheduleStatus');
 
-    cy.intercept('GET', '/api/persona/video-generations**', {
-      statusCode: 200,
-      body: { success: true, generations: [] },
-    }).as('getGenerations');
 
     visitHomeAsReturningUser();
     cy.wait('@getSchedules');
-  });
-
-  it('troca labels da sidebar de PT para EN e volta', () => {
-    cy.contains('a', 'Contas').should('be.visible');
-
-    cy.contains('button', 'EN').click();
-    cy.contains('a', 'Accounts').should('be.visible');
-    cy.get('[data-testid=profile-billing-link]').should('exist');
-    cy.contains('button', 'Sign out').should('exist');
-
-    cy.contains('button', 'PT').click();
-    cy.contains('a', 'Contas').should('be.visible');
-    cy.contains('button', 'Sair').should('exist');
   });
 
   it('persiste o idioma escolhido no localStorage entre visitas', () => {

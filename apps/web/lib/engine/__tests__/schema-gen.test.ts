@@ -44,9 +44,10 @@ describe('lib/engine/schema.gen.ts', () => {
     expect(text.includes('volume?: number;')).toBe(true);
   });
 
-  it('carries the engine video request contract', () => {
+  it('carries the publish worker contract: health, ping and version only', () => {
     const generated = readFileSync(generatedPath, 'utf8');
-    expect(generated.includes('TaskVideoRequest: {')).toBe(true);
-    expect(generated.includes('"/api/v1/videos": {')).toBe(true);
+    expect(generated.includes('"/health": {')).toBe(true);
+    expect(generated.includes('"/version": {')).toBe(true);
+    expect(generated.includes('"/api/v1/')).toBe(false);
   });
 });

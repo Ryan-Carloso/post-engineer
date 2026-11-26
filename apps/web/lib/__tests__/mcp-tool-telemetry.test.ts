@@ -53,7 +53,7 @@ describe('mcp_tool_called', () => {
   });
 
   it('records no action for a tool without actions', () => {
-    record(mcpRequest({ 'x-mcp-tool': 'generate_video' }));
+    record(mcpRequest({ 'x-mcp-tool': 'publish_video' }));
     expect(captureAs.mock.calls[0]?.[2]).not.toHaveProperty('action');
   });
 
@@ -211,7 +211,7 @@ describe('mcp_tool_called', () => {
     const promptSlug = 'daily-news';
 
     function recordedProperties(headers: Record<string, string>): Record<string, unknown> {
-      record(mcpRequest({ 'x-mcp-tool': 'generate_video', ...headers }));
+      record(mcpRequest({ 'x-mcp-tool': 'publish_video', ...headers }));
       return captureAs.mock.calls[0]?.[2] as Record<string, unknown>;
     }
 
@@ -222,7 +222,6 @@ describe('mcp_tool_called', () => {
         'x-mcp-nudged-by': 'personas_list',
         'x-mcp-recipes-known': 'true',
         'x-mcp-recipe-fetched': promptSlug,
-        'x-mcp-script-rejections': '2',
         'x-mcp-recipe': promptSlug,
       });
       expect(properties).toMatchObject({
@@ -231,7 +230,6 @@ describe('mcp_tool_called', () => {
         nudged_by: 'personas_list',
         recipes_known: true,
         recipe_fetched: 'prompt',
-        script_rejections: 2,
         recipe: 'prompt',
       });
       expect(JSON.stringify(properties)).not.toContain(promptSlug);
@@ -261,18 +259,17 @@ describe('mcp_tool_called', () => {
       expect(properties.recipe).toBe('unknown');
     });
 
-    it('drops malformed session, transport, surface, boolean and counter values', () => {
+    it('drops malformed session, transport, surface and boolean values', () => {
       const properties = recordedProperties({
         'x-mcp-session-id': 'not-a-uuid',
         'x-mcp-transport': 'carrier-pigeon',
         'x-mcp-nudged-by': 'some_other_tool',
         'x-mcp-recipes-known': 'yes',
-        'x-mcp-script-rejections': '10000',
       });
-      for (const key of ['session_id', 'transport', 'nudged_by', 'recipes_known', 'script_rejections']) {
+      for (const key of ['session_id', 'transport', 'nudged_by', 'recipes_known']) {
         expect(properties).not.toHaveProperty(key);
       }
-      expect(properties.tool).toBe('generate_video');
+      expect(properties.tool).toBe('publish_video');
     });
 
     it('records recipes_known false as a boolean', () => {
@@ -281,7 +278,7 @@ describe('mcp_tool_called', () => {
 
     it('lets no recipe header override the tool, path or auth method', () => {
       const properties = recordedProperties({ 'x-mcp-recipe': promptSlug });
-      expect(properties).toMatchObject({ tool: 'generate_video', auth_method: 'api_key', path: '/api/persona/list' });
+      expect(properties).toMatchObject({ tool: 'publish_video', auth_method: 'api_key', path: '/api/persona/list' });
     });
   });
 });

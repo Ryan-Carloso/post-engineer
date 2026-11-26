@@ -28,11 +28,7 @@ const PERSONA = { id: 'persona-1', name: 'Ryan' };
 const PREVIEW = {
   success: true,
   persona: { id: 'persona-1', name: 'Ryan' },
-  counts: { schedules: 2, upcomingSlots: 3, publishedSlots: 0, failedSlots: 0, generatedVideos: 2, personaImages: 1 },
-  videos: [
-    { taskId: 'task-aaa', title: 'Topic one', status: 'completed', downloadUrl: '/dl/task-aaa/f.mp4' },
-    { taskId: 'task-bbb', title: 'Topic two', status: 'failed', downloadUrl: null },
-  ],
+  counts: { schedules: 2, upcomingSlots: 3, publishedSlots: 0, failedSlots: 0 },
 };
 
 function renderModal(props: Partial<Parameters<typeof DeletePersonaModal>[0]> = {}) {
@@ -59,26 +55,17 @@ describe('DeletePersonaModal', () => {
     expect(fetchDeletePreview).not.toHaveBeenCalled();
   });
 
-  it('shows counts and the no-refund warning from the preview', async () => {
+  it('shows the counts from the preview', async () => {
     renderModal();
     await waitFor(() => expect(fetchDeletePreview).toHaveBeenCalledWith('persona-1'));
-    expect(await screen.findByText('personas.deleteDialogNoRefund')).toBeInTheDocument();
+    expect(await screen.findByText('personas.deleteDialogTypeName')).toBeInTheDocument();
     expect(screen.getAllByText('2').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('3')).toBeInTheDocument();
   });
 
-  it('lists videos with download links, unavailable when no URL', async () => {
-    renderModal();
-    const link = await screen.findByRole('link', { name: 'personas.deleteDialogDownload' });
-    expect(link).toHaveAttribute('href', '/dl/task-aaa/f.mp4');
-    expect(
-      await screen.findByText('personas.deleteDialogDownloadUnavailable'),
-    ).toBeInTheDocument();
-  });
-
   it('keeps Delete disabled until the typed name matches exactly', async () => {
     renderModal();
-    await screen.findByText('personas.deleteDialogNoRefund');
+    await screen.findByText('personas.deleteDialogTypeName');
     const confirm = screen.getByRole('button', { name: 'personas.deleteConfirm' });
     expect(confirm).toBeDisabled();
 
@@ -97,7 +84,7 @@ describe('DeletePersonaModal', () => {
     const onClose = vi.fn();
     const onDeleted = vi.fn();
     renderModal({ onClose, onDeleted });
-    await screen.findByText('personas.deleteDialogNoRefund');
+    await screen.findByText('personas.deleteDialogTypeName');
     fireEvent.change(screen.getByLabelText('personas.deleteDialogTypeName'), {
       target: { value: 'Ryan' },
     });
@@ -112,7 +99,7 @@ describe('DeletePersonaModal', () => {
     const onClose = vi.fn();
     vi.mocked(deletePersona).mockResolvedValue({ success: false, error: 'boom' });
     renderModal({ onClose });
-    await screen.findByText('personas.deleteDialogNoRefund');
+    await screen.findByText('personas.deleteDialogTypeName');
     fireEvent.change(screen.getByLabelText('personas.deleteDialogTypeName'), {
       target: { value: 'Ryan' },
     });
@@ -141,7 +128,7 @@ describe('DeletePersonaModal', () => {
     vi.mocked(deletePersona).mockRejectedValue(new Error('timeout'));
     const onClose = vi.fn();
     renderModal({ onClose });
-    await screen.findByText('personas.deleteDialogNoRefund');
+    await screen.findByText('personas.deleteDialogTypeName');
     fireEvent.change(screen.getByLabelText('personas.deleteDialogTypeName'), {
       target: { value: 'Ryan' },
     });
@@ -154,7 +141,7 @@ describe('DeletePersonaModal', () => {
 
   it('hints when the typed name does not match', async () => {
     renderModal();
-    await screen.findByText('personas.deleteDialogNoRefund');
+    await screen.findByText('personas.deleteDialogTypeName');
     fireEvent.change(screen.getByLabelText('personas.deleteDialogTypeName'), {
       target: { value: 'Rya' },
     });
@@ -165,59 +152,19 @@ describe('DeletePersonaModal', () => {
   it('uses singular labels for a count of 1', async () => {
     vi.mocked(fetchDeletePreview).mockResolvedValue({
       ...PREVIEW,
-      counts: { schedules: 1, upcomingSlots: 1, publishedSlots: 0, failedSlots: 0, generatedVideos: 1, personaImages: 1 },
+      counts: { schedules: 1, upcomingSlots: 1, publishedSlots: 0, failedSlots: 0 },
     });
     renderModal();
-    await screen.findByText('personas.deleteDialogNoRefund');
+    await screen.findByText('personas.deleteDialogTypeName');
     expect(screen.getByText('personas.deleteDialogSchedule')).toBeInTheDocument();
     expect(screen.getByText('personas.deleteDialogSlot')).toBeInTheDocument();
-    expect(screen.getByText('personas.deleteDialogVideo')).toBeInTheDocument();
-    expect(screen.getByText('personas.deleteDialogImage')).toBeInTheDocument();
     expect(screen.queryByText('personas.deleteDialogSchedules')).not.toBeInTheDocument();
-  });
-
-  it('notes when the video list was truncated', async () => {
-    vi.mocked(fetchDeletePreview).mockResolvedValue({
-      ...PREVIEW,
-      counts: { schedules: 0, upcomingSlots: 0, publishedSlots: 0, failedSlots: 0, generatedVideos: 25, personaImages: 0 },
-      videosTruncated: true,
-    });
-    const { container } = renderModal();
-    await screen.findByText('personas.deleteDialogVideosTruncated');
-    expect(container.textContent).toContain('personas.deleteDialogVideosTruncated');
-  });
-
-  it('warns with retry when download links are incomplete', async () => {
-    vi.mocked(fetchDeletePreview).mockResolvedValue({
-      ...PREVIEW,
-      linksIncomplete: true,
-    });
-    renderModal();
-    await screen.findByText('personas.deleteDialogLinksIncomplete');
-    fireEvent.click(screen.getByRole('button', { name: 'personas.tryAgain' }));
-    await waitFor(() => expect(fetchDeletePreview).toHaveBeenCalledTimes(2));
-  });
-
-  it('disables the links-incomplete retry while a delete is in flight', async () => {
-    vi.mocked(fetchDeletePreview).mockResolvedValue({ ...PREVIEW, linksIncomplete: true });
-    vi.mocked(deletePersona).mockImplementation(() => new Promise(() => {}));
-    renderModal();
-    await screen.findByText('personas.deleteDialogLinksIncomplete');
-    fireEvent.change(screen.getByLabelText('personas.deleteDialogTypeName'), {
-      target: { value: 'Ryan' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'personas.deleteConfirm' }));
-    await waitFor(() => expect(deletePersona).toHaveBeenCalled());
-    const retry = screen.getByRole('button', { name: 'personas.tryAgain' });
-    expect(retry).toBeDisabled();
-    fireEvent.click(retry);
-    expect(fetchDeletePreview).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the Delete label on the destructive button while deleting', async () => {
     vi.mocked(deletePersona).mockImplementation(() => new Promise(() => {}));
     renderModal();
-    await screen.findByText('personas.deleteDialogNoRefund');
+    await screen.findByText('personas.deleteDialogTypeName');
     fireEvent.change(screen.getByLabelText('personas.deleteDialogTypeName'), {
       target: { value: 'Ryan' },
     });
@@ -227,24 +174,9 @@ describe('DeletePersonaModal', () => {
     expect(button).toBeDisabled();
   });
 
-  it('keeps the typed name when retrying incomplete links', async () => {
-    vi.mocked(fetchDeletePreview)
-      .mockResolvedValueOnce({ ...PREVIEW, linksIncomplete: true })
-      .mockResolvedValueOnce(PREVIEW);
-    renderModal();
-    await screen.findByText('personas.deleteDialogLinksIncomplete');
-    fireEvent.change(screen.getByLabelText('personas.deleteDialogTypeName'), {
-      target: { value: 'Ryan' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'personas.tryAgain' }));
-    await waitFor(() => expect(fetchDeletePreview).toHaveBeenCalledTimes(2));
-    expect(screen.getByLabelText('personas.deleteDialogTypeName')).toHaveValue('Ryan');
-    expect(screen.getByRole('button', { name: 'personas.deleteConfirm' })).toBeEnabled();
-  });
-
   it('resets the typed name when the modal is closed and reopened', async () => {
     const { rerender } = renderModal();
-    await screen.findByText('personas.deleteDialogNoRefund');
+    await screen.findByText('personas.deleteDialogTypeName');
     fireEvent.change(screen.getByLabelText('personas.deleteDialogTypeName'), {
       target: { value: 'Ryan' },
     });
@@ -258,7 +190,7 @@ describe('DeletePersonaModal', () => {
       <DeletePersonaModal persona={PERSONA} onClose={vi.fn()} onDeleted={vi.fn()} />,
     );
 
-    await screen.findByText('personas.deleteDialogNoRefund');
+    await screen.findByText('personas.deleteDialogTypeName');
     expect(screen.getByLabelText('personas.deleteDialogTypeName')).toHaveValue('');
     expect(screen.getByRole('button', { name: 'personas.deleteConfirm' })).toBeDisabled();
   });
@@ -272,7 +204,7 @@ describe('DeletePersonaModal', () => {
   it('closes on Escape unless a delete is in flight', async () => {
     const onClose = vi.fn();
     renderModal({ onClose });
-    await screen.findByText('personas.deleteDialogNoRefund');
+    await screen.findByText('personas.deleteDialogTypeName');
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);
   });
@@ -281,7 +213,7 @@ describe('DeletePersonaModal', () => {
     const onClose = vi.fn();
     vi.mocked(deletePersona).mockImplementation(() => new Promise(() => {}));
     renderModal({ onClose });
-    await screen.findByText('personas.deleteDialogNoRefund');
+    await screen.findByText('personas.deleteDialogTypeName');
     fireEvent.change(screen.getByLabelText('personas.deleteDialogTypeName'), {
       target: { value: 'Ryan' },
     });
@@ -312,7 +244,7 @@ describe('DeletePersonaModal', () => {
       code: 'PERSONA_NOT_FOUND',
     });
     renderModal({ onClose, onDeleted });
-    await screen.findByText('personas.deleteDialogNoRefund');
+    await screen.findByText('personas.deleteDialogTypeName');
     fireEvent.change(screen.getByLabelText('personas.deleteDialogTypeName'), {
       target: { value: 'Ryan' },
     });

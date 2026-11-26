@@ -7,16 +7,16 @@ import {
 
 describe('api-telemetry-names', () => {
   it('maps a known route label to its semantic 2xx event name', () => {
-    expect(successEventName('GET /api/billing/transactions')).toBe(
-      'billing_transactions_fetched',
+    expect(successEventName('GET /api/schedule')).toBe(
+      'schedule_fetched',
     );
     expect(successEventName('POST /api/persona')).toBe('persona_created');
     expect(successEventName('DELETE /api/schedule')).toBe('schedule_deleted');
   });
 
   it('derives the 4xx event name by appending _rejected ("rejected", not "failed": a 4xx is the caller erroring)', () => {
-    expect(rejectionEventName('GET /api/billing/transactions')).toBe(
-      'billing_transactions_fetched_rejected',
+    expect(rejectionEventName('GET /api/schedule')).toBe(
+      'schedule_fetched_rejected',
     );
     expect(rejectionEventName('POST /api/persona')).toBe(
       'persona_created_rejected',
@@ -28,20 +28,11 @@ describe('api-telemetry-names', () => {
     expect(rejectionEventName('GET /api/not-a-real-route')).toBeUndefined();
   });
 
-  it('maps the segment media routes to their semantic 2xx event names', () => {
-    expect(successEventName('POST /api/media/check')).toBe(
-      'segment_media_checked',
-    );
-    expect(successEventName('POST /api/media/upload')).toBe(
-      'segment_media_uploaded',
-    );
-  });
-
   it('matches labels exactly, including [id]-style path segments', () => {
-    expect(successEventName('GET /api/persona/video-status/[taskId]')).toBe(
-      'video_status_fetched',
+    expect(successEventName('GET /api/schedule/slots/[slotId]')).toBe(
+      'schedule_slot_fetched',
     );
-    expect(successEventName('GET /api/persona/video-status/abc123')).toBeUndefined();
+    expect(successEventName('GET /api/schedule/slots/abc123')).toBeUndefined();
   });
 
   it('uses the repo PostHog convention (noun + past-tense verb, snake_case) for every entry', () => {

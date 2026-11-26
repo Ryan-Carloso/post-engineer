@@ -2,13 +2,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { savePersonaBinding } from '../create-binding';
 import { setPersonaDefaultAccounts, type PersonaDefaultAccounts } from '@/lib/persona-publishing-accounts';
-import { rollbackStoragePath } from '@/lib/persona-remote-face';
+import { rollbackStoragePath } from '@/lib/persona-photo';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 
 vi.mock('@/lib/persona-publishing-accounts', () => ({
   setPersonaDefaultAccounts: vi.fn(),
 }));
-vi.mock('@/lib/persona-remote-face', () => ({
+vi.mock('@/lib/persona-photo', () => ({
   rollbackStoragePath: vi.fn(),
 }));
 vi.mock('@/lib/logger', () => ({

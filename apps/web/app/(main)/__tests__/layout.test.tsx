@@ -213,26 +213,11 @@ describe('app/(main)/layout — MainLayout', () => {
     expect(promptsLink?.getAttribute('href')).toBe('/recipes');
   });
 
-  it('does not render a Billing tab in the sidebar nav (moved to the profile area)', () => {
+  it('does not render a Billing tab in the sidebar nav', () => {
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
     const sidebar = screen.getByTestId('nav-brand').closest('aside');
     const nav = within(sidebar as HTMLElement).getByRole('navigation');
     expect(within(nav).queryByText('nav.billing')).toBeNull();
-  });
-
-  it('billing is reachable from the profile panel, not from a tab', () => {
-    vi.mocked(useSessionQuery).mockReturnValue({
-      data: {
-        id: 'u1',
-        email: 'test@example.com',
-        user_metadata: { name: 'User' },
-      },
-      isLoading: false,
-    } as never);
-    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
-    const panelLink = screen.getByTestId('profile-billing-link');
-    expect(panelLink).toHaveAttribute('href', '/billing');
-    expect(panelLink).toHaveTextContent('account.billingLink');
   });
 
   it('does not duplicate the API keys row in the sidebar footer when the nav tab already links there', () => {
@@ -257,9 +242,10 @@ describe('app/(main)/layout — MainLayout', () => {
     expect(screen.getByText('EN')).toBeTruthy();
   });
 
-  it('renders token balance badge in the sidebar', () => {
+  it('renders no token balance badge and no billing link', () => {
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
-    expect(screen.getByTestId('token-balance')).toBeInTheDocument();
+    expect(screen.queryByTestId('token-balance')).toBeNull();
+    expect(screen.queryByTestId('profile-billing-link')).toBeNull();
   });
 
   it('does not render sidebar user when no session', () => {
@@ -526,7 +512,7 @@ describe('mobile header profile area', () => {
     expect(within(link).getByText('H')).toBeInTheDocument();
   });
 
-  it('More opens a sheet linking History, Metrics, A/B Tests and Tokens (not the profile)', async () => {
+  it('More opens a sheet linking History, Metrics and A/B Tests (not the profile, no billing)', async () => {
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
     fireEvent.click(screen.getByRole('button', { name: 'nav.more' }));
     const sheet = await screen.findByRole('dialog', { name: 'nav.moreTitle' });
@@ -534,7 +520,7 @@ describe('mobile header profile area', () => {
     expect(within(sheet).getByText('nav.metrics').closest('a')).toHaveAttribute('href', '/metrics');
     expect(within(sheet).getByText('nav.experiments').closest('a')).toHaveAttribute('href', '/experiments');
     expect(within(sheet).queryByText('nav.profile')).toBeNull();
-    expect(within(sheet).getByText('nav.billing').closest('a')).toHaveAttribute('href', '/billing');
+    expect(within(sheet).queryByText('nav.billing')).toBeNull();
   });
 
   it('More sheet links lay out in two columns with truncating labels', async () => {
@@ -544,7 +530,7 @@ describe('mobile header profile area', () => {
     const list = sheet.querySelector('ul');
     expect(list?.className).toContain('grid-cols-2');
     expect(list?.className).not.toContain('grid-cols-3');
-    for (const labelKey of ['nav.history', 'nav.metrics', 'nav.experiments', 'nav.billing']) {
+    for (const labelKey of ['nav.history', 'nav.metrics', 'nav.experiments']) {
       const label = within(sheet).getByText(labelKey);
       expect(label.className).toContain('truncate');
       expect(label.className).toContain('min-w-0');
@@ -565,7 +551,7 @@ describe('mobile header profile area', () => {
     expect(activeLink).toHaveAttribute('aria-current', 'page');
     expect(activeLink.className).toContain('bg-brand-soft');
     expect(activeLink.className).not.toContain('bg-surface');
-    for (const labelKey of ['nav.history', 'nav.experiments', 'nav.billing']) {
+    for (const labelKey of ['nav.history', 'nav.experiments']) {
       const link = within(sheet).getByText(labelKey).closest('a') as HTMLElement;
       expect(link).not.toHaveAttribute('aria-current');
       expect(link.className).toContain('bg-surface');

@@ -17,7 +17,7 @@ export const DAILY_RUN_TIME_BUDGET_MS = 45_000;
 export interface DailyDuePost {
   id: string;
   userId: string;
-  taskId: string;
+  publishOutcomes: unknown[];
   collectedKeys: Set<string>;
 }
 
@@ -35,7 +35,6 @@ export interface DailyReading {
 
 export interface PostMetricsDailyDeps {
   listDuePosts: (now: Date, limit: number) => Promise<DailyDuePost[]>;
-  fetchTaskSource: (taskId: string, userId: string) => Promise<{ publishResults: unknown[] }>;
   fetchCounters: (userId: string, target: MetricsTarget, context: CounterContext) => Promise<MetricsCounters>;
   resolveTarget: (userId: string, target: MetricsTarget) => Promise<MetricsTarget | null>;
   saveReading: (reading: DailyReading) => Promise<void>;
@@ -72,20 +71,11 @@ export async function collectPostMetricsDaily(deps: PostMetricsDailyDeps): Promi
     }
     report.checked += 1;
 
-    let targets: MetricsTarget[];
-    try {
-      const source = await deps.fetchTaskSource(post.taskId, post.userId);
-      const found = deps.metricsTargets(source.publishResults);
-      targets = found.targets;
-      for (const provider of found.unknownProviders) {
-        logger.warn('[post-metrics-daily] unknown provider in publish results', { postId: post.id, provider });
-        report.errors.push(`${post.id}/${provider}: unknown provider`);
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      logger.warn('[post-metrics-daily] publish results unavailable', { postId: post.id, error: message });
-      report.errors.push(`${post.id}: publish results unavailable`);
-      continue;
+    const found = deps.metricsTargets(post.publishOutcomes);
+    const targets = found.targets;
+    for (const provider of found.unknownProviders) {
+      logger.warn('[post-metrics-daily] unknown provider in publish outcomes', { postId: post.id, provider });
+      report.errors.push(`${post.id}/${provider}: unknown provider`);
     }
 
     const seen = new Set<string>();
@@ -169,13 +159,18 @@ export function createPostMetricsDailyStore(
       if (error) throw new Error(`daily due posts lookup failed: ${error.message}`);
       const posts: DailyDuePost[] = [];
       for (const row of (Array.isArray(data) ? data : []) as Array<Record<string, unknown>>) {
-        if (typeof row.post_id !== 'string' || typeof row.user_id !== 'string' || typeof row.task_id !== 'string') {
+        if (typeof row.post_id !== 'string' || typeof row.user_id !== 'string') {
           continue;
         }
         const keys = Array.isArray(row.collected_keys)
           ? row.collected_keys.filter((key): key is string => typeof key === 'string')
           : [];
-        posts.push({ id: row.post_id, userId: row.user_id, taskId: row.task_id, collectedKeys: new Set(keys) });
+        posts.push({
+          id: row.post_id,
+          userId: row.user_id,
+          publishOutcomes: Array.isArray(row.publish_outcomes) ? row.publish_outcomes : [],
+          collectedKeys: new Set(keys),
+        });
       }
       return posts;
     },

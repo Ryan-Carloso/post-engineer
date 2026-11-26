@@ -33,13 +33,8 @@ const rowSlot: ScheduledSlot = {
   id: 'u1',
   scheduleId: 's1',
   slotAt: '2030-06-01T10:00:00.000Z',
-  status: 'awaiting',
+  status: 'ready',
   title: 'Upcoming topic',
-  progress: 0,
-  stage: null,
-  queuePosition: null,
-  queueTotal: null,
-  retryable: null,
 };
 
 describe('DayListRow', () => {
@@ -52,12 +47,6 @@ describe('DayListRow', () => {
     expect(screen.getByText('Upcoming topic')).toBeInTheDocument();
     expect(screen.getByText('posts.groupScheduled')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'posts.cardOpenDetail' })).toHaveAttribute('href', '/posts/u1');
-  });
-
-  it('shows the generating stage with its progress in the chip', () => {
-    render(<DayListRow slot={{ ...rowSlot, status: 'generating', progress: 62 }} joins={rowJoins} />);
-
-    expect(screen.getByText('posts.statusGenerating · 62%')).toBeInTheDocument();
   });
 
   it('shows the unknown-title fallback on a slot with no title', () => {
@@ -88,7 +77,7 @@ describe('DayListRow', () => {
 
   it('renders no thumbnail video: a summarized row, not a card', () => {
     const { container } = render(
-      <DayListRow slot={{ ...rowSlot, status: 'published', publishedAt: '2030-06-01T10:05:00.000Z', taskId: 'task-9' }} joins={rowJoins} />,
+      <DayListRow slot={{ ...rowSlot, status: 'published', publishedAt: '2030-06-01T10:05:00.000Z' }} joins={rowJoins} />,
     );
 
     expect(container.querySelector('video')).toBeNull();

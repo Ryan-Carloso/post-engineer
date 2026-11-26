@@ -13,7 +13,6 @@ vi.mock('@/lib/api', () => ({
   useScheduleStatusQuery: vi.fn(),
   useSchedulesQuery: vi.fn(),
   usePersonaListQuery: vi.fn(),
-  useVideoGenerationsQuery: vi.fn(),
 }));
 
 vi.mock('@/lib/social-accounts-queries', () => ({
@@ -38,7 +37,6 @@ import {
   useScheduleStatusQuery,
   useSchedulesQuery,
   usePersonaListQuery,
-  useVideoGenerationsQuery,
 } from '@/lib/api';
 import { useSocialAccountsQuery } from '@/lib/social-accounts-queries';
 
@@ -59,7 +57,6 @@ const PUBLISHED_SLOT = {
   title: 'Past topic',
   error: null,
   publishedAt: '2020-01-01T10:05:00.000Z',
-  taskId: 'task-9',
 };
 
 const FAILED_SLOT = {
@@ -74,7 +71,7 @@ const FAILED_SLOT = {
 
 const ok = (data: unknown, refetch = vi.fn()) => ({ data, isLoading: false, isFetching: false, isError: false, refetch }) as never;
 
-function mockQueries(overrides: { recent?: unknown[]; schedules?: unknown[]; generations?: unknown[]; personas?: unknown[] } = {}) {
+function mockQueries(overrides: { recent?: unknown[]; schedules?: unknown[]; personas?: unknown[] } = {}) {
   vi.mocked(useScheduleStatusQuery).mockReturnValue(ok({ upcoming: [], recent: overrides.recent ?? [PUBLISHED_SLOT, FAILED_SLOT] }));
   vi.mocked(useSchedulesQuery).mockReturnValue(ok(overrides.schedules ?? [SCHEDULE]));
   vi.mocked(usePersonaListQuery).mockReturnValue(ok(overrides.personas ?? [{ id: 'p1', name: 'Viva Leve' }]));
@@ -84,52 +81,12 @@ function mockQueries(overrides: { recent?: unknown[]; schedules?: unknown[]; gen
     isError: false,
     refetch: vi.fn(),
   } as never);
-  vi.mocked(useVideoGenerationsQuery).mockReturnValue(ok(overrides.generations ?? []));
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
   mockQueries();
 });
-
-const FAILED_GENERATION = {
-  id: 'g1',
-  generationId: 'gen-1',
-  engineTaskId: 'task-1',
-  personaName: 'Viva Leve',
-  videoSubject: 'Myth busting',
-  status: 'failed',
-  errorCode: 'custom_audio_invalid',
-  tokensRefunded: true,
-  createdAt: '2026-09-23T10:00:00.000Z',
-  completedAt: '2026-09-23T10:01:00.000Z',
-};
-
-const RUNNING_GENERATION = {
-  id: 'g2',
-  generationId: 'gen-2',
-  engineTaskId: 'task-2',
-  personaName: 'Viva Leve',
-  videoSubject: 'Morning routine',
-  status: 'running',
-  errorCode: null,
-  tokensRefunded: false,
-  createdAt: '2026-09-23T11:00:00.000Z',
-  completedAt: null,
-};
-
-const COMPLETED_GENERATION = {
-  id: 'g3',
-  generationId: 'gen-3',
-  engineTaskId: 'task-3',
-  personaName: 'Viva Leve',
-  videoSubject: 'Launch recap',
-  status: 'completed',
-  errorCode: null,
-  tokensRefunded: false,
-  createdAt: '2026-09-23T12:00:00.000Z',
-  completedAt: '2026-09-23T12:02:00.000Z',
-};
 
 describe('PostHistoryPage', () => {
   it('lists published and failed posts', () => {
@@ -143,14 +100,6 @@ describe('PostHistoryPage', () => {
     expect(screen.queryByText('Upload failed')).not.toBeInTheDocument();
   });
 
-  it('tells a retryable failed card apart from a permanent one', () => {
-    mockQueries({ recent: [{ ...FAILED_SLOT, retryable: true }] });
-    render(<PostHistoryPage />);
-
-    expect(screen.getByText('posts.cardFailedRetryable')).toBeInTheDocument();
-    expect(screen.queryByText('posts.cardFailedPermanent')).not.toBeInTheDocument();
-  });
-
   it('shows the history empty state when there are no past posts', () => {
     mockQueries({ recent: [] });
     render(<PostHistoryPage />);
@@ -162,7 +111,6 @@ describe('PostHistoryPage', () => {
     render(<PostHistoryPage />);
 
     expect(screen.getByText('posts.historyPostsTitle')).toBeInTheDocument();
-    expect(screen.getByText('posts.generationsTitle')).toBeInTheDocument();
   });
 
   it('shows a loading skeleton while the history is loading', () => {
@@ -179,34 +127,9 @@ describe('PostHistoryPage', () => {
     expect(screen.getByText('posts.loadingPosts')).toBeInTheDocument();
   });
 
-  it('names the generations when the generations query fails', () => {
-    vi.mocked(useVideoGenerationsQuery).mockReturnValue({
-      data: undefined,
-      isLoading: false,
-      isError: true,
-      refetch: vi.fn(),
-    } as never);
-    render(<PostHistoryPage />);
-
-    expect(screen.getByText('posts.loadErrorGenerations')).toBeInTheDocument();
-  });
-
-  it('shows the categorized failure reason on a failed card, never the raw engine text', () => {
-    mockQueries({
-      recent: [{ ...FAILED_SLOT, error: 'The engine restarted while generating your video.', retryable: true }],
-    });
-    render(<PostHistoryPage />);
-
-    expect(screen.getByText('posts.errorEngineRestart')).toBeInTheDocument();
-    expect(screen.queryByText('The engine restarted while generating your video.')).not.toBeInTheDocument();
-  });
-
   it('truncates the failure line to one row in the dense list', () => {
-    mockQueries({ generations: [FAILED_GENERATION] });
     render(<PostHistoryPage />);
 
-    const message = screen.getByText('posts.errorCustomAudio');
-    expect(message.className.split(/\s+/)).toContain('truncate');
     const slotMessage = screen.getByText('posts.cardFailedPermanent');
     expect(slotMessage.className.split(/\s+/)).toContain('truncate');
   });
@@ -317,27 +240,7 @@ describe('PostHistoryPage', () => {
     expect(screen.getByText('posts.noResultsForFilter')).toBeInTheDocument();
   });
 
-  it('shows the generations section with friendly errors and refund badges', () => {
-    mockQueries({ generations: [FAILED_GENERATION, RUNNING_GENERATION] });
-    render(<PostHistoryPage />);
-
-    expect(screen.getByText('posts.generationsTitle')).toBeInTheDocument();
-    expect(screen.getByText('posts.errorCustomAudio')).toBeInTheDocument();
-    expect(screen.queryByText('custom audio file is invalid: boom')).not.toBeInTheDocument();
-    expect(screen.getByText('posts.refundedBadge')).toBeInTheDocument();
-    expect(screen.getByText('posts.statusRunning')).toBeInTheDocument();
-  });
-
-  it('shows the generations empty state when there are no generations', () => {
-    mockQueries({ generations: [] });
-    render(<PostHistoryPage />);
-
-    expect(screen.getByText('posts.generationsTitle')).toBeInTheDocument();
-    expect(screen.getByText('posts.generationsEmpty')).toBeInTheDocument();
-  });
-
-  it('links history cards and generation cards to their detail pages', () => {
-    mockQueries({ generations: [COMPLETED_GENERATION] });
+  it('links history cards to their detail pages', () => {
     render(<PostHistoryPage />);
 
     const pastCard = screen.getByText('Past topic').closest('a');
@@ -346,71 +249,12 @@ describe('PostHistoryPage', () => {
     const failedCard = screen.getByText('Failed topic').closest('a');
     expect(failedCard).not.toBeNull();
     expect(failedCard).toHaveAttribute('href', '/posts/r2');
-    expect(screen.getByRole('link', { name: /Launch recap/ })).toHaveAttribute('href', '/posts/gen-3');
-  });
-
-  it('links generation cards to the id the detail lookup resolves by', () => {
-    const generation = { ...COMPLETED_GENERATION, id: 'row-uuid-9', generationId: 'gen-9' };
-    mockQueries({ generations: [generation] });
-    render(<PostHistoryPage />);
-
-    expect(screen.getByRole('link', { name: /Launch recap/ })).toHaveAttribute('href', '/posts/gen-9');
-  });
-
-  it('keeps showing the video thumbnail with the #t=0.1 frame in the card', () => {
-    render(<PostHistoryPage />);
-
-    const cardVideo = document.querySelector('button video, a video');
-    expect(cardVideo).not.toBeNull();
-    expect(cardVideo?.getAttribute('src')).toBe('/api/persona/video-download/task-9/final-1.mp4#t=0.1');
-    expect(cardVideo?.getAttribute('controls')).toBeNull();
   });
 
   it('shows no progress bar on terminal cards', () => {
     render(<PostHistoryPage />);
 
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
-  });
-
-  it('retry refetches the generations query as well', async () => {
-    const user = userEvent.setup();
-    const generationsRefetch = vi.fn();
-    vi.mocked(useScheduleStatusQuery).mockReturnValue({
-      data: undefined,
-      isLoading: false,
-      isFetching: false,
-      isError: true,
-      refetch: vi.fn(),
-    } as never);
-    vi.mocked(useVideoGenerationsQuery).mockReturnValue({
-      data: [],
-      isLoading: false,
-      isError: true,
-      refetch: generationsRefetch,
-    } as never);
-    render(<PostHistoryPage />);
-
-    const errorPanel = screen.getByText('posts.loadErrorHistory').closest('div');
-    if (!errorPanel) throw new Error('error panel not rendered');
-    await user.click(within(errorPanel).getByRole('button', { name: 'posts.refresh' }));
-    expect(generationsRefetch).toHaveBeenCalledTimes(1);
-  });
-
-  it('falls back to the generic error copy for an unmapped generation error code', () => {
-    mockQueries({ generations: [{ ...FAILED_GENERATION, errorCode: 'future_code_123' }] });
-    render(<PostHistoryPage />);
-
-    expect(screen.getByText('posts.errorUnknown')).toBeInTheDocument();
-  });
-
-  it('falls back to placeholders when a generation has no persona or subject', () => {
-    mockQueries({
-      generations: [{ ...FAILED_GENERATION, personaName: null, videoSubject: null }],
-    });
-    render(<PostHistoryPage />);
-
-    expect(screen.getByText('posts.personaFallback')).toBeInTheDocument();
-    expect(screen.getAllByText('posts.unknownTitle').length).toBeGreaterThanOrEqual(1);
   });
 
   it('prefers publishedAt for history slots but falls back to slotAt', () => {

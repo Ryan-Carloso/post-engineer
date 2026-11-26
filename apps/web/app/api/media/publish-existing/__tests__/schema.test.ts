@@ -9,8 +9,8 @@ import {
   parsePublishExistingBody,
 } from '../schema';
 
-const TASK_BODY = {
-  media: { kind: 'task', taskId: '11111111-1111-4111-8111-111111111111' },
+const ASAP_BODY = {
+  media: { kind: 'upload', uploadId: '22222222-2222-4222-8222-222222222222' },
   title: 'A walk in Porto',
   description: 'Walking the riverside at sunset.',
   publishing: {
@@ -45,11 +45,11 @@ function scheduledBody(overrides: Record<string, unknown> = {}): Record<string, 
 }
 
 describe('parsePublishExistingBody', () => {
-  it('parses a task ASAP body', () => {
-    const parsed = parsePublishExistingBody(TASK_BODY);
+  it('parses an upload ASAP body', () => {
+    const parsed = parsePublishExistingBody(ASAP_BODY);
     expect(parsed.ok).toBe(true);
     if (parsed.ok) {
-      expect(parsed.value.media).toEqual({ kind: 'task', taskId: '11111111-1111-4111-8111-111111111111' });
+      expect(parsed.value.media).toEqual({ kind: 'upload', uploadId: '22222222-2222-4222-8222-222222222222' });
       expect(parsed.value.publishing.mode).toBe('asap');
     }
   });
@@ -60,8 +60,8 @@ describe('parsePublishExistingBody', () => {
   });
 
   it('requires publishing.mode: a publish call never defaults to now or to later', () => {
-    const { mode: _mode, ...publishing } = TASK_BODY.publishing;
-    const parsed = parsePublishExistingBody({ ...TASK_BODY, publishing });
+    const { mode: _mode, ...publishing } = ASAP_BODY.publishing;
+    const parsed = parsePublishExistingBody({ ...ASAP_BODY, publishing });
     expect(parsed.ok).toBe(false);
     if (!parsed.ok) expect(parsed.issues[0]?.field).toBe('publishing.mode');
   });
@@ -82,7 +82,7 @@ describe('parsePublishExistingBody', () => {
 
   it('rejects an unknown media kind', () => {
     const parsed = parsePublishExistingBody({
-      ...TASK_BODY,
+      ...ASAP_BODY,
       media: { kind: 'carrier-pigeon', taskId: 'x' },
     });
     expect(parsed.ok).toBe(false);
@@ -96,48 +96,48 @@ describe('parsePublishExistingBody', () => {
   });
 
   it('rejects a missing title', () => {
-    const parsed = parsePublishExistingBody({ ...TASK_BODY, title: undefined });
+    const parsed = parsePublishExistingBody({ ...ASAP_BODY, title: undefined });
     expect(parsed.ok).toBe(false);
   });
 });
 
 describe('checkPublishExistingSemantics', () => {
-  it('accepts a valid task ASAP body', () => {
-    const parsed = parsePublishExistingBody(TASK_BODY);
+  it('accepts a valid upload ASAP body', () => {
+    const parsed = parsePublishExistingBody(ASAP_BODY);
     expect(parsed.ok).toBe(true);
     if (parsed.ok) expect(checkPublishExistingSemantics(parsed.value).ok).toBe(true);
   });
 
   it('rejects a blank title at semantics and an over-long title at parse', () => {
-    const blank = parsePublishExistingBody({ ...TASK_BODY, title: '' });
+    const blank = parsePublishExistingBody({ ...ASAP_BODY, title: '' });
     expect(blank.ok).toBe(true);
     if (blank.ok) {
       const checked = checkPublishExistingSemantics(blank.value);
       expect(checked.ok).toBe(false);
       if (!checked.ok) expect(checked.issues[0]?.field).toBe('title');
     }
-    const long = parsePublishExistingBody({ ...TASK_BODY, title: 'x'.repeat(101) });
+    const long = parsePublishExistingBody({ ...ASAP_BODY, title: 'x'.repeat(101) });
     expect(long.ok).toBe(false);
     if (!long.ok) expect(long.issues[0]?.field).toBe('title');
   });
 
   it('rejects a blank description at semantics and an over-long description at parse', () => {
-    const blank = parsePublishExistingBody({ ...TASK_BODY, description: '   ' });
+    const blank = parsePublishExistingBody({ ...ASAP_BODY, description: '   ' });
     expect(blank.ok).toBe(true);
     if (blank.ok) {
       const checked = checkPublishExistingSemantics(blank.value);
       expect(checked.ok).toBe(false);
       if (!checked.ok) expect(checked.issues[0]?.field).toBe('description');
     }
-    const long = parsePublishExistingBody({ ...TASK_BODY, description: 'x'.repeat(5001) });
+    const long = parsePublishExistingBody({ ...ASAP_BODY, description: 'x'.repeat(5001) });
     expect(long.ok).toBe(false);
     if (!long.ok) expect(long.issues[0]?.field).toBe('description');
   });
 
   it('rejects an unknown provider', () => {
     const parsed = parsePublishExistingBody({
-      ...TASK_BODY,
-      publishing: { ...TASK_BODY.publishing, providers: ['myspace'] },
+      ...ASAP_BODY,
+      publishing: { ...ASAP_BODY.publishing, providers: ['myspace'] },
     });
     expect(parsed.ok).toBe(true);
     if (parsed.ok) {
@@ -149,9 +149,9 @@ describe('checkPublishExistingSemantics', () => {
 
   it('rejects ASAP with a schedule and scheduled without one', () => {
     const asapWithSchedule = parsePublishExistingBody({
-      ...TASK_BODY,
+      ...ASAP_BODY,
       publishing: {
-        ...TASK_BODY.publishing,
+        ...ASAP_BODY.publishing,
         schedule: { publishAt: '2026-11-20T18:00:00Z', timezone: 'UTC' },
       },
     });
@@ -180,13 +180,13 @@ describe('checkPublishExistingSemantics', () => {
       if (!checked.ok) {
         expect(checked.issues[0]?.field).toBe('publishing.providers');
         expect(checked.issues[0]?.message).toBe(
-          'Images can be published to youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, telegram only; rumble takes video.',
+          'Images can be published to instagram, bluesky, linkedin, threads, facebook, pinterest, telegram only; rumble takes video.',
         );
       }
     }
   });
 
-  it('accepts an image for YouTube, which publishes it as a Short', () => {
+  it('refuses an image for YouTube, which takes video only', () => {
     const parsed = parsePublishExistingBody({
       media: { kind: 'image', imageData: JPEG_BASE64, contentType: 'image/jpeg' },
       title: 'Sunset photo',
@@ -196,7 +196,11 @@ describe('checkPublishExistingSemantics', () => {
       privacyStatus: 'public',
     });
     expect(parsed.ok).toBe(true);
-    if (parsed.ok) expect(checkPublishExistingSemantics(parsed.value).ok).toBe(true);
+    if (parsed.ok) {
+      const checked = checkPublishExistingSemantics(parsed.value);
+      expect(checked.ok).toBe(false);
+      if (!checked.ok) expect(checked.issues[0]?.message).toContain('youtube takes video');
+    }
   });
 
   it('accepts an image for every image network at once', () => {
@@ -217,11 +221,12 @@ describe('checkPublishExistingSemantics', () => {
 
   it('imageProvidersIssue names every video-only network', () => {
     expect(imageProvidersIssue(['instagram', 'rumble', '3speak'])?.message).toContain('rumble, 3speak take video');
+    expect(imageProvidersIssue(['youtube'])?.message).toContain('youtube takes video');
     expect(imageProvidersIssue(['bluesky'])).toBeNull();
   });
 
   it('requires youtube tags and privacyStatus for ASAP, but not for scheduled', () => {
-    const noTags = parsePublishExistingBody({ ...TASK_BODY, tags: undefined, privacyStatus: undefined });
+    const noTags = parsePublishExistingBody({ ...ASAP_BODY, tags: undefined, privacyStatus: undefined });
     expect(noTags.ok).toBe(true);
     if (noTags.ok) {
       const checked = checkPublishExistingSemantics(noTags.value);
@@ -237,7 +242,7 @@ describe('checkPublishExistingSemantics', () => {
 
   it('requires a pinterest board id when pinterest is targeted', () => {
     const parsed = parsePublishExistingBody({
-      ...TASK_BODY,
+      ...ASAP_BODY,
       publishing: { mode: 'asap', providers: ['pinterest'], accounts: { pinterest: ['pin-1'] } },
     });
     expect(parsed.ok).toBe(true);

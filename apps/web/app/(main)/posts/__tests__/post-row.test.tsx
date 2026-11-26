@@ -14,16 +14,10 @@ const SLOT: ScheduledSlot = {
   id: 'slot-1',
   scheduleId: 's1',
   slotAt: '2030-06-01T13:05:00.000Z',
-  status: 'awaiting',
+  status: 'ready',
   title: 'Calendar topic',
   error: null,
   publishedAt: null,
-  taskId: null,
-  progress: 0,
-  stage: null,
-  queuePosition: null,
-  queueTotal: null,
-  retryable: null,
 };
 
 const ACCOUNTS = [
@@ -99,10 +93,8 @@ describe('PostRow layout', () => {
 
 describe('PostRow status', () => {
   it.each([
-    ['awaiting', 'posts.groupScheduled'],
     ['ready', 'posts.groupScheduled'],
-    ['generating', 'posts.statusGenerating'],
-    ['publishing', 'posts.statusPublishing'],
+    ['publishing', 'posts.groupInProgress'],
     ['published', 'posts.groupPublished'],
     ['failed', 'posts.groupFailed'],
   ] as const)('labels a %s post with %s', (status, label) => {
@@ -111,46 +103,16 @@ describe('PostRow status', () => {
     expect(document.querySelector(`[data-status="${status}"]`)).toHaveTextContent(label);
   });
 
-  it('spins the badge only while the video generates', () => {
-    renderRow({ status: 'generating', progress: 40 });
-    expect(document.querySelector('[data-status="generating"]')?.querySelector('.animate-spin')).not.toBeNull();
-
-    renderRow({ status: 'publishing', progress: 40 });
-    expect(document.querySelector('[data-status="publishing"]')?.querySelector('.animate-spin')).toBeNull();
-  });
-
-  it('fills the progress bar only while work runs, and never for a waiting or finished post', () => {
-    renderRow({ status: 'generating', progress: 62 });
-    const bar = screen.getByRole('progressbar');
-    expect(bar).toHaveAttribute('aria-valuenow', '62');
-    expect(screen.getByText('62%')).toBeInTheDocument();
-
-    renderRow({ status: 'ready', progress: 0, taskId: 'task-1' });
-    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
-
-    renderRow({ status: 'awaiting', progress: 0 });
-    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
-  });
 });
 
 describe('PostRow failure', () => {
-  it('shows the translated reason for the slot error, never the raw engine text', () => {
-    renderRow({ status: 'failed', error: 'Engine restart while rendering the final video' });
+  it('shows the generic failure line, never the raw error text', () => {
+    renderRow({ status: 'failed', error: 'Instagram said: token expired at 12:00' });
 
-    expect(screen.getByText('posts.errorEngineRestart')).toBeInTheDocument();
-    expect(screen.queryByText(/Engine restart while rendering/)).not.toBeInTheDocument();
+    expect(screen.getByText('posts.cardFailedPermanent')).toBeInTheDocument();
+    expect(screen.queryByText(/token expired/)).not.toBeInTheDocument();
   });
 
-  it('keeps the retryable / permanent copy for an unrecognized error', () => {
-    renderRow({ status: 'failed', error: 'torchrun exited 1', retryable: true });
-    expect(screen.getByText('posts.cardFailedRetryable')).toBeInTheDocument();
-
-    renderRow({ status: 'failed', error: 'torchrun exited 1', retryable: false });
-    expect(screen.getByText('posts.cardFailedPermanent')).toBeInTheDocument();
-
-    renderRow({ status: 'failed', error: null, retryable: null });
-    expect(screen.getByText('posts.cardFailedPermanent')).toBeInTheDocument();
-  });
 
   it('shows no failure line on a post that did not fail', () => {
     renderRow({ status: 'published' });
@@ -160,21 +122,3 @@ describe('PostRow failure', () => {
   });
 });
 
-describe('PostRow media', () => {
-  it('renders the final video of a ready or published post', () => {
-    renderRow({ status: 'published', taskId: 'task-1' });
-
-    expect(document.querySelector('video')).toHaveAttribute(
-      'src',
-      '/api/persona/video-download/task-1/final-1.mp4#t=0.1',
-    );
-  });
-
-  it('draws the group glyph instead of a video when there is nothing to preview', () => {
-    renderRow({ status: 'awaiting', taskId: null });
-
-    expect(document.querySelector('video')).toBeNull();
-    expect(document.querySelector('[data-status="awaiting"]')).not.toBeNull();
-    expect(document.querySelector('[data-post-row-error]')).toBeNull();
-  });
-});

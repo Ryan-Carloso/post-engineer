@@ -10,7 +10,7 @@ The OpenAPI spec lists every endpoint below. It is generated from the MCP
 parity mapping (apps/mcp/src/__tests__/parity-endpoint-tools.json) by
 `node apps/web/scripts/generate-openapi.mjs`, with request and response
 schemas from apps/web/scripts/openapi-schemas.mjs. Some nested items (social
-accounts, metrics rows, generation lists) are typed as free-form objects.
+accounts, metrics rows) are typed as free-form objects.
 
 ================================================================================
 AUTHENTICATION
@@ -33,40 +33,30 @@ RESPONSES AND ERRORS
 ================================================================================
 
 - JSON bodies. Failures carry success:false and an error message.
-- Most routes return a flat { "success", ... } payload. Only the two engine
-  proxies, GET /api/persona/video-status/{taskId} and
-  DELETE /api/persona/video-task/{taskId}, return the engine envelope
-  { "status", "message", "body" }: the payload is `body`, never `data`.
+- Routes return a flat { "success", ... } payload.
 - 400 invalid, over-length or conflicting input (nothing is truncated or
-  coerced silently). POST /api/videos/generate-and-schedule lists every
-  problem in one response: `code`, `error` and `field` describe the first
-  one, and `errors` (an array of { code, message, field }) holds at most 20 of them. 401 bad key. 402 not enough tokens. 404 unknown id.
-  409 conflict (e.g. the persona already has an active schedule). 410 gone:
-  terminal, stop polling. 429 rate limited: retry with backoff. 5xx
-  transient: retry with backoff. Each operation's statuses are in the spec.
+  coerced silently). 401 bad key. 402 TRIAL_EXPIRED: the free trial ended,
+  publishing and scheduling are blocked (contact the owner to extend it).
+  404 unknown id. 409 conflict. 410 gone: an expired upload. 429 rate
+  limited: retry with backoff. 5xx transient: retry with backoff. Each
+  operation's statuses are in the spec.
 - Upload, destructive and fan-out routes are rate limited per caller.
 
 ================================================================================
-VIDEOS (cost prepaid tokens: voiceover 1, ok 2, very_good 3)
+PUBLISHING
 ================================================================================
 
-Check the balance first: GET /api/billing/tokens.
+Post Engineer does not generate media. Make the video or image with your own
+tool, then publish it:
 
-1. POST /api/videos/validate-script   mechanical validation, spends no tokens
-2. POST /api/videos/score-draft       mechanical score + publish check, no tokens
-3. POST /api/videos/generate-and-schedule
-   One call generates the video, schedules it and auto-publishes it. There
-   are no orphan videos. Script is segments: hook first, then content takes
-   in order, 60-200 words total. Slot is 3h to 30d ahead, or mode "asap".
-4. GET  /api/persona/video-status/{taskId}   task state
-   state: -1 failed, 1 complete, 3 queued, 4 processing. Only -1 and 1 are
-   terminal. HTTP 200 does not mean the job is alive: read `state`.
-   410 Gone is terminal too (the engine lost the task): stop polling and
-   read GET /api/schedule/slots/{slotId} to see if the video was delivered
-   or failed and refunded.
-5. DELETE /api/persona/video-task/{taskId}   cancel a task
+1. POST /api/videos/upload-url                     create a staged upload
+2. PUT the file to the returned signed URL
+3. POST /api/videos/uploads/{uploadId}/complete    mark the upload complete
+4. POST /api/media/publish-existing                publish now (mode "asap")
+   or schedule once at publishAt (mode "scheduled", 3h to 30d ahead)
 
-Jobs stuck for several days are refunded automatically.
+POST /api/upload-content publishes a small video directly in one multipart
+request. Read the result with GET /api/schedule/slots/{slotId}.
 
 ================================================================================
 ENDPOINTS (all require an API key)
@@ -74,40 +64,18 @@ ENDPOINTS (all require an API key)
 
 METHOD PATH                                                   OPERATION
 --------------------------------------------------------------------------------
-POST   /api/videos/validate-script                            validate script
-POST   /api/videos/score-draft                                score draft
-POST   /api/videos/generate-and-schedule                      generate persona video
-POST   /api/videos/batch-discount                             apply batch discount
-GET    /api/persona/video-status/{taskId}                     get video status
-DELETE /api/persona/video-task/{taskId}                       cancel video task
-GET    /api/persona/video-generations                         list video generations
-GET    /api/persona/video-generations/{generationId}          get video generation
 POST   /api/upload-content                                    publish video direct
 POST   /api/videos/upload-url                                 create video upload
 POST   /api/videos/uploads/{uploadId}/complete                complete video upload
 POST   /api/videos/publish-by-id                              publish uploaded video
-POST   /api/media/upload                                      upload media
 POST   /api/media/publish-existing                            publish or schedule existing media
-POST   /api/media/check                                       check media
 GET    /api/persona/list                                      list personas
 POST   /api/persona                                           create persona
 PATCH  /api/persona                                           update persona
 DELETE /api/persona                                           delete persona
 GET    /api/persona/delete-preview                            get persona delete preview
-GET    /api/persona/faces                                     list faces
-GET    /api/persona/images                                    list persona images
-POST   /api/persona/images                                    add persona image
-PATCH  /api/persona/images                                    update persona image
-DELETE /api/persona/images                                    remove persona image
 GET    /api/persona/identity-card                             read a persona's identity card
 POST   /api/persona/identity-card                             render the image prompt for a scene from the card
-GET    /api/persona/voices                                    list voices
-GET    /api/persona/cloned-voices                             list cloned voices
-POST   /api/persona/cloned-voices                             create cloned voice
-GET    /api/persona/cloned-voices/{cloneId}                   get cloned voice
-DELETE /api/persona/cloned-voices/{cloneId}                   delete cloned voice
-POST   /api/persona/cloned-voices/{cloneId}/preview           preview cloned voice
-POST   /api/persona/voices/{voiceId}/preview                  preview house voice
 GET    /api/persona/publishing-accounts                       get persona publishing accounts
 PUT    /api/persona/publishing-accounts                       set persona publishing accounts
 GET    /api/account                                           list social accounts
@@ -134,9 +102,6 @@ POST   /api/share-links                                       create public read
 GET    /api/share-links                                       list share links
 DELETE /api/share-links/{id}                                  revoke share link
 GET    /api/experiments                                       compare prompts per account
-POST   /api/experiments                                       quote then create a prompt experiment
-GET    /api/billing/tokens                                    get token balance
-GET    /api/billing/transactions                              list token transactions
 GET    /api/prompts                                           list recipe prompts
 GET    /api/prompts/{slug}                                    get recipe prompt
 POST   /api/prompts                                           create prompt
@@ -147,7 +112,7 @@ GET    /api/prompts/{slug}/versions/{version}                 read one old versi
 POST   /api/prompts/{slug}/versions/{version}/restore         restore an old version as a new one
 
 Not in this list: session-only routes (OAuth callbacks, API key management,
-billing checkout/webhook, logout, GET /api/health) and the public
+logout, GET /api/health) and the public
 GET /api/version.
 
 ================================================================================
@@ -165,17 +130,14 @@ post, a group bot a member allowed to send). Then map accounts to a persona
 with PUT /api/persona/publishing-accounts.
 
 ================================================================================
-MARKETPLACES (RapidAPI, Apify, MCP Registry)
+MARKETPLACES (RapidAPI, MCP Registry)
 ================================================================================
 
-The same API key works everywhere; tokens are always billed by Post Engineer.
+The same API key works everywhere.
 
 - RapidAPI: send your Post Engineer key in Authorization: Bearer pe_live_...
   next to the X-RapidAPI-Key header. RapidAPI forwards it; without it the API
   returns 401.
-- Apify: the "Post Engineer video" Actor takes the key as a secret input and
-  calls POST /api/videos/generate-and-schedule for you (source:
-  integrations/apify in the repository).
 - MCP Registry: io.github.Ryan-Carloso/post-engineer (npm post-engineer-mcp),
   configured with POST_ENGINEER_API_KEY.
 

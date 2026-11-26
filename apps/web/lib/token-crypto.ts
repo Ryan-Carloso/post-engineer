@@ -28,10 +28,6 @@ function getEncryptionKey(): Buffer {
   return key;
 }
 
-export function deriveServerKey(purpose: string): Buffer {
-  return Buffer.from(crypto.hkdfSync('sha256', getEncryptionKey(), Buffer.alloc(0), purpose, 32));
-}
-
 function encryptPlaintext(plaintext: string): string {
   const key = getEncryptionKey();
   const iv = crypto.randomBytes(12);

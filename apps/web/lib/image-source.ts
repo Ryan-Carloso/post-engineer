@@ -18,7 +18,7 @@ export function describeImageSource(value: string | null | undefined): string | 
   }
 }
 
-const PUBLIC_ASSET_DIRS: readonly string[] = ['caracter-samples', 'voice-samples'];
+const PUBLIC_ASSET_DIRS: readonly string[] = ['caracter-samples'];
 
 const ASSET_SEGMENT = /^[A-Za-z0-9_-][A-Za-z0-9._-]*$/;
 

@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: vi.fn(),
@@ -13,23 +13,16 @@ vi.mock('@/lib/request-auth', () => ({
 vi.mock('@/lib/logger', () => ({
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
 }));
-vi.mock('node:dns/promises', () => ({
-  lookup: vi.fn(async () => [{ address: '1.2.3.4' }]),
-}));
 vi.mock('@/lib/rate-limit', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/rate-limit')>();
   return { ...actual, applyRateLimit: vi.fn(async () => null) };
 });
-vi.mock('@/lib/voice-catalog-fetch', () => ({
-  fetchPersonaVoiceCatalogIds: vi.fn(async () => undefined),
-}));
 
 import { PATCH, POST } from '../route';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
-import { restorePinnedHttp, stubPinnedHttp } from '@/test/stub-pinned-http';
 
 const USER_ID = 'user-uuid-1';
 const PNG_BYTES = Uint8Array.from([
@@ -52,11 +45,6 @@ describe('POST/PATCH personaWrite coverage', () => {
     });
   });
 
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    restorePinnedHttp();
-  });
-
   it('returns 429 when personaWrite rejects POST', async () => {
     const limited = new Response(JSON.stringify({ success: false, errorType: 'RATE_LIMITED' }), {
       status: 429,
@@ -64,7 +52,6 @@ describe('POST/PATCH personaWrite coverage', () => {
     vi.mocked(applyRateLimit).mockResolvedValueOnce(limited as never);
     const form = new FormData();
     form.append('name', 'Ana');
-    form.append('voiceId', 'chatterbox:kokoro_af_heart');
     form.append('photo', png('main.png'));
     const res = await POST(new Request('http://localhost/api/persona', { method: 'POST', body: form }));
     expect(res.status).toBe(429);
@@ -86,114 +73,7 @@ describe('POST/PATCH personaWrite coverage', () => {
     expect(applyRateLimit).toHaveBeenCalledWith(expect.any(Request), RATE_LIMITS.personaWrite, USER_ID);
   });
 
-  it('rolls back the ingested photo when library add fails after insert', async () => {
-    const removed: string[][] = [];
-    const rollbackEq: Array<[string, string]> = [];
-    const chain = (result: unknown) => {
-      const node: Record<string, ReturnType<typeof vi.fn>> = {
-        select: vi.fn(),
-        eq: vi.fn(),
-        neq: vi.fn(),
-        in: vi.fn(),
-        insert: vi.fn(),
-        update: vi.fn(),
-        delete: vi.fn(),
-        single: vi.fn().mockResolvedValue(result),
-      };
-      for (const method of ['select', 'eq', 'neq', 'in', 'insert', 'update', 'delete'] as const) {
-        node[method].mockReturnThis();
-      }
-      return Object.assign(node, {
-        then(
-          onFulfilled: (value: unknown) => unknown,
-          onRejected?: (reason: unknown) => unknown,
-        ) {
-          return Promise.resolve(result).then(onFulfilled, onRejected);
-        },
-      });
-    };
-    const client = {
-      from: vi.fn((table: string) => {
-        if (table === 'personas') {
-          return {
-            insert: vi.fn(() => ({
-              select: vi.fn(() => ({
-                single: vi.fn(async () => ({ data: { id: 'persona-uuid-1' }, error: null })),
-              })),
-            })),
-            delete: vi.fn(() => ({
-              eq: vi.fn((col: string, val: string) => {
-                rollbackEq.push([col, val]);
-                return {
-                  eq: vi.fn((col2: string, val2: string) => {
-                    rollbackEq.push([col2, val2]);
-                    return Promise.resolve({ error: null });
-                  }),
-                  then: (resolve: (v: unknown) => void) => resolve({ error: null }),
-                };
-              }),
-              then: (resolve: (v: unknown) => void) => resolve({ error: null }),
-            })),
-            select: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                eq: vi.fn(() => ({
-                  maybeSingle: vi.fn(async () => ({ data: { id: 'persona-uuid-1' }, error: null })),
-                })),
-              })),
-            })),
-          };
-        }
-        if (table === 'social_accounts') {
-          return {
-            select: vi.fn(() => ({
-              eq: vi.fn(async () => ({
-                data: [{ provider: 'youtube', provider_account_id: 'UC-1' }],
-                error: null,
-              })),
-            })),
-          };
-        }
-        if (table === 'persona_default_accounts') {
-          return {
-            delete: vi.fn(() => ({ eq: vi.fn(async () => ({ error: null })) })),
-            insert: vi.fn(async () => ({ error: null })),
-          };
-        }
-        return {
-          select: vi.fn(() => chain({ count: 0, error: null })),
-          insert: vi.fn(() => chain({ data: null, error: { message: 'insert boom' } })),
-          delete: vi.fn(() => chain({ error: null })),
-        };
-      }),
-      storage: {
-        from: vi.fn(() => ({
-          upload: vi.fn(async (path: string) => ({ data: { path }, error: null })),
-          remove: vi.fn(async (paths: string[]) => {
-            removed.push(paths);
-            return { error: null };
-          }),
-        })),
-      },
-    };
-    vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
-    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
-    stubPinnedHttp(200, PNG_BYTES);
-    const form = new FormData();
-    form.append('name', 'Remote');
-    form.append('voiceId', 'chatterbox:kokoro_af_heart');
-    form.append('avatarUrl', 'https://cdn.example/face.png');
-    form.append('publishingAccounts', JSON.stringify({ youtube: ['UC-1'] }));
-    form.append('images', png('lib.png'));
-    const res = await POST(new Request('http://localhost/api/persona', { method: 'POST', body: form }));
-    expect(res.status).toBe(500);
-    expect(removed.some((paths) => paths.some((path) => path.endsWith('/photo.png')))).toBe(true);
-    expect(client.from).toHaveBeenCalledWith('personas');
-    expect(rollbackEq).toContainEqual(['id', 'persona-uuid-1']);
-    expect(rollbackEq).toContainEqual(['user_id', USER_ID]);
-    expect(createSupabaseServiceClient).toHaveBeenCalled();
-  });
-
-  it('removes photoPathToRollback when the persona insert fails', async () => {
+  it('removes the uploaded photo when the persona insert fails', async () => {
     const removed: string[][] = [];
     const client = {
       from: vi.fn(() => ({
@@ -215,11 +95,9 @@ describe('POST/PATCH personaWrite coverage', () => {
     };
     vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
-    stubPinnedHttp(200, PNG_BYTES);
     const form = new FormData();
-    form.append('name', 'Remote');
-    form.append('voiceId', 'chatterbox:kokoro_af_heart');
-    form.append('avatarUrl', 'https://cdn.example/face.png');
+    form.append('name', 'Uploaded');
+    form.append('photo', png('face.png'));
     form.append('publishingAccounts', JSON.stringify({ youtube: ['UC-1'] }));
     const res = await POST(new Request('http://localhost/api/persona', { method: 'POST', body: form }));
     expect(res.status).toBe(500);

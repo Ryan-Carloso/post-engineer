@@ -59,16 +59,10 @@ function makeSlot(overrides: Partial<ScheduledSlot> = {}): ScheduledSlot {
     id: 'u1',
     scheduleId: 's1',
     slotAt: '2030-06-01T10:00:00.000Z',
-    status: 'awaiting',
+    status: 'ready',
     title: 'Upcoming topic',
     error: null,
     publishedAt: null,
-    taskId: null,
-    progress: 0,
-    stage: null,
-    queuePosition: null,
-    queueTotal: null,
-    retryable: null,
     ...overrides,
   };
 }

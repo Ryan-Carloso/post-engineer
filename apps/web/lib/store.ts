@@ -7,11 +7,7 @@ import type {
   SocialProvider,
   UploadContentResult,
 } from '@/lib/types';
-import { isEnglishLanguage } from '@/lib/language-gate';
-import { MAX_PERSONA_IMAGES } from '@/lib/persona-image-select';
 import { SOCIAL_PROVIDERS } from '@/lib/types';
-import type { FaceQuality } from '@/lib/tokens';
-import type { PersonaCtaType } from '@/lib/contracts/personas';
 import {
   emptyPersonaDefaultAccounts,
   type PersonaDefaultAccounts,
@@ -156,39 +152,11 @@ export const useUploadStore = create<UploadFormState>()(
   }),
 );
 
-const SCRIPT_LANGUAGES = ['pt', 'es', 'fr', 'en'] as const;
-
-export type ScriptLanguage = (typeof SCRIPT_LANGUAGES)[number];
-
-const DEFAULT_SCRIPT_LANGUAGE: ScriptLanguage = 'en';
-
-export function resolveScriptLanguage(locale: string): ScriptLanguage {
-  const base = locale.split('-')[0].toLowerCase();
-  const derived: ScriptLanguage = (SCRIPT_LANGUAGES as readonly string[]).includes(base)
-    ? (base as ScriptLanguage)
-    : DEFAULT_SCRIPT_LANGUAGE;
-  return isEnglishLanguage(derived) ? derived : DEFAULT_SCRIPT_LANGUAGE;
-}
-
 interface PersonaFormState {
   name: string;
   photo: File | null;
-  extraPhotos: File[];
-  prompt: string;
-  avatarUrl: string | null;
   storedPhotoUrl: string | null;
-  voiceId: string | null;
-  language: string | null;
-  videoAspect: string;
-  videoLayout: string;
-  hookPanel: boolean;
-  scriptPrompt: string;
-  ctaType: PersonaCtaType;
-  ctaUrl: string;
-  ctaInstruction: string;
-  niche: string;
   result: CreatePersonaResult | null;
-  faceQuality: FaceQuality;
   publishingAccounts: PersonaDefaultAccounts;
   publishingAccountsLoaded: boolean;
   loadedPublishingAccounts: PersonaDefaultAccounts | null;
@@ -204,45 +172,18 @@ interface PersonaFormState {
   setLoadedPublishingAccounts: (accounts: PersonaDefaultAccounts) => void;
   setName: (value: string) => void;
   setPhoto: (file: File | null) => void;
-  addPhotos: (files: File[]) => void;
-  removePhoto: (index: number) => void;
-  setPrompt: (value: string) => void;
-  setAvatarUrl: (url: string | null) => void;
   setStoredPhotoUrl: (url: string | null) => void;
-  setVoiceId: (id: string | null) => void;
-  setLanguage: (language: string | null) => void;
-  setVideoAspect: (value: string) => void;
-  setVideoLayout: (value: string) => void;
-  setHookPanel: (value: boolean) => void;
-  setScriptPrompt: (value: string) => void;
-  setCta: (cta: { type: PersonaCtaType; url: string; instruction: string }) => void;
-  setNiche: (value: string) => void;
   setResult: (result: CreatePersonaResult | null) => void;
-  setFaceQuality: (quality: FaceQuality) => void;
   resetForm: () => void;
-  buildPersonaFormData: (language?: string) => FormData;
+  buildPersonaFormData: () => FormData;
   buildPersonaEditFormData: () => FormData;
 }
 
 const initialPersonaState = {
   name: '',
   photo: null,
-  extraPhotos: [] as File[],
-  prompt: '',
-  avatarUrl: null,
   storedPhotoUrl: null,
-  voiceId: null,
-  language: null,
-  videoAspect: '9:16',
-  videoLayout: 'standard',
-  hookPanel: true,
-  scriptPrompt: '',
-  ctaType: 'follow' as PersonaCtaType,
-  ctaUrl: '',
-  ctaInstruction: '',
-  niche: '',
   result: null,
-  faceQuality: 'ok' as FaceQuality,
   publishingAccounts: emptyPersonaDefaultAccounts(),
   publishingAccountsLoaded: true,
   loadedPublishingAccounts: null,
@@ -256,34 +197,8 @@ export const usePersonaStore = create<PersonaFormState>()(
     ...initialPersonaState,
     setName: (name) => set({ name }),
     setPhoto: (photo) => set({ photo }),
-    addPhotos: (files) =>
-      set((s) => {
-        const [photo = null, ...extraPhotos] = [...(s.photo ? [s.photo] : []), ...s.extraPhotos, ...files].slice(
-          0,
-          MAX_PERSONA_IMAGES,
-        );
-        return { photo, extraPhotos };
-      }),
-    removePhoto: (index) =>
-      set((s) => {
-        const [photo = null, ...extraPhotos] = [...(s.photo ? [s.photo] : []), ...s.extraPhotos].filter(
-          (_, i) => i !== index,
-        );
-        return { photo, extraPhotos };
-      }),
-    setPrompt: (prompt) => set({ prompt }),
-    setAvatarUrl: (avatarUrl) => set({ avatarUrl }),
     setStoredPhotoUrl: (storedPhotoUrl) => set({ storedPhotoUrl }),
-    setVoiceId: (voiceId) => set({ voiceId }),
-    setLanguage: (language) => set({ language }),
-    setVideoAspect: (videoAspect) => set({ videoAspect }),
-    setVideoLayout: (videoLayout) => set({ videoLayout }),
-    setHookPanel: (hookPanel) => set({ hookPanel }),
-    setScriptPrompt: (scriptPrompt) => set({ scriptPrompt }),
-    setCta: (cta) => set({ ctaType: cta.type, ctaUrl: cta.url, ctaInstruction: cta.instruction }),
-    setNiche: (niche) => set({ niche }),
     setResult: (result) => set({ result }),
-    setFaceQuality: (faceQuality) => set({ faceQuality }),
     setPublishingAccounts: (publishingAccounts) => set({ publishingAccounts }),
     setPublishingAccountsLoaded: (publishingAccountsLoaded) => set({ publishingAccountsLoaded }),
     setLoadedPublishingAccounts: (loadedPublishingAccounts) => set({ loadedPublishingAccounts }),
@@ -296,32 +211,12 @@ export const usePersonaStore = create<PersonaFormState>()(
     resetIdentityCard: () => set({ identityCardDraft: emptyIdentityCardDraft(), identityCardLoaded: emptyIdentityCardDraft() }),
     setSubmitting: (isSubmitting) => set({ isSubmitting }),
     resetForm: () => set({ ...initialPersonaState, publishingAccounts: emptyPersonaDefaultAccounts() }),
-    buildPersonaFormData: (language?: string) => {
+    buildPersonaFormData: () => {
       const s = get();
       const formData = new FormData();
       formData.append('name', s.name.trim());
-      formData.append('faceQuality', s.faceQuality);
       formData.append('publishingAccounts', JSON.stringify(s.publishingAccounts));
-      if (s.photo) {
-        formData.append('photo', s.photo);
-        for (const extra of s.extraPhotos) formData.append('images', extra);
-      } else if (s.avatarUrl) {
-        formData.append('avatarUrl', s.avatarUrl);
-      }
-      if (s.voiceId) {
-        formData.append('voiceId', s.voiceId);
-      }
-      if (language) formData.append('language', language);
-      if (s.videoAspect) formData.append('videoAspect', s.videoAspect);
-      if (s.videoLayout) formData.append('videoLayout', s.videoLayout);
-      formData.append('hookPanel', String(s.hookPanel));
-      if (s.scriptPrompt.trim()) formData.append('scriptPrompt', s.scriptPrompt.trim());
-      formData.append('ctaType', s.ctaType);
-      if (s.ctaUrl.trim()) formData.append('ctaUrl', s.ctaUrl.trim());
-      if (s.ctaInstruction.trim()) formData.append('ctaInstruction', s.ctaInstruction.trim());
-      if (s.niche.trim()) formData.append('niche', s.niche.trim());
-      const videoSubject = s.niche.trim() || s.scriptPrompt.trim();
-      if (videoSubject) formData.append('video_subject', videoSubject);
+      if (s.photo) formData.append('photo', s.photo);
       const identityCard = identityCardFormValue(s.identityCardDraft, s.identityCardLoaded);
       if (identityCard !== null) formData.append('identityCard', identityCard);
       return formData;
@@ -330,17 +225,7 @@ export const usePersonaStore = create<PersonaFormState>()(
       const s = get();
       const formData = new FormData();
       formData.append('name', s.name.trim());
-      if (s.avatarUrl) formData.append('avatarUrl', s.avatarUrl);
-      if (s.voiceId) formData.append('voiceId', s.voiceId);
-      if (s.videoAspect) formData.append('videoAspect', s.videoAspect);
-      if (s.videoLayout) formData.append('videoLayout', s.videoLayout);
-      formData.append('hookPanel', String(s.hookPanel));
-      if (s.scriptPrompt.trim()) formData.append('scriptPrompt', s.scriptPrompt.trim());
-      formData.append('ctaType', s.ctaType);
-      formData.append('ctaUrl', s.ctaUrl.trim());
-      formData.append('ctaInstruction', s.ctaInstruction.trim());
-      if (s.niche.trim()) formData.append('niche', s.niche.trim());
-      formData.append('faceQuality', s.faceQuality);
+      if (s.photo) formData.append('photo', s.photo);
       const identityCard = identityCardFormValue(s.identityCardDraft, s.identityCardLoaded);
       if (identityCard !== null) formData.append('identityCard', identityCard);
       return formData;

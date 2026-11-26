@@ -24,12 +24,6 @@ export const PublishProviderFailureSchema = z.object({
   notice: z.string(),
 });
 
-export const SlotProgressHistoryEntrySchema = z.object({
-  progress: z.number(),
-  stage: z.string().nullable(),
-  recordedAt: z.string(),
-});
-
 export const SlotPostSchema = z.object({
   id: z.string(),
   scheduleId: z.string(),
@@ -38,17 +32,9 @@ export const SlotPostSchema = z.object({
   title: z.string().nullable(),
   error: z.string().nullable(),
   publishedAt: z.string().nullable(),
-  taskId: z.string().nullable(),
-  progress: z.number(),
-  stage: z.string().nullable(),
-  retryable: z.boolean().nullable(),
-  scriptAngle: z.string().nullable(),
   publishLinks: z.array(PublishLinkSchema),
-  progressHistory: z.array(SlotProgressHistoryEntrySchema),
   userNotices: z.array(PublishUserNoticeSchema),
   providerFailures: z.array(PublishProviderFailureSchema),
-  queuePosition: z.null(),
-  queueTotal: z.null(),
   postUrl: z.string().nullable(),
 });
 
@@ -72,55 +58,18 @@ export const SlotScheduleSchema = z.object({
   publishMode: z.enum(['scheduled', 'asap']),
 });
 
-export const SlotGenerationSchema = z.object({
-  voiceover: z.boolean(),
-  language: z.string().nullable(),
-  voiceId: z.string().nullable(),
-  videoAspect: z.string().nullable(),
-  videoLayout: z.string().nullable(),
-  niche: z.string().nullable(),
-  paragraphNumber: z.number().nullable(),
-  faceQuality: z.string().nullable(),
-});
-
 export const SlotDetailSchema = z.object({
   slot: SlotPostSchema,
   schedule: SlotScheduleSchema,
   persona: z.object({ id: z.string(), name: z.string() }).nullable(),
-  generation: SlotGenerationSchema,
 });
 
-export const GenerationPostDetailSchema = z.object({
-  id: z.string(),
-  generationId: z.string(),
-  engineTaskId: z.string().nullable(),
-  personaName: z.string().nullable(),
-  videoSubject: z.string().nullable(),
-  status: z.string(),
-  errorCode: z.string().nullable(),
-  tokensRefunded: z.boolean(),
-  createdAt: z.string(),
-  completedAt: z.string().nullable(),
-  progress: z.number(),
-  stage: z.string().nullable(),
-  scriptAngle: z.string().nullable(),
+export const GetPostResponseSchema = z.object({
+  success: z.literal(true),
+  slot: SlotPostSchema,
+  schedule: SlotScheduleSchema,
+  persona: z.object({ id: z.string(), name: z.string() }).nullable(),
 });
-
-export const GetPostResponseSchema = z.discriminatedUnion('kind', [
-  z.object({
-    success: z.literal(true),
-    kind: z.literal('generation'),
-    generation: GenerationPostDetailSchema,
-  }),
-  z.object({
-    success: z.literal(true),
-    kind: z.literal('slot'),
-    slot: SlotPostSchema,
-    schedule: SlotScheduleSchema,
-    persona: z.object({ id: z.string(), name: z.string() }).nullable(),
-    generation: SlotGenerationSchema,
-  }),
-]);
 
 export const getPost = defineEndpoint({
   method: 'GET',

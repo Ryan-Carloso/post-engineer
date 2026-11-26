@@ -12,7 +12,7 @@ export const recipesI18nEn = {
   copyExplanation:
       'Copying puts the full prompt on your clipboard. Paste it into your agent — Cursor, Claude, Muse, OpenCode, or any agent — and it asks you what it needs, then runs with the Post Engineer MCP server.',
   copyNext:
-      'Next: your agent validates the script, then generates and publishes the video. Validation is free; generation costs tokens.',
+      'Next: your agent writes the copy with the prompt, then publishes or schedules the media you made.',
   backToPrompts: 'Back to prompts',
   notFound: 'This prompt does not exist yet.',
   stepKeyTitle: 'Create your API key',

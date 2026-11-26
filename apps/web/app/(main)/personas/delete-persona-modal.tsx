@@ -96,7 +96,6 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
   if (!persona) return null;
 
   const counts = preview?.counts;
-  const videos = preview?.videos ?? [];
   const nameMatches = typedName === persona.name;
 
   const handleDelete = (): void => {
@@ -181,73 +180,7 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
                   )}
                 </li>
               )}
-              <li>
-                <strong className="font-semibold">{counts.generatedVideos}</strong>{' '}
-                {t(counts.generatedVideos === 1 ? 'personas.deleteDialogVideo' : 'personas.deleteDialogVideos')}
-              </li>
-              <li>
-                <strong className="font-semibold">{counts.personaImages}</strong>{' '}
-                {t(counts.personaImages === 1 ? 'personas.deleteDialogImage' : 'personas.deleteDialogImages')}
-              </li>
             </ul>
-
-            <div className="mt-4 rounded-lg bg-warning-soft p-3 text-sm leading-6 text-warning">
-              {t('personas.deleteDialogNoRefund')}
-            </div>
-
-            {videos.length > 0 && (
-              <div className="mt-4">
-                <p className="text-sm font-medium text-ink-soft">
-                  {t('personas.deleteDialogDownloadHint')}
-                </p>
-                {preview?.videosTruncated === true && (
-                  <p className="mt-1 text-xs text-muted-text">
-                    {t('personas.deleteDialogVideosTruncated', {
-                      shown: videos.length,
-                      total: counts?.generatedVideos ?? videos.length,
-                    })}
-                  </p>
-                )}
-                {preview?.linksIncomplete === true && (
-                  <p className="mt-1 text-xs text-warning">
-                    {t('personas.deleteDialogLinksIncomplete')}{' '}
-                    <button
-                      type="button"
-                      onClick={() => setAttempt((n) => n + 1)}
-                      disabled={phase === 'deleting'}
-                      className="font-medium underline hover:no-underline disabled:no-underline disabled:opacity-50"
-                    >
-                      {t('personas.tryAgain')}
-                    </button>
-                  </p>
-                )}
-                <ul className="mt-2 space-y-1.5">
-                  {videos.map((video, index) => (
-                    <li
-                      key={video.taskId ?? `video-${index}`}
-                      className="flex items-center justify-between gap-3 text-sm"
-                    >
-                      <span className="min-w-0 flex-1 truncate text-ink-soft">
-                        {video.title ?? video.taskId ?? `video-${index + 1}`}
-                      </span>
-                      {video.downloadUrl ? (
-                        <a
-                          href={video.downloadUrl}
-                          download
-                          className="shrink-0 font-medium text-info hover:underline"
-                        >
-                          {t('personas.deleteDialogDownload')}
-                        </a>
-                      ) : (
-                        <span className="shrink-0 text-xs text-faint">
-                          {t('personas.deleteDialogDownloadUnavailable')}
-                        </span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
 
             {phase === 'deleteError' && (
               <p className="mt-4 text-sm text-destructive">{t('personas.deleteDialogDeleteError')}</p>

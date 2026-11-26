@@ -1,33 +1,29 @@
 # Post Engineer
 
-> Post Engineer lets AI agents create AI personas (avatar, voice, language,
-> niche), generate videos with them, and schedule automated posting to
-> YouTube, Instagram, LinkedIn, Threads, Facebook Pages, Bluesky and Rumble.
-> Generation is always tied to publishing: one call generates, schedules and
-> auto-publishes — no orphan videos. Voiceover videos are supported without a persona. Videos cost
-> prepaid tokens; check the balance before generating. Post Engineer is open
-> source under the Apache-2.0 license
+> Post Engineer lets AI agents schedule and auto-publish videos and images
+> they made elsewhere to YouTube, Instagram, LinkedIn, Threads, Facebook Pages,
+> Bluesky, Rumble and more. Personas group the publishing accounts of one
+> brand or character. Post Engineer does not generate media: bring the file
+> from your own tool. New accounts get a 7-day free trial for publishing.
+> Post Engineer is open source under the Apache-2.0 license
 > (https://github.com/Ryan-Carloso/post-engineer): self-host it on your own
-> VPS or use the hosted platform and buy tokens. Lip sync runs on Modal.com,
-> whose Starter plan includes $30/month in compute credits — we are not
-> Modal, and this free-credit offer is theirs and can end at any time.
+> VPS or use the hosted platform.
 
 ## Platform
 
-- [Post Engineer](https://post-engineer.com/): create an account, create AI
-  personas, generate videos, connect social accounts, schedule automated posting.
+- [Post Engineer](https://post-engineer.com/): create an account, create
+  personas, connect social accounts, schedule automated posting.
 - [API keys](https://post-engineer.com/recipes): generate the API key used by
   the MCP server.
 - [Prompts and recipes](https://post-engineer.com/recipes): ready-made prompts
-  for the MCP server, including daily news becomes a video and GitHub PRs
-  become videos.
+  for the MCP server.
 
 ## HTTP API
 
 - [OpenAPI spec](https://post-engineer.com/openapi.json): every endpoint callable
   with an API key (`Authorization: Bearer pe_live_...`).
 - [API documentation](https://post-engineer.com/api-documentation.txt): auth,
-  errors, the video flow and token costs.
+  errors and the publishing flow.
 
 ## MCP server
 
@@ -41,22 +37,19 @@
 
 ## MCP tools
 
-17 intent tools; each takes an `action`, except `generate_video` and `cancel_video`. Personas and
-accounts are given by name or id.
+10 intent tools; each takes an `action`. Personas and accounts are given by name or id.
 
-- `generate_video`: one video or a batch of 2-12 (script as segments — hook first, then content takes in
-  order, 60–200 words total; slot 3h–30d ahead or `mode: 'asap'`), `video_tasks`
-  (`status`, `list_generations`, `get_generation`), `cancel_video`.
-- Personas and voices: `personas` (`list`, `get`, `create`, `update`, `delete` — preview, then confirm),
-  `persona_media` (`list_faces`, `list_images`, `add_image`, `update_image`, `remove_image`), `voices`
-  (`list`, `preview`, `list_clones`, `create_clone`, `get_clone`, `preview_clone`, `delete_clone`).
+- Publishing: `publish_video` (`from_file`, `create_upload`, `complete_upload`, `publish_upload`,
+  `publish_existing`: a video or an image you made elsewhere, now or at a scheduled time).
+- Personas: `personas` (`list`, `get`, `create`, `update`, `delete` — preview, then confirm),
+  `persona_media` (`get_card`, `render_prompt`: the identity card and the image prompts for your own
+  image tool).
 - Accounts and schedule: `accounts` (`list`, `connect`, `disconnect`, `get_persona_publishing`,
   `set_persona_publishing`, `list_boards`), `schedules` (`list`, `cancel`, `get_slot`, `update_slot_title`,
-  `delete_slot`), `posts` (`list`, `get`), `insights` (`post_metrics`, `last_day`, `retention_curve`, `share_link_create`, `share_link_list`, `share_link_revoke`), `billing`
-  (`balance`, `transactions`), `experiments` (`results`: compare your prompts inside each account; `create`: run the comparison, quote then confirm).
-- Scripts, media and publishing: `check_script` (`validate`, `score`: mechanical, no tokens spent),
-  `media` (`upload`, `check`), `publish_video` (`from_file`, `create_upload`, `complete_upload`,
-  `publish_upload`), `prompts` (`list`, `get`, `create`, `update`, `delete`, `versions`, `restore`).
+  `delete_slot`), `posts` (`list`, `get`), `insights` (`post_metrics`, `last_day`, `retention_curve`,
+  `share_link_create`, `share_link_list`, `share_link_revoke`), `experiments` (`results`: compare your
+  prompts inside each account), `prompts` (`list`, `get`, `create`, `update`, `delete`, `versions`,
+  `restore`).
 - Tool configuration: `tool_config` (`get`, `save`) — the saved search tool and licensed stock
   sources; keys are stored encrypted and only presence + last 4 are ever returned.
 - Prompts: `/daily-news` (daily news becomes a video), `/github-prs`

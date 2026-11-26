@@ -111,8 +111,8 @@ describe('llms-full.txt', () => {
     for (const tool of tools.filter((name) => tokens.has(name))) {
       expect(toolBullets().has(tool), `llms-full.txt documents ${tool}`).toBe(true);
     }
-    expect(tokens.has('generate_video')).toBe(true);
-    expect(tokens.has('cancel_video')).toBe(true);
+    expect(tokens.has('publish_video')).toBe(true);
+    expect(tokens.has('publish_existing')).toBe(true);
   });
 
   it('links the OpenAPI spec, the MCP README and the prompt hub', () => {

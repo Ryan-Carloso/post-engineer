@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import type { IdentityCard, Scene } from '@/lib/contracts/persona-identity-card';
-import { MAX_DESCRIPTION_LENGTH } from '@/lib/contracts/personas';
 import { buildIdentityPrompt } from '../persona-identity-prompt';
 import { FIXTURE_CARD, FIXTURE_SCENE } from '@/test/identity-card-fixtures';
 
@@ -119,7 +118,7 @@ describe('buildIdentityPrompt suggestedDescription', () => {
     };
     const { suggestedDescription } = buildIdentityPrompt(FIXTURE_CARD, scene);
     expect(suggestedDescription.length).toBeLessThanOrEqual(500);
-    expect(suggestedDescription.length).toBeLessThanOrEqual(MAX_DESCRIPTION_LENGTH);
+    expect(suggestedDescription.length).toBeLessThanOrEqual(500);
     expect(suggestedDescription.endsWith(',')).toBe(false);
     expect(suggestedDescription.endsWith(' ')).toBe(false);
   });

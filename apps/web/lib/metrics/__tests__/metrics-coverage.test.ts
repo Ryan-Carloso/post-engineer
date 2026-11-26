@@ -43,7 +43,7 @@ const PUBLISHED_AT = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(
 function row(overrides: Partial<MetricsRowView> = {}): MetricsRowView {
   return {
     postId: 'post-1', personaId: PERSONA, provider: 'youtube', accountId: 'yt', externalId: 'abc123',
-    scriptAngle: 'myth', publishedAt: PUBLISHED_AT, views: 100, likes: null, comments: null, saves: null, collectedAt: '2026-10-21T12:00:00.000Z',
+    publishedAt: PUBLISHED_AT, views: 100, likes: null, comments: null, saves: null, collectedAt: '2026-10-21T12:00:00.000Z',
     analyticsViews: null, engagedViews: null, stayedToWatchPct: null, averageViewDurationSeconds: null,
     averageViewPercentage: null, contentType: null, analyticsStatus: null, provisional: false,
     ...overrides,
@@ -51,7 +51,7 @@ function row(overrides: Partial<MetricsRowView> = {}): MetricsRowView {
 }
 
 function query(overrides: Partial<MetricsQuery> = {}): MetricsQuery {
-  return { window: '24h', personaId: null, accountId: null, provider: null, angle: null, ...overrides };
+  return { window: '24h', personaId: null, accountId: null, provider: null, ...overrides };
 }
 
 function compute(
@@ -98,6 +98,7 @@ describe('metrics window hours (migrations 025/039)', () => {
 });
 
 describe('computeCoverage', () => {
+
   it('lists a missing target as retrying while its window is open', () => {
     const { items, truncated, unknownProviders } = compute();
     expect(truncated).toBe(false);
@@ -108,7 +109,6 @@ describe('computeCoverage', () => {
       provider: 'youtube',
       accountId: 'yt',
       externalId: 'abc123',
-      scriptAngle: null,
       reason: 'retrying',
       publishedAt: '2026-10-21T12:00:00.000Z',
       windowOpensAt: '2026-10-22T12:00:00.000Z',
@@ -210,24 +210,6 @@ describe('computeCoverage', () => {
     expect(items).toEqual([]);
   });
 
-  it('takes a null angle from a row and shows the item with no angle', () => {
-    const { items } = compute({
-      posts: [post({ outcomes: [YT_OUTCOME, IG_OUTCOME] })],
-      rows: [row({ scriptAngle: null })],
-    });
-    expect(items).toHaveLength(1);
-    expect(items[0]).toMatchObject({ provider: 'instagram', scriptAngle: null });
-  });
-
-  it('keeps the first angle when a later row has none', () => {
-    const { items } = compute({
-      posts: [post({ outcomes: [YT_OUTCOME, IG_OUTCOME] })],
-      rows: [row(), row({ scriptAngle: null })],
-    });
-    expect(items).toHaveLength(1);
-    expect(items[0]).toMatchObject({ provider: 'instagram', scriptAngle: 'myth' });
-  });
-
   it('shows persona-less posts under the none persona filter, hides persona posts', () => {
     const posts = [
       post({ id: 'post-own', personaId: PERSONA }),
@@ -235,21 +217,6 @@ describe('computeCoverage', () => {
     ];
     const { items } = compute({ posts, query: query({ personaId: METRICS_NONE }) });
     expect(items.map((item) => item.postId)).toEqual(['post-voiceover']);
-  });
-
-  it('hides angled posts under the none angle filter, shows angle-less ones', () => {
-    expect(compute({
-      posts: [post({ outcomes: [YT_OUTCOME, IG_OUTCOME] })],
-      rows: [row()],
-      query: query({ angle: METRICS_NONE }),
-    }).items).toEqual([]);
-    const shown = compute({
-      posts: [post({ outcomes: [YT_OUTCOME, IG_OUTCOME] })],
-      rows: [row({ scriptAngle: null })],
-      query: query({ angle: METRICS_NONE }),
-    });
-    expect(shown.items).toHaveLength(1);
-    expect(shown.items[0]).toMatchObject({ provider: 'instagram', scriptAngle: null });
   });
 
   it('skips non-object entries and failed entries with unknown providers or no account', () => {
@@ -277,25 +244,6 @@ describe('computeCoverage', () => {
   it('skips targets that already have a snapshot row', () => {
     const { items } = compute({ rows: [row()] });
     expect(items).toEqual([]);
-  });
-
-  it('takes the post angle from its rows, and skips unknown-angle posts under an angle filter', () => {
-    const withAngle = compute({
-      posts: [post({ outcomes: [YT_OUTCOME, IG_OUTCOME] })],
-      rows: [row()],
-      query: query({ angle: 'myth' }),
-    });
-    expect(withAngle.items).toHaveLength(1);
-    expect(withAngle.items[0]).toMatchObject({ provider: 'instagram', scriptAngle: 'myth' });
-
-    expect(compute({
-      posts: [post({ outcomes: [YT_OUTCOME, IG_OUTCOME] })],
-      rows: [row()],
-      query: query({ angle: 'tutorial' }),
-    }).items).toEqual([]);
-
-    expect(compute({ query: query({ angle: 'myth' }) }).items).toEqual([]);
-    expect(compute().items).toHaveLength(1);
   });
 
   it('respects the persona, provider and account filters', () => {
@@ -649,9 +597,9 @@ describe('fetchCoverage', () => {
       post_metrics_done: { data: [], error: null },
       post_metrics: {
         data: [
-          { post_id: 'post-1', provider: 'tiktok', external_id: 't1', script_angle: 'myth' },
-          { post_id: 'post-1', provider: 'youtube', external_id: null, script_angle: 'myth' },
-          { post_id: 'post-1', provider: 'youtube', external_id: 'abc123', script_angle: 'myth' },
+          { post_id: 'post-1', provider: 'tiktok', external_id: 't1' },
+          { post_id: 'post-1', provider: 'youtube', external_id: null },
+          { post_id: 'post-1', provider: 'youtube', external_id: 'abc123' },
         ],
         error: null,
       },
@@ -664,21 +612,9 @@ describe('fetchCoverage', () => {
     );
   });
 
-  it('reads a null script angle from a collected row', async () => {
-    const { client } = fakeClient({
-      scheduled_posts: { data: [postRecord({ publish_outcomes: [YT_OUTCOME, IG_OUTCOME] })], error: null },
-      schedules: { data: [{ id: 'sched-1', persona_id: PERSONA }], error: null },
-      post_metrics_done: { data: [], error: null },
-      post_metrics: { data: [{ post_id: 'post-1', provider: 'youtube', external_id: 'abc123', script_angle: null }], error: null },
-    });
-    const { items } = await fetchCoverage(client, 'user-1', query(), NOW);
-    expect(items).toHaveLength(1);
-    expect(items[0]).toMatchObject({ provider: 'instagram', scriptAngle: null });
-  });
-
   it('warns when the rows read hits its cap', async () => {
     const rows = Array.from({ length: 5000 }, (_, i) => ({
-      post_id: 'post-1', provider: 'youtube', external_id: `v${i}`, script_angle: 'myth',
+      post_id: 'post-1', provider: 'youtube', external_id: `v${i}`,
     }));
     const { client } = fakeClient({
       scheduled_posts: { data: [postRecord()], error: null },

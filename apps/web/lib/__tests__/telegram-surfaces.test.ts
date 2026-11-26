@@ -1,10 +1,8 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest';
-import { PUBLISH_NETWORKS, checkPublish } from '@/lib/draft-scoring';
 import { PROVIDER_LABELS, accountOption, scheduleAccountIds } from '@/lib/account-options';
 import { resolvePublishLinks } from '@/lib/publish-links';
 import { COUNTER_FETCHERS } from '@/lib/metrics/provider-counters';
-import { TELEGRAM_CAPTION_MAX_LENGTH } from '@/lib/telegram';
 import { DIRECT_CONNECT_PROVIDERS, IMAGE_PROVIDERS, OAUTH_CONNECT_PROVIDERS } from '@/lib/contracts/providers';
 import { PROVIDER_REGISTRY } from '@/lib/providers/registry';
 import type { SocialAccountRecord } from '@/lib/social-accounts';
@@ -32,14 +30,6 @@ describe('Telegram across the shared surfaces', () => {
     expect(
       await COUNTER_FETCHERS.telegram('user-1', { provider: 'telegram', accountId: '-1001', externalId: '9' }, CTX),
     ).toEqual({ views: null, likes: null, comments: null, saves: null });
-  });
-
-  it('fails the publish check over the 1024-character caption limit', () => {
-    expect(PUBLISH_NETWORKS).toContain('telegram');
-    expect(checkPublish('a'.repeat(TELEGRAM_CAPTION_MAX_LENGTH), 'telegram').failures).toEqual([]);
-    expect(checkPublish('a'.repeat(TELEGRAM_CAPTION_MAX_LENGTH + 1), 'telegram').failures).toEqual([
-      `Draft is ${TELEGRAM_CAPTION_MAX_LENGTH + 1} characters, over the Telegram ${TELEGRAM_CAPTION_MAX_LENGTH}-character caption limit.`,
-    ]);
   });
 
   it('links only the permalink the handler supplies (a public chat), never a guess from the message id', () => {

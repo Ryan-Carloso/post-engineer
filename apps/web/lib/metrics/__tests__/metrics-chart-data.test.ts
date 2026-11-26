@@ -18,7 +18,6 @@ function row(overrides: Partial<MetricsRowView> = {}): MetricsRowView {
     provider: 'youtube',
     accountId: 'UC1',
     externalId: 'v1',
-    scriptAngle: null,
     publishedAt: new Date(Date.now() - 86400000).toISOString(),
     views: 100,
     likes: 10,

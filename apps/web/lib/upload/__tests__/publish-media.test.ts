@@ -237,11 +237,11 @@ describe('cleanupPublishMedia', () => {
 });
 
 describe('PUBLISH_MEDIA_BUCKET', () => {
-  it('matches the engine R2 bucket literal', () => {
+  it('matches the bucket the engine publish worker downloads uploads from', () => {
     const source = readFileSync(
-      path.join(findRepoRoot(import.meta.url), 'apps/engine/app/services/video_storage.py'),
+      path.join(findRepoRoot(import.meta.url), 'apps/engine/app/services/fill_schedule/publish_existing_media.py'),
       'utf8',
     );
-    expect(source.includes(`STORAGE_BUCKET = "${PUBLISH_MEDIA_BUCKET}"`)).toBe(true);
+    expect(source.includes(`store.download_storage_object("${PUBLISH_MEDIA_BUCKET}", storage_path)`)).toBe(true);
   });
 });

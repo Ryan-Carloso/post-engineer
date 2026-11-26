@@ -61,16 +61,12 @@ function postAccountsPayload() {
   };
 }
 
-describe('Posts list progress', () => {
+describe('Posts calendar', () => {
   beforeEach(() => {
     cy.loginE2EUser();
 
     cy.intercept('GET', '/api/persona/list', personasPayload()).as('personas');
     cy.intercept('GET', '/api/account', postAccountsPayload()).as('accounts');
-    cy.intercept('GET', '/api/persona/video-generations*', {
-      success: true,
-      generations: [],
-    }).as('generations');
     cy.intercept('GET', '/api/schedule', {
       success: true,
       schedules: [
@@ -91,24 +87,18 @@ describe('Posts list progress', () => {
         },
       ],
     }).as('schedules');
-    const generatingSlot = {
+    const readySlot = {
       id: 'slot-e2e-gen',
       schedule_id: NEW_POST_SCHEDULE_ID,
       slot_at: new Date().toISOString(),
-      status: 'generating',
-      title: 'E2E generating topic',
-      task_id: 'task-e2e-1',
-      progress: 42,
-      stage: 'lipsync',
-      queuePosition: 1,
-      queueTotal: 1,
-      retryable: null,
+      status: 'ready',
+      title: 'E2E scheduled topic',
     };
     cy.intercept('GET', '/api/schedule/status*', {
       success: true,
-      upcoming: [generatingSlot],
+      upcoming: [readySlot],
       recent: [],
-      slots: [generatingSlot],
+      slots: [readySlot],
     }).as('status');
   });
 
@@ -117,13 +107,6 @@ describe('Posts list progress', () => {
     cy.get('[data-testid=mcp-onboard-card]').should('not.exist');
     cy.get('[role=dialog]').should('not.exist');
     cy.get('[data-testid=new-post-button]').should('have.attr', 'href', '/recipes');
-  });
-
-  it('shows the live progress percent on the calendar day card', () => {
-    visitPosts();
-    cy.contains('E2E generating topic').scrollIntoView().should('be.visible');
-    cy.contains('42%').should('be.visible');
-    cy.get('[role="progressbar"]').should('have.attr', 'aria-valuenow', '42');
   });
 
   it('drives the calendar: pick a day, change month, go to today, refresh', () => {
@@ -138,7 +121,7 @@ describe('Posts list progress', () => {
     cy.get('[data-calendar-card]').contains('Ir para hoje').click();
     cy.contains(`Publicações de ${shortDate(new Date())}`).scrollIntoView().should('be.visible');
     cy.get('button[aria-label="Atualizar"]').click();
-    cy.contains('E2E generating topic').scrollIntoView().should('be.visible');
+    cy.contains('E2E scheduled topic').scrollIntoView().should('be.visible');
   });
 
   it('scrolls the day panel into view when picking a day on a narrow screen', () => {

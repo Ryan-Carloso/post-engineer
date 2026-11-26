@@ -76,75 +76,52 @@ describe('McpDocsSection', () => {
     expect(screen.queryByTestId('mcp-docs-help-cta')).toBeNull();
   });
 
-  it('renders the tools grid with the 17 intent tools and the actions of each', () => {
+  it('renders the tools grid with the 10 intent tools and the actions of each', () => {
     render(<McpDocsSection apiKey={null} />);
 
     const grid = screen.getByTestId('mcp-tools-grid');
     expect(grid).toBeInTheDocument();
     const ids = [...grid.querySelectorAll('p.font-bold')].map((p) => p.textContent);
     expect(ids).toEqual([
-      'generate_video',
-      'video_tasks',
-      'cancel_video',
+      'publish_video',
       'personas',
       'persona_media',
-      'voices',
       'accounts',
       'tool_config',
       'schedules',
       'posts',
       'insights',
       'experiments',
-      'media',
-      'billing',
       'prompts',
-      'check_script',
-      'publish_video',
     ]);
     const ACTIONS: Record<string, string> = {
-      generate_video: '',
-      video_tasks: 'status · list_generations · get_generation',
-      cancel_video: '',
+      publish_video: 'from_file · create_upload · complete_upload · publish_upload · publish_existing',
       personas: 'list · get · create · update · delete',
-      persona_media: 'list_faces · list_images · add_image · update_image · remove_image · get_card · render_prompt',
-      voices: 'list · preview · list_clones · create_clone · get_clone · preview_clone · delete_clone',
+      persona_media: 'get_card · render_prompt',
       accounts: 'list · connect · disconnect · get_persona_publishing · set_persona_publishing · list_boards',
+      tool_config: 'get · save',
       schedules: 'list · cancel · get_slot · update_slot_title · delete_slot',
       posts: 'list · get',
       insights: 'post_metrics · last_day · retention_curve · share_link_create · share_link_list · share_link_revoke',
       experiments: 'results',
-      media: 'upload · check',
-      billing: 'balance · transactions',
       prompts: 'list · get · create · update · delete · versions · restore',
-      check_script: 'validate · score',
-      publish_video: 'from_file · create_upload · complete_upload · publish_upload',
     };
     for (const [tool, actions] of Object.entries(ACTIONS)) {
       const card = [...grid.querySelectorAll('p.font-bold')].find((p) => p.textContent === tool)?.parentElement;
       const actionLine = card?.querySelector('p.font-mono:not(.font-bold)')?.textContent ?? '';
       expect(actionLine, `${tool} actions`).toBe(actions);
     }
-    const personas = [...grid.querySelectorAll('p.font-bold')].find((p) => p.textContent === 'personas')?.parentElement;
-    expect(personas?.textContent).toContain('list · get · create · update · delete');
-    const cancel = [...grid.querySelectorAll('p.font-bold')].find((p) => p.textContent === 'cancel_video')?.parentElement;
-    expect(cancel?.querySelectorAll('p')).toHaveLength(2);
     for (const descKey of [
-      'apiKeys.toolDescGenerateVideo',
-      'apiKeys.toolDescVideoTasks',
-      'apiKeys.toolDescCancelVideo',
+      'apiKeys.toolDescPublishVideo',
       'apiKeys.toolDescPersonas',
       'apiKeys.toolDescPersonaMedia',
-      'apiKeys.toolDescVoices',
       'apiKeys.toolDescAccounts',
+      'apiKeys.toolDescToolConfig',
       'apiKeys.toolDescSchedules',
       'apiKeys.toolDescPosts',
       'apiKeys.toolDescInsights',
       'apiKeys.toolDescExperiments',
-      'apiKeys.toolDescMedia',
-      'apiKeys.toolDescBilling',
       'apiKeys.toolDescPrompts',
-      'apiKeys.toolDescCheckScript',
-      'apiKeys.toolDescPublishVideo',
     ]) {
       expect(within(grid).getByText(descKey)).toBeInTheDocument();
     }

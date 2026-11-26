@@ -43,7 +43,6 @@ describe('server-only guard', () => {
   it('client components use the client logger, never the server logger', () => {
     const clientComponents: readonly string[] = [
       'app/global-error.tsx',
-      'app/(main)/persona/persona-image-library.tsx',
       'app/login/page.tsx',
     ];
     for (const relativePath of clientComponents) {

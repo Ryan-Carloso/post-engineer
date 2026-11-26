@@ -1,8 +1,7 @@
 export const accountI18nEn = {
   title: 'Profile',
-  subtitle: 'Your info, tokens and preferences.',
+  subtitle: 'Your info and preferences.',
   version: 'Version',
-  billingLink: 'Buy tokens and view history',
   signOutAllDevices: 'Sign out of all devices',
   signOutAllDevicesTitle: 'Sign out of all devices?',
   signOutAllDevicesDesc:

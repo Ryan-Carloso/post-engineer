@@ -42,24 +42,12 @@ describe('supabase/migrations/005_persona-visual-identity.sql', () => {
 });
 
 describe('PATCH /api/persona — the identity swap the constraint requires', () => {
-  it('sets avatar_url and clears photo_path in the same update', async () => {
+  it('clears avatar_url when a new photo is uploaded', () => {
     const route = readFileSync(routePath, 'utf8');
 
-    const branch = route.slice(route.indexOf('} else if (patch.avatarUrl !== null) {'));
-    const setAvatar = branch.indexOf('updates.avatar_url = resolved.avatarUrl;');
-    const setPhoto = branch.indexOf('updates.photo_path = resolved.photoPath;');
-    expect(setAvatar).toBeGreaterThan(-1);
-    expect(setPhoto).toBeGreaterThan(setAvatar);
-    expect(branch.indexOf('stalePaths.push(persona.photo_path)')).toBeGreaterThan(setPhoto);
-  });
-
-  it('clears avatar_url when a new photo is uploaded (the mirror branch)', () => {
-    const route = readFileSync(routePath, 'utf8');
-
-    const branch = route.slice(
-      route.indexOf('if (patch.photo && patch.photoExtension) {'),
-      route.indexOf('} else if (patch.avatarUrl !== null) {'),
-    );
+    const start = route.indexOf('if (patch.photo && patch.photoExtension) {');
+    expect(start).toBeGreaterThan(-1);
+    const branch = route.slice(start, route.indexOf('\n  }\n', start));
     expect(branch).toContain('updates.photo_path = photoPath;');
     expect(branch).toContain('updates.avatar_url = null;');
   });

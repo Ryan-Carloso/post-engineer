@@ -9,8 +9,6 @@ import {
 } from '@/lib/metrics/post-metrics-daily';
 import { fetchProviderCounters } from '@/lib/metrics/provider-counters';
 import { resolveYouTubeMetricsTarget } from '@/lib/metrics/youtube-account-resolution';
-import { fetchEnginePostMetricsSource } from '@/lib/engine-tasks';
-import { createReconcileStore, runBillingReconciliation } from '@/lib/billing/reconcile';
 import { trackApiEvent } from '@/lib/analytics';
 import { flushPostHog } from '@/lib/posthog-server';
 import { logger } from '@/lib/logger';
@@ -40,7 +38,6 @@ async function runPostMetricsTick(): Promise<void> {
   const startedAt = Date.now();
   const report = await collectPostMetrics({
     ...store,
-    fetchTaskSource: fetchEnginePostMetricsSource,
     fetchCounters: fetchProviderCounters,
     resolveTarget: resolveYouTubeMetricsTarget,
     track: trackApiEvent,
@@ -53,7 +50,6 @@ async function runPostMetricsTick(): Promise<void> {
   }
   const dailyReport = await collectPostMetricsDaily({
     ...createPostMetricsDailyStore(supabase),
-    fetchTaskSource: fetchEnginePostMetricsSource,
     fetchCounters: fetchProviderCounters,
     resolveTarget: resolveYouTubeMetricsTarget,
     metricsTargets,
@@ -63,17 +59,6 @@ async function runPostMetricsTick(): Promise<void> {
   if (dailyReport.errors.length > 0) {
     logger.error('[scheduler/post-metrics] daily readings completed with errors', null, {
       errors: dailyReport.errors,
-    });
-  }
-  await flushPostHog();
-}
-
-async function runBillingReconcileTick(): Promise<void> {
-  const store = createReconcileStore(createSupabaseServiceClient());
-  const report = await runBillingReconciliation(store);
-  if (report.errors.length > 0) {
-    logger.error('[scheduler/billing-reconcile] completed with errors', null, {
-      errors: report.errors,
     });
   }
   await flushPostHog();
@@ -133,14 +118,6 @@ export const SCHEDULER_JOBS: SchedulerJob[] = [
     successEvent: 'post_metrics_run',
     routeLabel: 'POST /api/cron/post-metrics',
     run: runPostMetricsTick,
-  },
-  {
-    name: 'billing-reconcile',
-    dueAfterMs: 24 * 60 * 60 * 1000,
-    leaseTtlSeconds: 30 * 60,
-    successEvent: 'billing_reconciled',
-    routeLabel: 'POST /api/cron/billing-reconcile',
-    run: runBillingReconcileTick,
   },
   {
     name: 'video-upload-sweep',

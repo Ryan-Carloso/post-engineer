@@ -15,9 +15,6 @@ declare global {
   namespace Cypress {
     interface Chainable {
       loginE2EUser(): Chainable;
-      openVoicePicker(): Chainable;
-      pickHouseVoice(label: string): Chainable;
-      playHouseVoiceSample(label: string): Chainable;
     }
   }
 }
@@ -111,29 +108,6 @@ function sleepMs(delayMs: number): Promise<void> {
     setTimeout(resolve, delayMs);
   });
 }
-
-const VOICE_PICKER_TRIGGER = /^(Escolher voz|Trocar voz|Choose voice|Change voice)$/;
-
-Cypress.Commands.add('openVoicePicker', () => {
-  cy.contains('button', VOICE_PICKER_TRIGGER).scrollIntoView().click();
-  return cy.get('[role="dialog"]').should('be.visible');
-});
-
-Cypress.Commands.add('pickHouseVoice', (label: string) => {
-  cy.openVoicePicker();
-  cy.get('[role="dialog"] input[type="search"]').type(label);
-  cy.get('[role="dialog"]').contains('button[aria-pressed]', label).click();
-  return cy.get('[role="dialog"]').should('not.exist');
-});
-
-Cypress.Commands.add('playHouseVoiceSample', (label: string) => {
-  cy.get('body').then(($body) => {
-    if ($body.find('[role="dialog"]').length === 0) {
-      cy.openVoicePicker();
-    }
-  });
-  return cy.get('[role="dialog"]').contains('li', label).find('button').first().click();
-});
 
 function requiredCypressEnv(key: string, name: string): string {
   const value: unknown = Cypress.env(key);

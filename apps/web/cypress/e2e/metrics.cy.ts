@@ -36,10 +36,6 @@ function interceptShell(): void {
     },
   });
 
-  cy.intercept('GET', '/api/billing/tokens', {
-    statusCode: 200,
-    body: { success: true, balance: 100 },
-  });
 
   cy.intercept('GET', '/api/persona/list', {
     statusCode: 200,

@@ -36,7 +36,7 @@ const WINDOW_LABEL_KEYS: Record<MetricsQuery['window'], TranslationKey> = {
   '28d': 'metrics.window28d',
 };
 
-const EMPTY_QUERY: MetricsQuery = { window: '24h', personaId: null, accountId: null, provider: null, angle: null };
+const EMPTY_QUERY: MetricsQuery = { window: '24h', personaId: null, accountId: null, provider: null };
 
 export default function MetricsPage(): React.ReactElement {
   const { t, locale } = useI18n();
@@ -99,7 +99,7 @@ export default function MetricsPage(): React.ReactElement {
 
   const update = (patch: Partial<MetricsQuery>): void => setQuery((current) => ({ ...current, ...patch }));
   const applyFilters = (filters: MetricsFilterPatch): void =>
-    update({ ...filters, accountId: null, angle: null });
+    update({ ...filters, accountId: null });
   const filtered = query.personaId !== null || query.provider !== null;
   const formatNumber = (value: number): string => value.toLocaleString(locale === 'pt' ? 'pt-BR' : 'en-US');
   const formatDate = (iso: string): string =>
@@ -108,7 +108,7 @@ export default function MetricsPage(): React.ReactElement {
     new Date(iso).toLocaleString(locale === 'pt' ? 'pt-BR' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' });
   const needsReconnect = rows.some((row) => row.analyticsStatus === 'scope_missing');
   const fallbackTitle = (row: MetricsRowView): string =>
-    row.scriptAngle ?? `${PROVIDER_LABELS[row.provider]} · ${formatDate(row.collectedAt)}`;
+    `${PROVIDER_LABELS[row.provider]} · ${formatDate(row.collectedAt)}`;
 
   return (
     <div className="mx-auto flex w-full max-w-375 flex-col gap-5 lg:gap-6">

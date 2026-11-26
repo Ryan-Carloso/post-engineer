@@ -6,10 +6,8 @@ import {
   SECTION_LABEL_CLASS,
   formatCount,
   formatFileSize,
-  PlayIcon,
   GoogleIcon,
   UploadIcon,
-  FilmIcon,
   CheckIcon,
   AlertIcon,
   ExternalLinkIcon,
@@ -23,7 +21,6 @@ import {
   
   BoltIcon,
   KeyIcon,
-  CoinsIcon,
 } from '@/lib/ui';
 
 describe('ui constants', () => {
@@ -69,10 +66,8 @@ describe('formatFileSize', () => {
 
 describe('ui icons', () => {
   const components = [
-    ['play', PlayIcon],
     ['google', GoogleIcon],
     ['upload', UploadIcon],
-    ['film', FilmIcon],
     ['check', CheckIcon],
     ['alert', AlertIcon],
     ['external', ExternalLinkIcon],
@@ -85,7 +80,6 @@ describe('ui icons', () => {
     ['history', HistoryIcon],
     ['bolt', BoltIcon],
     ['key', KeyIcon],
-    ['coins', CoinsIcon],
   ] as const;
 
   for (const [name, Component] of components) {

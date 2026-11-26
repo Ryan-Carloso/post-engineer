@@ -70,40 +70,6 @@ new numbered files; you only need to run the ones newer than what you
 already applied. All files are idempotent, so re-running the whole
 sequence is safe.
 
-### Voices and cloning (local CPU TTS server)
-
-All voices run on CPU in the `tts` service next to the engine
-(`apps/engine/local_tts/server.py`, built from `apps/engine/Dockerfile.tts`):
-
-- **House voices** — 65 English presets listed in
-  `apps/engine/app/services/voice_catalog.json`: Phonon-31m-en (25 US/UK
-  voices + 12 characters, Apache 2.0) and Kokoro-82M (28 US/UK voices,
-  Apache 2.0).
-- **Per-user clones** — Chatterbox Nano (MIT), zero-shot from the user's
-  reference WAV, registered through `POST/DELETE /v1/voices` on the same
-  server. Users can clean (denoise) the recording before cloning.
-
-Setup:
-
-1. Set `CHATTERBOX_HTTP_SECRET` in `apps/engine/.env` (the `tts` service reads
-   it; the engine sends the same value).
-2. Nothing to set in `apps/engine/config.toml`: `docker-compose.yml` passes
-   `MPT_CHATTERBOX_BASE_URL=http://tts:4123/v1`,
-   `MPT_CLONED_VOICES_REGISTRY_BASE_URL=http://tts:4123` and the secret as
-   both API keys to the engine, and these override `[chatterbox]` /
-   `[cloned_voices]` in `config.toml` (outside compose, set those sections
-   by hand).
-3. `docker compose up -d --build` in `apps/engine`. Models download to the
-   `tts_models` volume on first use (Chatterbox Nano is a gated Hugging Face
-   repo: accept its terms and set `HF_TOKEN` in `.env` if the download is
-   refused). Clone references persist on the `tts_voices` volume.
-4. Set web `MONEYPRINT_API_URL` / `MONEYPRINT_API_SECRET` as usual so
-   `/api/persona/cloned-voices` proxies to the engine.
-
-Picker samples live in `apps/web/public/voice-samples/<name>.mp3`; re-render
-them with `python -m local_tts.render_samples ../web/public/voice-samples`
-whenever the catalog changes.
-
 ## 3. Run the engine with Docker Compose
 
 ```bash
