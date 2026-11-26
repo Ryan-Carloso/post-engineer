@@ -38,6 +38,7 @@ export interface ResolvedApiKey {
   userId: string;
   keyId: string;
   personaIds: string[] | null;
+  approvalMode: ApprovalMode;
 }
 
 export async function resolveApiKey(
@@ -52,12 +53,16 @@ export async function resolveApiKey(
 
   const { data, error } = await supabase
     .from('user_api_keys')
-    .select('id, user_id, persona_ids, revoked_at, last_used_at')
+    .select('id, user_id, persona_ids, approval_mode, revoked_at, last_used_at')
     .eq('key_hash', keyHash)
     .is('revoked_at', null)
     .single();
 
   if (error || !data) {
+    return null;
+  }
+
+  if (!isApprovalMode(data.approval_mode)) {
     return null;
   }
 
@@ -73,6 +78,7 @@ export async function resolveApiKey(
     userId: data.user_id as string,
     keyId: data.id as string,
     personaIds,
+    approvalMode: data.approval_mode,
   };
 }
 

@@ -31,6 +31,7 @@ describe('requireSupabaseSession', () => {
       userId: 'user-api-key-123',
       keyId: 'key-1',
       personaIds: null,
+      approvalMode: 'approval',
     });
 
     const request = new Request('http://localhost:3434/api/videos/generate-and-schedule', {
@@ -44,6 +45,7 @@ describe('requireSupabaseSession', () => {
     expect(result.auth?.userId).toBe('user-api-key-123');
     expect(result.auth?.isApiKey).toBe(true);
     expect(result.auth?.personaIds).toBeNull();
+    expect(result.auth?.approvalMode).toBe('approval');
     expect(noteMcpToolCaller).toHaveBeenCalledWith(request, 'user-api-key-123', 'api_key');
   });
 
@@ -55,6 +57,7 @@ describe('requireSupabaseSession', () => {
       userId: 'user-api-key-123',
       keyId: 'key-2',
       personaIds,
+      approvalMode: 'yolo',
     });
 
     const request = new Request('http://localhost:3434/api/videos/generate-and-schedule', {
@@ -66,6 +69,7 @@ describe('requireSupabaseSession', () => {
     const result = await requireSupabaseSession(request);
     expect(result.error).toBeNull();
     expect(result.auth?.personaIds).toEqual(personaIds);
+    expect(result.auth?.approvalMode).toBe('yolo');
   });
 
   it('rejects invalid Bearer API key with 401', async () => {
@@ -104,6 +108,7 @@ describe('requireSupabaseSession', () => {
     expect(result.error).toBeNull();
     expect(result.auth?.userId).toBe('user-cookie-456');
     expect(result.auth?.accessToken).toBe('cookie-session-token');
+    expect(result.auth?.approvalMode).toBeUndefined();
   });
 
   it('never records MCP tool telemetry for a cookie session, even with the MCP headers', async () => {
@@ -351,6 +356,7 @@ describe('requireSupabaseSession MCP version gate', () => {
       userId: 'user-api-key-123',
       keyId: 'key-1',
       personaIds: null,
+      approvalMode: 'approval',
     });
     const request = new Request('http://localhost:3434/api/account', {
       headers: {

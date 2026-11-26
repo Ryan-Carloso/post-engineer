@@ -66,6 +66,7 @@ describe('API Keys Utilities', () => {
                           id: 'key-id-1',
                           user_id: 'user-id-abc',
                           persona_ids: null,
+                          approval_mode: 'yolo',
                           revoked_at: null,
                         },
                         error: null,
@@ -84,7 +85,7 @@ describe('API Keys Utilities', () => {
     };
 
     const resolved = await resolveApiKey(rawKey, mockSupabase as unknown as SupabaseClient);
-    expect(resolved).toEqual({ userId: 'user-id-abc', keyId: 'key-id-1', personaIds: null });
+    expect(resolved).toEqual({ userId: 'user-id-abc', keyId: 'key-id-1', personaIds: null, approvalMode: 'yolo' });
   });
 
   it('resolves persona scope when the key is restricted', async () => {
@@ -104,6 +105,7 @@ describe('API Keys Utilities', () => {
                   id: 'key-id-2',
                   user_id: 'user-id-abc',
                   persona_ids: personaIds,
+                  approval_mode: 'approval',
                   revoked_at: null,
                 },
                 error: null,
@@ -119,6 +121,7 @@ describe('API Keys Utilities', () => {
 
     const resolved = await resolveApiKey(rawKey, mockSupabase as unknown as SupabaseClient);
     expect(resolved?.personaIds).toEqual(personaIds);
+    expect(resolved?.approvalMode).toBe('approval');
   });
 
   it('normalizes missing persona scope to null (full access)', async () => {
@@ -130,7 +133,7 @@ describe('API Keys Utilities', () => {
           eq: vi.fn().mockReturnValue({
             is: vi.fn().mockReturnValue({
               single: vi.fn().mockResolvedValue({
-                data: { id: 'key-id-3', user_id: 'user-id-abc', revoked_at: null },
+                data: { id: 'key-id-3', user_id: 'user-id-abc', approval_mode: 'yolo', revoked_at: null },
                 error: null,
               }),
             }),
@@ -144,6 +147,7 @@ describe('API Keys Utilities', () => {
 
     const resolved = await resolveApiKey(rawKey, mockSupabase as unknown as SupabaseClient);
     expect(resolved?.personaIds).toBeNull();
+    expect(resolved?.approvalMode).toBe('yolo');
   });
 
   it('returns null if api key is not found or revoked', async () => {
@@ -168,6 +172,35 @@ describe('API Keys Utilities', () => {
     expect(userId).toBeNull();
   });
 
+  it('returns null when the stored approval mode is unrecognized', async () => {
+    const rawKey = 'pe_live_test_weird_mode_key_1234567890ab';
+
+    const mockSupabase = {
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            is: vi.fn().mockReturnValue({
+              single: vi.fn().mockResolvedValue({
+                data: {
+                  id: 'key-id-4',
+                  user_id: 'user-id-abc',
+                  persona_ids: null,
+                  approval_mode: 'sometimes',
+                  revoked_at: null,
+                  last_used_at: null,
+                },
+                error: null,
+              }),
+            }),
+          }),
+        }),
+      }),
+    };
+
+    const resolved = await resolveApiKey(rawKey, mockSupabase as unknown as SupabaseClient);
+    expect(resolved).toBeNull();
+  });
+
   describe('last_used_at touch throttle', () => {
     const NOW = new Date('2026-11-23T12:00:00.000Z');
     const RAW_KEY = 'pe_live_touch_key_1234567890abcdef1234';
@@ -188,7 +221,7 @@ describe('API Keys Utilities', () => {
         eq: vi.fn().mockReturnValue({
           is: vi.fn().mockReturnValue({
             single: vi.fn().mockResolvedValue({
-              data: { id: 'key-id-9', user_id: 'user-id-abc', persona_ids: null, revoked_at: null, last_used_at: lastUsedAt },
+              data: { id: 'key-id-9', user_id: 'user-id-abc', persona_ids: null, approval_mode: 'yolo', revoked_at: null, last_used_at: lastUsedAt },
               error: null,
             }),
           }),
@@ -215,14 +248,14 @@ describe('API Keys Utilities', () => {
     it('selects last_used_at in the key lookup', async () => {
       const mock = touchMock(NOW.toISOString());
       await resolveApiKey(RAW_KEY, mock.supabase);
-      expect(mock.selectColumns).toHaveBeenCalledWith('id, user_id, persona_ids, revoked_at, last_used_at');
+      expect(mock.selectColumns).toHaveBeenCalledWith('id, user_id, persona_ids, approval_mode, revoked_at, last_used_at');
     });
 
     it('does not write when the key was used less than an hour ago', async () => {
       const fresh = new Date(NOW.getTime() - API_KEY_LAST_USED_TOUCH_INTERVAL_MS + 1000).toISOString();
       const mock = touchMock(fresh);
       const resolved = await resolveApiKey(RAW_KEY, mock.supabase);
-      expect(resolved).toEqual({ userId: 'user-id-abc', keyId: 'key-id-9', personaIds: null });
+      expect(resolved).toEqual({ userId: 'user-id-abc', keyId: 'key-id-9', personaIds: null, approvalMode: 'yolo' });
       expect(mock.update).not.toHaveBeenCalled();
     });
 
@@ -260,7 +293,7 @@ describe('API Keys Utilities', () => {
     it('logs a failed write and still resolves the key', async () => {
       const mock = touchMock(null, { code: '57014', message: 'canceling statement due to statement timeout' });
       const resolved = await resolveApiKey(RAW_KEY, mock.supabase);
-      expect(resolved).toEqual({ userId: 'user-id-abc', keyId: 'key-id-9', personaIds: null });
+      expect(resolved).toEqual({ userId: 'user-id-abc', keyId: 'key-id-9', personaIds: null, approvalMode: 'yolo' });
       expect(warnMock).toHaveBeenCalledWith('[api-keys] last_used_at touch failed', {
         keyId: 'key-id-9',
         code: '57014',
