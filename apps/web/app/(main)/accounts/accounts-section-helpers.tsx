@@ -11,10 +11,6 @@ import {
 import { reportAccountDisconnectFailed } from '@/lib/account-card-telemetry';
 import { useI18n } from '@/lib/i18n/provider';
 
-export function BrandIcon({ className, children }: { className: string; children: ReactNode }): ReactNode {
-  return <span className={`flex size-9 items-center justify-center rounded-lg ${className} [&>svg]:size-5`}>{children}</span>;
-}
-
 export function connectedLabel(t: ReturnType<typeof useI18n>['t'], count: number): string {
   return t(count === 1 ? 'accounts.accountConnected' : 'accounts.accountsConnected', { count });
 }

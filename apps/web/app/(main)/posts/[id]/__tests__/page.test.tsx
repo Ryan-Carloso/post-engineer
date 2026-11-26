@@ -48,6 +48,8 @@ vi.mock('@/lib/fanvue-accounts', () => ({
 vi.mock('@/lib/ui', () => ({
   SpinnerIcon: () => <span data-testid="icon-spinner" />,
   ExternalLinkIcon: () => <span data-testid="icon-external-link" />,
+  GoogleIcon: () => <svg data-testid="icon-google" />,
+  InstagramIcon: () => <svg data-testid="icon-instagram" />,
 }));
 
 vi.mock('@/lib/i18n/provider', () => {
@@ -1044,6 +1046,14 @@ describe('PostDetailPage — post identity', () => {
 
     expect(screen.getByText('posts.accountsLabel')).toBeInTheDocument();
     expect(screen.getByText('Europa Na Estrada')).toBeInTheDocument();
+  });
+
+  it('shows each target account under its network heading with the accounts page brand tile', () => {
+    render(<DetailPage />);
+
+    const youtube = within(screen.getByLabelText('posts.accountsLabel')).getByRole('group', { name: 'accounts.youtubeLabel' });
+    expect(within(youtube).getByTestId('provider-brand-youtube')).toBeInTheDocument();
+    expect(within(youtube).getByText('Europa Na Estrada')).toBeInTheDocument();
   });
 
   it('restarts the copied-indicator window on rapid clicks instead of extending it', async () => {

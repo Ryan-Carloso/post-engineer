@@ -14,7 +14,6 @@ import {
   type ProgressHistoryEntry,
 } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
-import AccountCard from '@/components/account-card';
 import { DetailProgressBar } from './detail-progress-bar';
 import { formatDateTime, ScheduleSection } from './schedule-section';
 import { GenerationFactsSection } from './generation-facts-section';
@@ -22,6 +21,7 @@ import { HookPhotoSection } from './hook-photo-section';
 import { RescheduleSection } from './reschedule-section';
 import { ScriptAngleSection } from './script-angle-section';
 import { usePostAccountCards, type AccountCardData } from './account-cards';
+import { PostAccountsSection } from './post-accounts-section';
 import { ExternalLinkIcon } from '@/lib/ui';
 import type { PublishLink } from '@/lib/publish-links';
 import { PROVIDER_LABELS, scheduleAccountIds } from '@/lib/account-options';
@@ -403,25 +403,7 @@ export const SlotDetail = ({
 
       <GenerationFactsSection generation={generation} personaName={personaName} />
 
-      {accounts.length > 0 && (
-        <section aria-label={t('posts.accountsLabel')} className="mt-6">
-          <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-            {t('posts.accountsLabel')}
-          </p>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            {accounts.map((account) => (
-              <AccountCard
-                key={`${account.type}:${account.id}`}
-                type={account.type}
-                name={account.name}
-                email={account.email}
-                thumbnail={account.thumbnail}
-                handle={account.handle}
-              />
-            ))}
-          </div>
-        </section>
-      )}
+      <PostAccountsSection accounts={accounts} />
 
       <PublishLinks links={publishLinks} />
 
