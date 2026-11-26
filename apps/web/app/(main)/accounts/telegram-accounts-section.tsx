@@ -8,9 +8,9 @@ import { useTelegramAccountsQuery } from '@/lib/social-accounts-queries';
 import { useAccountListErrorTelemetry } from '@/lib/account-card-telemetry';
 import { useI18n } from '@/lib/i18n/provider';
 import { notifyIfSessionExpired } from '@/lib/session-expiry';
-import { ProviderIcon } from '@/components/provider-icon';
+import { ProviderBrandIcon } from '@/components/provider-brand-icon';
 import { TelegramSetupGuide, telegramConnectErrorKey, type TelegramChatKind } from '@/components/telegram-setup-guide';
-import { BrandIcon, connectedLabel, errorLabel, useDisconnectFlow } from './accounts-section-helpers';
+import { connectedLabel, errorLabel, useDisconnectFlow } from './accounts-section-helpers';
 
 export function TelegramAccountsSection(): ReactNode {
   const { t } = useI18n();
@@ -58,7 +58,7 @@ export function TelegramAccountsSection(): ReactNode {
 
   return (
     <SocialAccountsSection
-      icon={<BrandIcon className="bg-info-soft text-info"><ProviderIcon provider="telegram" /></BrandIcon>}
+      icon={<ProviderBrandIcon provider="telegram" />}
       label={t('accounts.telegramLabel')}
       description={t('accounts.telegramDescription')}
       connectedLabel={connectedLabel(t, accounts.length)}
