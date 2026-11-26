@@ -113,7 +113,7 @@ describe('reportSchemaDrift', () => {
     expect(loggerMock.error).toHaveBeenCalledTimes(1);
     const [message, cause] = loggerMock.error.mock.calls[0] as [string, Error];
     expect(message).toContain('apply the pending supabase migrations');
-    expect(cause.message).toContain('scheduled_posts.voiceover_material');
+    expect(cause.message).toContain('scheduled_posts.media_ref');
     expect(trackMock).toHaveBeenCalledWith(
       'schema_drift_detected',
       expect.objectContaining({ tables: expect.arrayContaining(['scheduled_posts']) }),

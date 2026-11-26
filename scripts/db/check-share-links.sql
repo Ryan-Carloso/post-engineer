@@ -73,15 +73,15 @@ values
   ('dddddddd-dddd-dddd-dddd-dddddddddd02', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeee2', array['instagram', 'bluesky'], array[]::text[], array[]::text[], array[]::text[], array[]::text[], array[]::text[]),
   ('dddddddd-dddd-dddd-dddd-dddddddddd03', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeee1', array['youtube'], array[]::text[], array[]::text[], array[]::text[], array[]::text[], array[]::text[]);
 
-insert into public.scheduled_posts (id, schedule_id, user_id, slot_at, status, title, charged_tokens)
+insert into public.scheduled_posts (id, schedule_id, user_id, slot_at, status, title)
 values
-  ('ffffffff-ffff-ffff-ffff-fffffffffff1', 'dddddddd-dddd-dddd-dddd-dddddddddd01', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2026-03-10T10:00:00Z', 'published', 'persona one post', 0),
-  ('ffffffff-ffff-ffff-ffff-fffffffffff2', 'dddddddd-dddd-dddd-dddd-dddddddddd02', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2026-03-11T10:00:00Z', 'pending', 'persona two post', 0),
-  ('ffffffff-ffff-ffff-ffff-fffffffffff3', 'dddddddd-dddd-dddd-dddd-dddddddddd09', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2026-03-12T10:00:00Z', 'published', 'orphan post', 0),
-  ('ffffffff-ffff-ffff-ffff-fffffffffff4', 'dddddddd-dddd-dddd-dddd-dddddddddd03', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '2026-03-10T11:00:00Z', 'published', 'other user post', 0),
-  ('ffffffff-ffff-ffff-ffff-fffffffffff5', 'dddddddd-dddd-dddd-dddd-dddddddddd01', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2026-03-13T10:00:00Z', 'cancelled', 'cancelled post', 0),
-  ('ffffffff-ffff-ffff-ffff-fffffffffff6', 'dddddddd-dddd-dddd-dddd-dddddddddd01', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2026-04-10T10:00:00Z', 'published', 'outside the week', 0),
-  ('ffffffff-ffff-ffff-ffff-fffffffffff7', 'dddddddd-dddd-dddd-dddd-dddddddddd03', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2026-03-14T10:00:00Z', 'published', 'foreign schedule post', 0);
+  ('ffffffff-ffff-ffff-ffff-fffffffffff1', 'dddddddd-dddd-dddd-dddd-dddddddddd01', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2026-03-10T10:00:00Z', 'published', 'persona one post'),
+  ('ffffffff-ffff-ffff-ffff-fffffffffff2', 'dddddddd-dddd-dddd-dddd-dddddddddd02', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2026-03-11T10:00:00Z', 'ready', 'persona two post'),
+  ('ffffffff-ffff-ffff-ffff-fffffffffff3', 'dddddddd-dddd-dddd-dddd-dddddddddd09', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2026-03-12T10:00:00Z', 'published', 'orphan post'),
+  ('ffffffff-ffff-ffff-ffff-fffffffffff4', 'dddddddd-dddd-dddd-dddd-dddddddddd03', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '2026-03-10T11:00:00Z', 'published', 'other user post'),
+  ('ffffffff-ffff-ffff-ffff-fffffffffff5', 'dddddddd-dddd-dddd-dddd-dddddddddd01', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2026-03-13T10:00:00Z', 'cancelled', 'cancelled post'),
+  ('ffffffff-ffff-ffff-ffff-fffffffffff6', 'dddddddd-dddd-dddd-dddd-dddddddddd01', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2026-04-10T10:00:00Z', 'published', 'outside the week'),
+  ('ffffffff-ffff-ffff-ffff-fffffffffff7', 'dddddddd-dddd-dddd-dddd-dddddddddd03', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2026-03-14T10:00:00Z', 'published', 'foreign schedule post');
 
 select pg_temp.expect_value(
   $$select string_agg(title, ',' order by slot_at) from public.share_week_posts('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', null, '2026-03-09T00:00:00Z', '2026-03-16T00:00:00Z', 50)$$,

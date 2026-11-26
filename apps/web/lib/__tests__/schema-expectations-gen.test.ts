@@ -14,10 +14,10 @@ describe('schema-expectations.gen.ts', () => {
     expect(committed).toBe(generator.generateSchemaExpectations());
   });
 
-  it('lists the columns whose absence caused the 2026-10 production errors', () => {
-    expect(REQUIRED_COLUMNS.scheduled_posts).toContain('voiceover_material');
-    expect(REQUIRED_COLUMNS.personas).toContain('cta_type');
-    expect(REQUIRED_COLUMNS.post_metrics).toContain('script_angle');
+  it('lists the columns the scheduling product reads', () => {
+    expect(REQUIRED_COLUMNS.scheduled_posts).toContain('media_ref');
+    expect(REQUIRED_COLUMNS.user_profiles).toContain('trial_ends_at');
+    expect(REQUIRED_COLUMNS.post_metrics).toContain('analytics_status');
   });
 
   it('does not list a table that migration 078 dropped', () => {
