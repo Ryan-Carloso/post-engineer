@@ -53,7 +53,7 @@ class StartPublishSchedulerTests(unittest.TestCase):
 
     def test_scheduler_starts_without_a_queue_dependency(self):
         asgi = self._import_asgi()
-        self.assertFalse(hasattr(asgi, "fill_schedule_queue"))
+        self.assertFalse(hasattr(asgi, "publisher_queue"))
         notifications = []
         with patch.dict(os.environ, SUPABASE_ENV, clear=False):
             with patch.object(asgi, "ScheduleStore") as store_cls, \
