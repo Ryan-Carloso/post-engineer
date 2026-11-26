@@ -8,7 +8,7 @@ export const docsIndex: DocPage = {
     en: 'Agent guides for Post Engineer: MCP setup, HTTP API, use cases and integrations.',
   },
   updatedAt: '2026-11-26',
-  contentHash: '6d1fc4c805cf3794615a9927de26dba4b4a13e6dfdf485279e87a1b236f91593',
+  contentHash: '3c38f94866033e54469f6fdbf899d0a0cc40df86955bcd10b88a7c6a4ccccd0b',
   blocks: [
     {
       kind: 'paragraph',
@@ -17,5 +17,8 @@ export const docsIndex: DocPage = {
       },
     },
     { kind: 'link', href: '/docs/mcp', text: { en: 'MCP server' } },
+    { kind: 'link', href: '/docs/api', text: { en: 'HTTP API' } },
+    { kind: 'link', href: '/docs/use-cases', text: { en: 'Use cases' } },
+    { kind: 'link', href: '/docs/integrations', text: { en: 'Integrations' } },
   ],
 };

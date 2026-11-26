@@ -30,7 +30,12 @@ describe('app/docs — server-rendered docs pages', () => {
   });
 
   it('statically generates every docs slug', () => {
-    expect(generateStaticParams()).toEqual([{ slug: 'mcp' }]);
+    expect(generateStaticParams()).toEqual([
+      { slug: 'mcp' },
+      { slug: 'api' },
+      { slug: 'use-cases' },
+      { slug: 'integrations' },
+    ]);
   });
 
   it('returns the mcp canonical from generateMetadata', async () => {
