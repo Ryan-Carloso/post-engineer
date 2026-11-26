@@ -65,7 +65,7 @@ async function postHandler(
     });
   }
   if (!computeTrialStatus(trialEndsAt, new Date()).active) {
-    return apiErrorResponse(402, errorMessage(ERROR_CODES.TRIAL_EXPIRED), {
+    return apiErrorResponse(403, errorMessage(ERROR_CODES.TRIAL_EXPIRED), {
       route: ROUTE,
       code: ERROR_CODES.TRIAL_EXPIRED,
       extra: { contactUrl: CONTACT_WHATSAPP_URL, trialEndedAt: trialEndsAt },
