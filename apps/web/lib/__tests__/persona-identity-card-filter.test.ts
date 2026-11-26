@@ -135,6 +135,82 @@ describe('scene filter for the v2 identity words', () => {
     expect(result.ok).toBe(true);
   });
 
+  it.each([
+    'relaxed-leg jeans',
+    'loose-leg trousers',
+    'carrot-leg trousers',
+    'barrel-leg jeans',
+    'balloon-leg trousers',
+    'peg-leg trousers',
+    'cigarette-leg pants',
+    'baggy-leg jeans',
+    'boyfriend-leg jeans',
+    'mom-leg jeans',
+    'stovepipe-leg trousers',
+    'relaxed leg jeans',
+    'loose leg trousers',
+  ])('accepts the generalised cut phrase "%s" in an outfit slot', (text) => {
+    expect(parseSceneValue({ ...FIXTURE_SCENE, outfit: { bottom: text } }).ok).toBe(true);
+  });
+
+  it.each([
+    'relaxed-leg jeans',
+    'loose-leg trousers',
+    'carrot-leg trousers',
+    'barrel-leg jeans',
+    'balloon-leg trousers',
+    'peg-leg trousers',
+    'cigarette-leg pants',
+    'baggy-leg jeans',
+    'boyfriend-leg jeans',
+    'mom-leg jeans',
+    'stovepipe-leg trousers',
+    'relaxed leg jeans',
+    'loose leg trousers',
+  ])('accepts the generalised cut phrase "%s" in a default outfit slot', (text) => {
+    const result = parseIdentityCardValue({
+      version: 2,
+      identity: { face: { eyes: 'green' } },
+      defaults: { outfit: { bottom: text } },
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it.each([
+    'long',
+    'short',
+    'big',
+    'small',
+    'thin',
+    'thick',
+    'fat',
+    'muscular',
+    'toned',
+    'bare',
+    'shapely',
+    'hairy',
+    'smooth',
+    'strong',
+    'weak',
+    'left',
+    'right',
+    'broken',
+    'injured',
+    'swollen',
+    'sore',
+    'pale',
+    'tanned',
+  ])('still rejects the body descriptor "%s leg" in an outfit slot', (word) => {
+    expect(parseSceneValue({ ...FIXTURE_SCENE, outfit: { bottom: `${word} leg` } }).ok).toBe(false);
+  });
+
+  it.each(['long-leg jeans', 'short-leg trousers', 'bare-leg jeans'])(
+    'still rejects the hyphenated body descriptor "%s" in an outfit slot',
+    (text) => {
+      expect(parseSceneValue({ ...FIXTURE_SCENE, outfit: { bottom: text } }).ok).toBe(false);
+    },
+  );
+
   it.each(['hip-hugger jeans', 'hip pocket jeans', 'hip seam skirt'])(
     'accepts the allowlisted phrase "%s" in an outfit slot',
     (text) => {
