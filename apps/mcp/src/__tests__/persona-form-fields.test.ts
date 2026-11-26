@@ -35,6 +35,7 @@ describe('persona form fields hookPanel', () => {
       videoAspect: '9:16',
       videoLayout: 'standard',
       hookPanel: 'true',
+      aiLabel: 'false',
       paragraphNumber: '1',
       niche: 'General',
       faceQuality: 'very_good',
@@ -105,6 +106,36 @@ describe('persona form fields hookPanel', () => {
     expect(created.success && created.data.hookPanel).toBe(true);
     const updated = UpdatePersonaSchema.safeParse({ personaId: 'p-1', hookPanel: false });
     expect(updated.success && updated.data.hookPanel).toBe(false);
+  });
+
+  it('creates a persona with aiLabel false unless the agent turns it on', () => {
+    const off = new FormData();
+    appendCreatePersonaFields(off, { name: 'Ana', voiceId: 'kokoro:af_heart', accounts: {} });
+    expect(off.get('aiLabel')).toBe('false');
+    const on = new FormData();
+    appendCreatePersonaFields(on, { name: 'Ana', voiceId: 'kokoro:af_heart', accounts: {}, aiLabel: true });
+    expect(on.get('aiLabel')).toBe('true');
+  });
+
+  it('sends aiLabel on update only when the agent sets it', () => {
+    const untouched = new FormData();
+    appendUpdatePersonaFields(untouched, { personaId: 'p-1', niche: 'travel' });
+    expect(untouched.has('aiLabel')).toBe(false);
+    const on = new FormData();
+    appendUpdatePersonaFields(on, { personaId: 'p-1', aiLabel: true });
+    expect(on.get('aiLabel')).toBe('true');
+  });
+
+  it('keeps aiLabel optional on create and update schemas', () => {
+    const created = CreatePersonaSchema.safeParse({
+      name: 'Ana',
+      avatarUrl: 'https://example.com/a.png',
+      voiceId: 'kokoro:af_heart',
+      accounts: { youtube: ['yt-1'] },
+    });
+    expect(created.success && created.data.aiLabel).toBeUndefined();
+    const updated = UpdatePersonaSchema.safeParse({ personaId: 'p-1', aiLabel: true });
+    expect(updated.success && updated.data.aiLabel).toBe(true);
   });
 
   it('accepts a per-video hookPanel boolean and rejects other values', () => {

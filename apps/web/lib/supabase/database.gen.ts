@@ -286,6 +286,7 @@ export interface Database {
         cta_url: string | null;
         cta_instruction: string | null;
         hook_panel: boolean;
+        ai_label: boolean;
         identity_card: Json | null;
         };
         Insert: {
@@ -309,6 +310,7 @@ export interface Database {
         cta_url?: string | null;
         cta_instruction?: string | null;
         hook_panel?: boolean;
+        ai_label?: boolean;
         identity_card?: Json | null;
         };
         Update: {
@@ -332,6 +334,7 @@ export interface Database {
         cta_url?: string | null;
         cta_instruction?: string | null;
         hook_panel?: boolean;
+        ai_label?: boolean;
         identity_card?: Json | null;
         };
         Relationships: [];

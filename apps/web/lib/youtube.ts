@@ -15,6 +15,7 @@ export interface YouTubeVideoMetadata {
   status: {
     privacyStatus: 'public' | 'private' | 'unlisted';
     selfDeclaredMadeForKids?: boolean;
+    containsSyntheticMedia?: boolean;
   };
 }
 
@@ -24,6 +25,7 @@ export interface YouTubeUploadOptions {
   tags?: string[];
   privacyStatus?: 'public' | 'private' | 'unlisted';
   categoryId?: string;
+  aiLabel?: boolean;
 }
 
 export function getYouTubeClient(authClient: OAuth2Client) {
@@ -129,7 +131,8 @@ export function createVideoMetadata(options: YouTubeUploadOptions): YouTubeVideo
     },
     status: {
       privacyStatus: options.privacyStatus || 'public',
-      selfDeclaredMadeForKids: false
+      selfDeclaredMadeForKids: false,
+      containsSyntheticMedia: options.aiLabel === true
     }
   };
 }

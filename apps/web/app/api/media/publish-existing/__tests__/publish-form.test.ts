@@ -11,6 +11,7 @@ const BASE_FIELDS = {
   privacyStatus: 'public',
   boardId: '123456',
   accountIds: ['acc-1', 'acc-2'],
+  aiLabel: true,
 };
 
 function formEntries(form: FormData): Array<[string, string]> {
@@ -31,6 +32,7 @@ describe('buildExistingMediaForm', () => {
     expect(entries).toContainEqual(['description', 'Walking the riverside at sunset.']);
     expect(entries).toContainEqual(['tags', 'porto']);
     expect(entries).toContainEqual(['privacyStatus', 'public']);
+    expect(entries).toContainEqual(['aiLabel', 'true']);
     expect(entries).toContainEqual(['accountIds', 'acc-1']);
     expect(entries).toContainEqual(['accountIds', 'acc-2']);
   });
@@ -41,6 +43,7 @@ describe('buildExistingMediaForm', () => {
     expect(entries).toContainEqual(['provider', 'instagram']);
     expect(entries).toContainEqual(['file', 'FILE:video.mp4:video/mp4']);
     expect(entries).toContainEqual(['caption', 'Walking the riverside at sunset.']);
+    expect(entries).toContainEqual(['aiLabel', 'true']);
     expect(entries).toContainEqual(['igAccountIds', 'acc-1']);
     expect(entries).not.toContainEqual(['video', 'FILE:video.mp4:video/mp4']);
   });

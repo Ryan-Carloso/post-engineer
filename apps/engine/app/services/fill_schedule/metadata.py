@@ -24,6 +24,11 @@ class AccountNotBoundError(RuntimeError):
     """
 
 
+def _persona_ai_label(schedule: dict[str, Any]) -> bool:
+    persona = schedule.get("personas")
+    return isinstance(persona, dict) and persona.get("ai_label") is True
+
+
 def _youtube_metadata(title: str, schedule: dict[str, Any], copy: str):
     return upload_publisher.YouTubeMetadata(
         title=title[:100],
@@ -31,6 +36,7 @@ def _youtube_metadata(title: str, schedule: dict[str, Any], copy: str):
         tags=derive_tags_from_title(title),
         privacy_status="public",
         account_ids=tuple(str(value) for value in schedule.get("youtube_account_ids", [])),
+        ai_label=_persona_ai_label(schedule),
     )
 
 
@@ -98,6 +104,7 @@ def _instagram_metadata(title: str, schedule: dict[str, Any], copy: str):
     return upload_publisher.InstagramMetadata(
         caption=copy[:2200],
         account_ids=tuple(str(value) for value in schedule.get("instagram_account_ids", [])),
+        ai_label=_persona_ai_label(schedule),
     )
 
 

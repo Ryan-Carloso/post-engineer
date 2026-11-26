@@ -8,9 +8,10 @@ application/x-www-form-urlencoded when ``videoStoragePath`` replaces it):
 - Authentication: ``Authorization: Bearer <MONEYPRINT_API_SECRET>`` (engine).
 - YouTube: ``provider=youtube``, ``video`` (file), ``title``, ``description``,
   ``tags`` (single comma-separated string), ``privacyStatus``
-  (public|private|unlisted), repeated ``accountIds`` fields.
+  (public|private|unlisted), ``aiLabel`` (true|false), repeated
+  ``accountIds`` fields.
 - Instagram: ``provider=instagram``, ``file`` xor ``videoStoragePath`` (R2 key),
-  ``caption``, repeated ``igAccountIds`` fields.
+  ``caption``, ``aiLabel`` (true|false), repeated ``igAccountIds`` fields.
 - Bluesky: ``provider=bluesky``, ``file`` (file), ``caption``,
   repeated ``did`` fields.
 - LinkedIn: ``provider=linkedin``, ``video`` (file), ``caption``,
@@ -84,6 +85,7 @@ class YouTubeMetadata:
     tags: tuple[str, ...]
     privacy_status: str
     account_ids: tuple[str, ...]
+    ai_label: bool = False
 
     def __post_init__(self) -> None:
         self.tags = tuple(self.tags)
@@ -96,6 +98,7 @@ class InstagramMetadata:
 
     caption: str
     account_ids: tuple[str, ...]
+    ai_label: bool = False
 
     def __post_init__(self) -> None:
         self.account_ids = tuple(self.account_ids)
@@ -267,6 +270,7 @@ def build_youtube_parts(metadata: YouTubeMetadata) -> MultipartParts:
             ("title", metadata.title),
             ("description", metadata.description),
             ("privacyStatus", metadata.privacy_status),
+            ("aiLabel", "true" if metadata.ai_label else "false"),
             *(("accountIds", account_id) for account_id in metadata.account_ids),
         ],
         tags=[("tags", ",".join(metadata.tags))],
@@ -279,6 +283,7 @@ def build_instagram_parts(metadata: InstagramMetadata) -> MultipartParts:
         fields=[
             ("provider", INSTAGRAM_PROVIDER),
             ("caption", metadata.caption),
+            ("aiLabel", "true" if metadata.ai_label else "false"),
             *(("igAccountIds", account_id) for account_id in metadata.account_ids),
         ],
     )

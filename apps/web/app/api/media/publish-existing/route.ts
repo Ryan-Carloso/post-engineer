@@ -285,7 +285,25 @@ async function postHandler(request: Request): Promise<NextResponse> {
     return verified;
   }
 
-  const ctx: PublishExistingContext = { route: ROUTE, supabase, userId, request, input, accountIds, reconnectWarning, ...verified, logId, startTime };
+  let aiLabel = false;
+  if (personaId !== null) {
+    const { data: personaRow, error: personaError } = await supabase
+      .from('personas')
+      .select('ai_label')
+      .eq('id', personaId)
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (personaError) {
+      logger.error('[publish-existing] persona ai_label lookup failed', personaError, { userId });
+      return apiErrorResponse(500, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR), {
+        route: ROUTE,
+        code: ERROR_CODES.INTERNAL_ERROR,
+      });
+    }
+    aiLabel = personaRow?.ai_label === true;
+  }
+
+  const ctx: PublishExistingContext = { route: ROUTE, supabase, userId, request, input, accountIds, reconnectWarning, aiLabel, ...verified, logId, startTime };
   if (input.publishing.mode === 'scheduled') {
     return scheduleExistingMedia(ctx);
   }

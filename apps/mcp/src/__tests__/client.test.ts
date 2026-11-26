@@ -286,8 +286,8 @@ describe('PostEngineerClient', () => {
     const mockList = {
       authenticated: true,
       personas: [
-        { id: 'p1', name: 'Persona 1', createdAt: '2026-01-01T00:00:00Z', hookPanel: true, boundAccounts: emptyAccounts },
-        { id: 'p2', name: 'Persona 2', createdAt: '2026-01-02T00:00:00Z', hookPanel: false, boundAccounts: emptyAccounts },
+        { id: 'p1', name: 'Persona 1', createdAt: '2026-01-01T00:00:00Z', hookPanel: true, aiLabel: false, boundAccounts: emptyAccounts },
+        { id: 'p2', name: 'Persona 2', createdAt: '2026-01-02T00:00:00Z', hookPanel: false, aiLabel: false, boundAccounts: emptyAccounts },
       ],
     };
 

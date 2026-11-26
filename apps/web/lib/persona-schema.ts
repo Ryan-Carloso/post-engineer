@@ -13,6 +13,7 @@ import {
   type PersonaDefaultAccounts,
 } from './persona-publishing-accounts';
 import { HOOK_PANEL_FORM_VALUES, invalidHookPanelMessage } from './hook-panel-form';
+import { AI_LABEL_FORM_VALUES, invalidAiLabelMessage } from './ai-label-form';
 import type { IdentityCard } from './contracts/persona-identity-card';
 import { parseIdentityCardField } from '@/app/api/persona/identity-card-field';
 
@@ -35,6 +36,7 @@ export const personaFormSchema = z.object({
   videoAspect: optionalText(z.enum(VALID_VIDEO_ASPECTS)),
   videoLayout: optionalText(z.enum(VIDEO_LAYOUTS)),
   hookPanel: optionalText(z.enum(HOOK_PANEL_FORM_VALUES)),
+  aiLabel: optionalText(z.enum(AI_LABEL_FORM_VALUES)),
   scriptPrompt: optionalText(z.string().max(2000)),
   ctaType: optionalText(z.enum(PERSONA_CTA_TYPES)),
   ctaUrl: optionalText(z.string().max(PERSONA_CTA_URL_MAX_LENGTH).url()),
@@ -49,6 +51,7 @@ const FIELD_ERRORS: Record<string, (value: unknown) => string> = {
   videoAspect: (value) => `Invalid videoAspect: ${String(value)}. Use one of ${VALID_VIDEO_ASPECTS.join(', ')}.`,
   videoLayout: (value) => `Invalid videoLayout: ${String(value)}. Use one of ${VIDEO_LAYOUTS.join(', ')}.`,
   hookPanel: (value) => invalidHookPanelMessage(value),
+  aiLabel: (value) => invalidAiLabelMessage(value),
   niche: () => 'Invalid niche: use at most 300 characters.',
   scriptPrompt: () => 'Invalid scriptPrompt: use at most 2000 characters.',
   ctaType: (value) => `Invalid ctaType: ${String(value)}. Use one of ${PERSONA_CTA_TYPES.join(', ')}.`,
@@ -84,6 +87,7 @@ export type ParsedPersonaForm = {
     videoAspect: string | null;
     videoLayout: (typeof VIDEO_LAYOUTS)[number] | null;
     hookPanel: boolean | null;
+    aiLabel: boolean | null;
     scriptPrompt: string | null;
     ctaType: (typeof PERSONA_CTA_TYPES)[number];
     ctaUrl: string | null;
@@ -181,6 +185,7 @@ export function parsePersonaForm(formData: FormData, mode: PersonaFormMode): Par
         videoAspect: values.videoAspect ?? null,
         videoLayout: values.videoLayout ?? null,
         hookPanel: values.hookPanel === undefined ? null : values.hookPanel === 'true',
+        aiLabel: values.aiLabel === undefined ? null : values.aiLabel === 'true',
         scriptPrompt: values.scriptPrompt ?? null,
         ctaType: values.ctaType ?? 'follow',
         ctaUrl: values.ctaUrl ?? null,

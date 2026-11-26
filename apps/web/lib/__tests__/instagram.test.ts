@@ -491,6 +491,26 @@ describe('InstagramService', () => {
         );
       });
 
+      it('labels the reel as AI-generated only when aiLabel is set', async () => {
+        mockPost
+          .mockResolvedValueOnce({ data: { id: 'c1' } })
+          .mockResolvedValueOnce({ data: { id: 'p1' } });
+        mockGet
+          .mockResolvedValueOnce({ data: { status_code: 'FINISHED' } })
+          .mockResolvedValueOnce({ data: {} });
+
+        const service = new InstagramService();
+        await service.publishMedia('user', 'tok', 'cap', 'https://example.com/vid.mp4', true, true);
+
+        expect(mockPost).toHaveBeenCalledWith(
+          expect.stringContaining('/media'),
+          null,
+          expect.objectContaining({
+            params: expect.objectContaining({ is_ai_generated: true }),
+          }),
+        );
+      });
+
       it('throws InstagramApiError when container status is ERROR', async () => {
         mockPost.mockResolvedValueOnce({ data: { id: 'err-container' } });
         mockGet.mockResolvedValueOnce({ data: { status_code: 'ERROR' } });

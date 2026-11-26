@@ -9,6 +9,7 @@ export type PersonaPreferenceColumns = Pick<
   | 'video_aspect'
   | 'video_layout'
   | 'hook_panel'
+  | 'ai_label'
   | 'script_prompt'
   | 'cta_type'
   | 'cta_url'
@@ -24,6 +25,7 @@ export function personaPreferenceColumns(values: ParsedPersonaForm['values']): P
     video_aspect: values.videoAspect,
     video_layout: values.videoLayout,
     hook_panel: values.hookPanel ?? true,
+    ai_label: values.aiLabel ?? false,
     script_prompt: values.scriptPrompt,
     cta_type: values.ctaType,
     cta_url: values.ctaUrl,
