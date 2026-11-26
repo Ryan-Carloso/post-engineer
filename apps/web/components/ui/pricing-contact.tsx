@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { useI18n } from '@/lib/i18n/provider';
-import { GITHUB_URL } from '@/lib/seo';
+import { GITHUB_URL } from '@/lib/site-urls';
 import { whatsappUrl } from '@/lib/whatsapp';
 
 export const SUPPORT_EMAIL = 'madebyryandev@gmail.com';

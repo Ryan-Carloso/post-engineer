@@ -1,10 +1,7 @@
 import { DOC_PAGES, docLocales, docPath } from '@/lib/docs/registry';
+import { GITHUB_URL, OG_IMAGE_PATH, SITE_URL } from './site-urls';
 
-export const SITE_URL = 'https://post-engineer.com';
-
-export const GITHUB_URL = 'https://github.com/Ryan-Carloso/post-engineer';
-
-export const OG_IMAGE_PATH = '/og.png';
+export { GITHUB_URL, OG_IMAGE_PATH, SITE_URL };
 
 export const LEGAL_UPDATED_AT = '2026-09-10';
 
