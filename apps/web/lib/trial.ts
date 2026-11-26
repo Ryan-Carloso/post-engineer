@@ -16,7 +16,7 @@ export interface TrialGateOptions {
   now?: () => Date;
 }
 
-async function readTrialEndsAt(supabase: SupabaseClient<Database>, userId: string): Promise<string> {
+export async function readTrialEndsAt(supabase: SupabaseClient<Database>, userId: string): Promise<string> {
   const { error: ensureError } = await supabase
     .from('user_profiles')
     .upsert({ id: userId }, { onConflict: 'id', ignoreDuplicates: true });
