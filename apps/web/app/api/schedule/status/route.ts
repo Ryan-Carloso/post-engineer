@@ -105,6 +105,12 @@ async function getHandler(request: Request): Promise<NextResponse> {
     .in('status', ['ready'])
     .gte('slot_at', nowIso)
     .order('slot_at', { ascending: true });
+  let awaitingQuery = supabase
+    .from('scheduled_posts')
+    .select('id, slot_at, status, title, error, published_at, schedule_id')
+    .eq('user_id', userId)
+    .in('status', ['awaiting_approval'])
+    .order('slot_at', { ascending: true });
   let recentQuery = supabase
     .from('scheduled_posts')
     .select(RESULT_SELECT)
@@ -121,21 +127,24 @@ async function getHandler(request: Request): Promise<NextResponse> {
   let anyPostQuery = supabase.from('scheduled_posts').select('id').eq('user_id', userId);
   if (scheduleIds) {
     upcomingQuery = upcomingQuery.in('schedule_id', scheduleIds);
+    awaitingQuery = awaitingQuery.in('schedule_id', scheduleIds);
     recentQuery = recentQuery.in('schedule_id', scheduleIds);
     publishingQuery = publishingQuery.in('schedule_id', scheduleIds);
     anyPostQuery = anyPostQuery.in('schedule_id', scheduleIds);
   }
 
-  const [upcoming, recent, publishing, anyPost] = await Promise.all([
+  const [upcoming, awaiting, recent, publishing, anyPost] = await Promise.all([
     upcomingQuery.limit(limit),
+    awaitingQuery.limit(limit),
     recentQuery.limit(limit),
     publishingQuery.limit(limit),
     anyPostQuery.limit(1),
   ]);
 
-  if (upcoming.error || recent.error || publishing.error || anyPost.error) {
-    logger.error('[api/schedule/status] query failed', upcoming.error ?? recent.error ?? publishing.error ?? anyPost.error, {
+  if (upcoming.error || awaiting.error || recent.error || publishing.error || anyPost.error) {
+    logger.error('[api/schedule/status] query failed', upcoming.error ?? awaiting.error ?? recent.error ?? publishing.error ?? anyPost.error, {
       upcoming: upcoming.error,
+      awaiting: awaiting.error,
       recent: recent.error,
       publishing: publishing.error,
       anyPost: anyPost.error,
@@ -146,7 +155,11 @@ async function getHandler(request: Request): Promise<NextResponse> {
     );
   }
   const upcomingEnriched = withPostUrl(
-    mergeBySlotAt(presentPublishRows(publishing.data), presentPublishRows(upcoming.data), limit),
+    mergeBySlotAt(
+      presentPublishRows(publishing.data),
+      presentPublishRows([...(upcoming.data ?? []), ...(awaiting.data ?? [])]),
+      limit,
+    ),
   );
   const recentEnriched = withPostUrl(presentPublishRows(recent.data));
 

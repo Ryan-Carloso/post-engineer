@@ -3,16 +3,20 @@ import type { TranslationKey } from '@/lib/i18n';
 
 export const STATUS_STYLE: Record<string, string> = {
   ready: 'bg-warning-soft text-warning',
+  awaiting_approval: 'bg-warning-soft text-warning',
   publishing: 'bg-info-soft text-info',
   published: 'bg-success-soft text-success',
   failed: 'bg-destructive-soft text-destructive',
+  cancelled: 'bg-line text-ink-soft',
 };
 
 export const STATUS_KEY: Record<string, TranslationKey> = {
   ready: 'posts.statusReady',
+  awaiting_approval: 'posts.statusAwaitingApproval',
   publishing: 'posts.statusPublishing',
   published: 'posts.statusPublished',
   failed: 'posts.statusFailed',
+  cancelled: 'posts.statusCancelled',
 };
 
 export type CalendarGroup = 'published' | 'failed' | 'inProgress' | 'scheduled';

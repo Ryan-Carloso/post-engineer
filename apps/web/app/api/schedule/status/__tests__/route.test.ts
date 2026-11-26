@@ -58,7 +58,7 @@ describe('parseStatusLimit', () => {
 
 const USER_ID = 'user-1';
 
-function mockPostsClient(upcoming: unknown[], recent: unknown[], queue: unknown[] = [], any?: unknown[]) {
+function mockPostsClient(upcoming: unknown[], recent: unknown[], queue: unknown[] = [], any?: unknown[], awaiting: unknown[] = []) {
   let limitCalls = 0;
   const chain = {
     select: vi.fn().mockReturnThis(),
@@ -74,10 +74,12 @@ function mockPostsClient(upcoming: unknown[], recent: unknown[], queue: unknown[
           call === 0
             ? upcoming
             : call === 1
-              ? recent
-              : call === 3
-                ? (any ?? (upcoming.length > 0 || recent.length > 0 ? [{ id: 'any-1' }] : []))
-                : [],
+              ? awaiting
+              : call === 2
+                ? recent
+                : call === 4
+                  ? (any ?? (upcoming.length > 0 || recent.length > 0 || awaiting.length > 0 ? [{ id: 'any-1' }] : []))
+                  : [],
         error: null,
       };
     }),
@@ -91,7 +93,7 @@ function mockAuthSession(auth: unknown, error: unknown) {
   vi.mocked(requireSupabaseSession).mockResolvedValue({ auth, error } as never);
 }
 
-function mockScopedPostsClient(schedules: Array<{ id: string; persona_id: string | null }>, upcoming: unknown[], recent: unknown[], queue: unknown[] = [], any?: unknown[]) {
+function mockScopedPostsClient(schedules: Array<{ id: string; persona_id: string | null }>, upcoming: unknown[], recent: unknown[], queue: unknown[] = [], any?: unknown[], awaiting: unknown[] = []) {
   let limitCalls = 0;
   const postsChain = {
     select: vi.fn().mockReturnThis(),
@@ -107,10 +109,12 @@ function mockScopedPostsClient(schedules: Array<{ id: string; persona_id: string
           call === 0
             ? upcoming
             : call === 1
-              ? recent
-              : call === 3
-                ? (any ?? (upcoming.length > 0 || recent.length > 0 ? [{ id: 'any-1' }] : []))
-                : [],
+              ? awaiting
+              : call === 2
+                ? recent
+                : call === 4
+                  ? (any ?? (upcoming.length > 0 || recent.length > 0 || awaiting.length > 0 ? [{ id: 'any-1' }] : []))
+                  : [],
         error: null,
       };
     }),
@@ -402,13 +406,13 @@ describe('GET query contracts', () => {
     return calls.filter(([column]) => column === 'schedule_id');
   }
 
-  it('queries scheduled_posts four times, each scoped by the caller user id', async () => {
+  it('queries scheduled_posts five times, each scoped by the caller user id', async () => {
     const client = await getWithLimit(null);
     const fromCalls: unknown[][] = client.from.mock.calls;
-    expect(fromCalls).toHaveLength(4);
+    expect(fromCalls).toHaveLength(5);
     expect(fromCalls.every(([table]) => table === 'scheduled_posts')).toBe(true);
     const eqCalls: unknown[][] = client.chain.eq.mock.calls;
-    expect(eqCalls).toHaveLength(4);
+    expect(eqCalls).toHaveLength(5);
     expect(eqCalls.every(([column, value]) => column === 'user_id' && value === USER_ID)).toBe(true);
   });
 
@@ -416,9 +420,10 @@ describe('GET query contracts', () => {
     const client = await getWithLimit(null);
     const inCalls = client.chain.in.mock.calls;
     expect(inCalls).toContainEqual(['status', ['ready']]);
+    expect(inCalls).toContainEqual(['status', ['awaiting_approval']]);
     expect(inCalls).toContainEqual(['status', ['published', 'failed']]);
     expect(inCalls).toContainEqual(['status', ['publishing']]);
-    expect(inCalls.filter(([column]: unknown[]) => column === 'status')).toHaveLength(3);
+    expect(inCalls.filter(([column]: unknown[]) => column === 'status')).toHaveLength(4);
   });
 
   it('selects the documented columns on every query', async () => {
@@ -443,7 +448,7 @@ describe('GET query contracts', () => {
       ([column, options]) =>
         column === 'slot_at' && (options as { ascending?: boolean } | null)?.ascending === false,
     );
-    expect(ascending).toHaveLength(2);
+    expect(ascending).toHaveLength(3);
     expect(descending).toHaveLength(1);
   });
 
@@ -454,11 +459,12 @@ describe('GET query contracts', () => {
 
   it('applies the parsed limit to the paginated lists, and 1 to the existence row', async () => {
     const client = await getWithLimit('5');
-    expect(client.chain.limit).toHaveBeenCalledTimes(4);
+    expect(client.chain.limit).toHaveBeenCalledTimes(5);
     expect(client.chain.limit).toHaveBeenNthCalledWith(1, 5);
     expect(client.chain.limit).toHaveBeenNthCalledWith(2, 5);
     expect(client.chain.limit).toHaveBeenNthCalledWith(3, 5);
-    expect(client.chain.limit).toHaveBeenNthCalledWith(4, 1);
+    expect(client.chain.limit).toHaveBeenNthCalledWith(4, 5);
+    expect(client.chain.limit).toHaveBeenNthCalledWith(5, 1);
   });
 
   it('does not filter by schedule id for unscoped callers', async () => {
@@ -475,7 +481,7 @@ describe('GET query contracts', () => {
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
     const response = await GET(new Request('https://example.com/api/schedule/status'));
     expect(response.status).toBe(200);
-    expect(scheduleIdFilters(client.postsChain)).toHaveLength(4);
+    expect(scheduleIdFilters(client.postsChain)).toHaveLength(5);
     expect(client.schedulesChain.select).toHaveBeenCalledWith('id, persona_id');
   });
 
@@ -506,7 +512,7 @@ describe('GET query contracts', () => {
       order: vi.fn().mockReturnThis(),
       limit: vi.fn(async () => {
         const call = limitCalls++;
-        return { data: call === 2 ? [publishingRow] : [], error: null };
+        return { data: call === 3 ? [publishingRow] : [], error: null };
       }),
       then: (resolve: (value: unknown) => void) => resolve({ data: [], error: null }),
     };
@@ -553,7 +559,7 @@ describe('GET query contracts', () => {
       order: vi.fn().mockReturnThis(),
       limit: vi.fn(async () => {
         const call = limitCalls++;
-        return { data: call === 0 ? upcomingRows : call === 2 ? publishingRows : [], error: null };
+        return { data: call === 0 ? upcomingRows : call === 3 ? publishingRows : [], error: null };
       }),
       then: (resolve: (value: unknown) => void) => resolve({ data: [], error: null }),
     };
@@ -564,6 +570,41 @@ describe('GET query contracts', () => {
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.upcoming.map((slot: { id: string }) => slot.id)).toEqual(['up-1', 'pub-1']);
+  });
+
+  it('lists awaiting_approval slots in upcoming, including an expired one', async () => {
+    const awaiting = [
+      { id: 'aw-1', slot_at: '2026-09-20T10:00:00Z', status: 'awaiting_approval', title: 'Expired hold', schedule_id: 's1', error: null, published_at: null },
+      { id: 'aw-2', slot_at: '2026-09-25T10:00:00Z', status: 'awaiting_approval', title: 'Held', schedule_id: 's1', error: null, published_at: null },
+    ];
+    const client = mockPostsClient([], [], [], undefined, awaiting);
+    mockAuthSession({ userId: USER_ID, accessToken: 'pe_test_key', isApiKey: true }, null);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await GET(new Request('https://example.com/api/schedule/status'));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(ListPostsResponseSchema.safeParse(body).success).toBe(true);
+    expect(body.upcoming.map((slot: { id: string }) => slot.id)).toEqual(['aw-1', 'aw-2']);
+    expect(body.upcoming[0].status).toBe('awaiting_approval');
+  });
+
+  it('restricts awaiting_approval slots to the scoped key schedules', async () => {
+    const awaiting = [
+      { id: 'aw-1', slot_at: '2026-09-25T10:00:00Z', status: 'awaiting_approval', title: 'Held', schedule_id: 's1', error: null, published_at: null },
+    ];
+    const client = mockScopedPostsClient([{ id: 's1', persona_id: 'p1' }], [], [], [], undefined, awaiting);
+    mockAuthSession(
+      { userId: USER_ID, accessToken: 'pe_live_scoped', isApiKey: true, keyId: 'key-1', personaIds: ['p1'] },
+      null,
+    );
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await GET(new Request('https://example.com/api/schedule/status'));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.upcoming.map((slot: { id: string }) => slot.id)).toEqual(['aw-1']);
+    expect(client.postsChain.in).toHaveBeenCalledWith('schedule_id', ['s1']);
   });
 });
 

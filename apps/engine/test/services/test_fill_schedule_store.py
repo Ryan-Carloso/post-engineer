@@ -8,6 +8,7 @@ instead of crashing the tick.
 
 import sys
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -44,6 +45,33 @@ def _store(rows):
     store._base_url = "https://supabase.example"
     store._headers = {}
     return store
+
+
+class ReadyDueSlotsTests(unittest.TestCase):
+    def test_asks_postgrest_for_ready_slots_only(self):
+        store = _store([])
+        store.ready_due_slots(datetime(2026, 9, 24, 10, tzinfo=timezone.utc))
+        call = store._requests.calls[0]
+        self.assertEqual(call["method"], "GET")
+        self.assertTrue(call["url"].endswith("/rest/v1/scheduled_posts"))
+        self.assertEqual(call["params"]["status"], "eq.ready")
+        self.assertEqual(call["params"]["slot_at"], "lte.2026-09-24T10:00:00+00:00")
+
+    def test_returns_the_ready_rows_it_receives(self):
+        ready = {"id": "rd-1", "status": "ready", "slot_at": "2026-09-24T09:00:00Z"}
+        store = _store([ready])
+        self.assertEqual(
+            store.ready_due_slots(datetime(2026, 9, 24, 10, tzinfo=timezone.utc)),
+            [ready],
+        )
+
+    def test_claims_only_ready_slots(self):
+        store = _store([{"id": "rd-1"}])
+        store.claim_ready_slot("rd-1", datetime(2026, 9, 24, 10, tzinfo=timezone.utc))
+        call = store._requests.calls[0]
+        self.assertEqual(call["method"], "PATCH")
+        self.assertEqual(call["params"]["status"], "eq.ready")
+        self.assertEqual(call["params"]["id"], "eq.rd-1")
 
 
 class PersonaBoundAccountsTests(unittest.TestCase):

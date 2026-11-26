@@ -67,9 +67,11 @@ export const RANGE_MAX_SPAN_DAYS = 62;
 export const RANGE_MAX_SLOTS = 1000;
 export const RANGE_STATUSES = [
   'ready',
+  'awaiting_approval',
   'publishing',
   'published',
   'failed',
+  'cancelled',
 ] as const;
 
 export type RangeParseResult =
@@ -122,9 +124,11 @@ export const StatusSlotSchema = z.object({
   slot_at: z.string(),
   status: z.enum([
     'ready',
+    'awaiting_approval',
     'publishing',
     'published',
     'failed',
+    'cancelled',
   ]),
   title: z.string().nullable(),
   error: z.string().nullable(),

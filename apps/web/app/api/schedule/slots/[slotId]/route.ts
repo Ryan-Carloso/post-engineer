@@ -140,7 +140,7 @@ async function deleteHandler(
   if ('error' in owned) return owned.error;
   const slot = owned.slot;
 
-  const DELETABLE_STATUSES = new Set(['ready', 'failed']);
+  const DELETABLE_STATUSES = new Set(['ready', 'failed', 'awaiting_approval']);
   if (!DELETABLE_STATUSES.has(slot.status)) {
     return apiErrorResponse(
       409,
@@ -205,9 +205,9 @@ async function patchHandler(
   if ('error' in owned) return owned.error;
   const { slot, publishMode } = owned;
 
-  const EDITABLE_STATUSES = new Set(['ready']);
+  const EDITABLE_STATUSES = new Set(['ready', 'awaiting_approval']);
   if (!EDITABLE_STATUSES.has(slot.status)) {
-    return apiErrorResponse(409, 'Only a ready slot can be edited.', {
+    return apiErrorResponse(409, 'Only a ready or awaiting-approval slot can be edited.', {
       route: 'PATCH /api/schedule/slots',
       metadata: { status: slot.status },
     });
@@ -226,6 +226,12 @@ async function patchHandler(
   if (rawTitle === undefined && rawSlotAt === undefined) {
     return apiErrorResponse(400, 'Provide title or slotAt to update.', {
       route: 'PATCH /api/schedule/slots',
+    });
+  }
+  if (slot.status === 'awaiting_approval' && rawTitle !== undefined) {
+    return apiErrorResponse(409, 'An awaiting-approval slot can only move its scheduled time.', {
+      route: 'PATCH /api/schedule/slots',
+      metadata: { status: slot.status },
     });
   }
   const patch: { title?: string; slot_at?: string } = {};
@@ -273,15 +279,21 @@ async function patchHandler(
     .update(patch)
     .eq('id', slot.id)
     .eq('user_id', auth.userId)
-    .in('status', ['ready'])
+    .in('status', slot.status === 'awaiting_approval' ? ['awaiting_approval'] : ['ready'])
     .select('id')
     .single();
   if (updateError) {
     if ((updateError as { code?: string }).code === 'PGRST116') {
-      return apiErrorResponse(409, 'Only a ready slot can be edited.', {
-        route: 'PATCH /api/schedule/slots',
-        metadata: { status: slot.status },
-      });
+      return apiErrorResponse(
+        409,
+        slot.status === 'awaiting_approval'
+          ? 'An awaiting-approval slot can only move its scheduled time.'
+          : 'Only a ready slot can be edited.',
+        {
+          route: 'PATCH /api/schedule/slots',
+          metadata: { status: slot.status },
+        },
+      );
     }
     return apiErrorResponse(500, 'Failed to update slot.', {
       route: 'PATCH /api/schedule/slots',

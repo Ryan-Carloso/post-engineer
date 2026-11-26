@@ -5,7 +5,7 @@ export interface ScheduledSlot {
   id: string;
   scheduleId: string;
   slotAt: string;
-  status: 'ready' | 'publishing' | 'published' | 'failed';
+  status: 'ready' | 'awaiting_approval' | 'publishing' | 'published' | 'failed' | 'cancelled';
   title: string | null;
   error?: string | null;
   publishedAt?: string | null;

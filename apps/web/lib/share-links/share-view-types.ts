@@ -1,7 +1,6 @@
-import { RANGE_STATUSES } from '@/lib/contracts/schedule';
 import type { SocialProvider } from '@/lib/providers/registry';
 
-export const SHARE_POST_STATUSES = RANGE_STATUSES;
+export const SHARE_POST_STATUSES = ['ready', 'publishing', 'published', 'failed'] as const;
 export type SharePostStatus = (typeof SHARE_POST_STATUSES)[number];
 
 export function isSharePostStatus(value: unknown): value is SharePostStatus {

@@ -1,12 +1,12 @@
 -- ============================================================================
 -- Atomic slot delete guard (prevents the last-slot check-then-act race)
 -- ----------------------------------------------------------------------------
--- SOURCE OF TRUTH: supabase/migrations/065_definer-function-grants.sql (the
--- newest versioned migration that redefines it: 058's body plus a pinned
--- search_path; 065 also makes it service-role only). This file keeps the
--- same body for reference, pinned by slot-delete-ready-migration.test.ts;
--- do not apply it by hand — the migration chain applies the function and
--- its grants.
+-- SOURCE OF TRUTH: supabase/migrations/089_slot-delete-awaiting-approval.sql
+-- (the newest versioned migration that redefines it: 058's body plus a
+-- pinned search_path; 065 also makes it service-role only; 089 admits
+-- awaiting_approval slots). This file keeps the same body for reference,
+-- pinned by slot-delete-ready-migration.test.ts; do not apply it by hand —
+-- the migration chain applies the function and its grants.
 --
 -- WHY: DELETE /api/schedule/slots checked "is this the schedule's last
 -- slot?" with a SELECT and then DELETEd in two steps. Two concurrent
@@ -42,10 +42,10 @@ begin
     return 'not_found';
   end if;
 
-  -- Pending (not yet dispatched), ready (generated, not yet dispatched)
-  -- and failed (dead row cleanup) slots can be deleted; the engine owns
-  -- everything mid-flight.
-  if v_status not in ('pending', 'ready', 'failed') then
+  -- Pending (not yet dispatched), ready (generated, not yet dispatched),
+  -- awaiting_approval (held for the owner's approval) and failed (dead row
+  -- cleanup) slots can be deleted; the engine owns everything mid-flight.
+  if v_status not in ('pending', 'ready', 'awaiting_approval', 'failed') then
     return 'not_deletable';
   end if;
 
