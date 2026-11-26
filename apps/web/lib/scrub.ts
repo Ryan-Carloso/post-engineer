@@ -42,3 +42,24 @@ export function redactCredentialFragments(text: string): string {
     .replace(/([?&](?:api[_-]?key|access[_-]?token|token)=)[^\s&]+/gi, '$1[redacted]')
     .replace(/\bsk-[A-Za-z0-9_-]{20,}/g, '[redacted]');
 }
+
+export const ENGINE_REASON_MAX_CHARS = 200;
+
+function basenameOfPath(path: string): string {
+  const segments = path.split(/[\\/]/).filter((segment) => segment.length > 0);
+  return segments.length > 0 ? segments[segments.length - 1] : path;
+}
+
+export function redactLocalPaths(text: string): string {
+  return text
+    .replace(/(^|[\s"'\(=,])([A-Za-z]:\\[^\s"'\)\],;]+)/g, (_match, prefix: string, path: string) => `${prefix}${basenameOfPath(path)}`)
+    .replace(/(^|[\s"'\(=,])(\/[^\s"'\)\],;:]+(?:\/[^\s"'\)\],;:]+)*)/g, (_match, prefix: string, path: string) => `${prefix}${basenameOfPath(path)}`);
+}
+
+export function sanitizeEngineReason(text: string): string | null {
+  const collapsed = redactLocalPaths(redactCredentialFragments(text)).replace(/\s+/g, ' ').trim();
+  if (collapsed.length === 0) {
+    return null;
+  }
+  return collapsed.slice(0, ENGINE_REASON_MAX_CHARS);
+}

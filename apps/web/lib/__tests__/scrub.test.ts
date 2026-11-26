@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { scrubSecrets } from '@/lib/scrub';
+import { ENGINE_REASON_MAX_CHARS, sanitizeEngineReason, scrubSecrets } from '@/lib/scrub';
 
 describe('scrubSecrets', () => {
   it('redacts secret-bearing keys (case-insensitive), keeps the key', () => {
@@ -65,5 +65,62 @@ describe('scrubSecrets', () => {
     scrubSecrets(input);
     expect(input['password']).toBe('x');
     expect((input['nested'] as Record<string, unknown>)['token']).toBe('y');
+  });
+});
+
+describe('sanitizeEngineReason', () => {
+  it('redacts Bearer tokens, URL userinfo, token/api_key query params and sk- secrets', () => {
+    const token = 'sk-' + 'a'.repeat(24);
+    const out = sanitizeEngineReason(
+      `Rejected: Bearer ${token} from https://user:pass@host.example/x?token=abc&api_key=def`,
+    );
+    expect(out).not.toContain(token);
+    expect(out).not.toContain('pass@host');
+    expect(out).not.toContain('token=abc');
+    expect(out).not.toContain('api_key=def');
+    expect(out).toContain('Bearer [redacted]');
+    expect(out).toContain('https://[redacted]@host.example/x');
+    expect(out).toContain('token=[redacted]');
+    expect(out).toContain('api_key=[redacted]');
+  });
+
+  it('reduces absolute Unix paths to their basename', () => {
+    expect(sanitizeEngineReason('failed to load /home/app/storage/tasks/abc/final.mp4')).toBe(
+      'failed to load final.mp4',
+    );
+  });
+
+  it('reduces Windows paths to their basename', () => {
+    expect(sanitizeEngineReason('failed to load C:\\app\\x\\voice.wav')).toBe(
+      'failed to load voice.wav',
+    );
+  });
+
+  it('leaves URL paths alone, redacting only secret query params', () => {
+    expect(sanitizeEngineReason('see https://host.example/a/b.mp4?token=secret')).toBe(
+      'see https://host.example/a/b.mp4?token=[redacted]',
+    );
+  });
+
+  it('never returns more than ENGINE_REASON_MAX_CHARS characters', () => {
+    expect(ENGINE_REASON_MAX_CHARS).toBe(200);
+    expect(sanitizeEngineReason('x'.repeat(500))).toHaveLength(ENGINE_REASON_MAX_CHARS);
+  });
+
+  it('scrubs before truncating, so no raw fragment survives past the boundary', () => {
+    const token = 'sk-' + 'b'.repeat(24);
+    const out = sanitizeEngineReason('y'.repeat(180) + ` Bearer ${token}`);
+    expect(out).not.toContain(token);
+    expect(out).not.toContain('sk-');
+    expect(out).toContain('Bearer [redacted]');
+  });
+
+  it('collapses whitespace and trims', () => {
+    expect(sanitizeEngineReason('  a\n  b\t c  ')).toBe('a b c');
+  });
+
+  it('returns null for empty or blank input', () => {
+    expect(sanitizeEngineReason('')).toBeNull();
+    expect(sanitizeEngineReason('   ')).toBeNull();
   });
 });
