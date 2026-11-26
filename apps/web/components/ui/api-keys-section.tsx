@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useApiKeysQuery, useCreateApiKeyMutation, useRevokeApiKeyMutation } from '@/lib/api';
+import type { ApprovalMode } from '@/lib/api-keys';
 import { useI18n } from '@/lib/i18n/provider';
 import { useCopyText } from '@/lib/use-copy-text';
 import { Button } from '@/components/ui/button';
@@ -22,6 +23,7 @@ export default function ApiKeysSection({
 
   const [isCreating, setIsCreating] = useState(false);
   const [keyName, setKeyName] = useState('');
+  const [keyMode, setKeyMode] = useState<ApprovalMode>('yolo');
   const [newKeyData, setNewKeyData] = useState<{ name: string; key: string } | null>(null);
   const [showAllKeys, setShowAllKeys] = useState(false);
   const { copied, copy } = useCopyText();
@@ -40,10 +42,12 @@ export default function ApiKeysSection({
       const result = await createMutation.mutateAsync({
         name: keyName.trim(),
         personaIds: null,
+        approvalMode: keyMode,
       });
       setNewKeyData({ name: result.name, key: result.key });
       onKeyCreated?.(result.key);
       setKeyName('');
+      setKeyMode('yolo');
       setIsCreating(false);
     } catch {
     }
@@ -131,6 +135,35 @@ export default function ApiKeysSection({
             <label htmlFor="api-key-name-input" className="block text-xs font-medium text-ink-soft">
               {t('apiKeys.nameLabel')}
             </label>
+            <fieldset>
+              <legend className="block text-xs font-medium text-ink-soft">{t('apiKeys.modeLabel')}</legend>
+              <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                {(['yolo', 'approval'] as const).map((mode) => (
+                  <label
+                    key={mode}
+                    className="flex flex-1 cursor-pointer items-start gap-2 rounded-lg border border-line bg-card px-3 py-2"
+                  >
+                    <input
+                      type="radio"
+                      name="api-key-mode"
+                      data-testid={`api-key-mode-${mode}`}
+                      value={mode}
+                      checked={keyMode === mode}
+                      onChange={() => setKeyMode(mode)}
+                      className="mt-0.5"
+                    />
+                    <span>
+                      <span className="block text-sm font-semibold text-ink">
+                        {mode === 'yolo' ? t('apiKeys.modeYolo') : t('apiKeys.modeApproval')}
+                      </span>
+                      <span className="block text-xs text-muted-text">
+                        {mode === 'yolo' ? t('apiKeys.modeYoloHint') : t('apiKeys.modeApprovalHint')}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
             <div className="flex flex-col gap-2 sm:flex-row">
               <input
                 id="api-key-name-input"
@@ -197,6 +230,7 @@ export default function ApiKeysSection({
               <thead>
                 <tr className="border-b border-hairline text-left text-xs font-semibold text-muted-text">
                   <th className="px-4 py-3 font-semibold">{t('apiKeys.colName')}</th>
+                  <th className="px-4 py-3 font-semibold">{t('apiKeys.colMode')}</th>
                   <th className="px-4 py-3 font-semibold">{t('apiKeys.colLastUsed')}</th>
                   <th className="px-4 py-3 font-semibold">{t('apiKeys.colStatus')}</th>
                   <th className="px-4 py-3 text-right font-semibold">{t('apiKeys.colActions')}</th>
@@ -210,6 +244,9 @@ export default function ApiKeysSection({
                       <td className="px-4 py-3.5">
                         <span className="block font-semibold text-ink">{key.name}</span>
                         <span className="mt-0.5 block font-mono text-xs text-faint">{key.keyPrefix}</span>
+                      </td>
+                      <td className="px-4 py-3.5 text-muted-text">
+                        {key.approvalMode === 'approval' ? t('apiKeys.modeApproval') : t('apiKeys.modeYolo')}
                       </td>
                       <td className="px-4 py-3.5 text-muted-text">
                         {key.lastUsedAt
@@ -265,6 +302,7 @@ export default function ApiKeysSection({
                       </div>
                       <div className="mt-1 flex flex-col gap-0.5 text-xs text-muted-text">
                         <span className="font-mono">{key.keyPrefix}</span>
+                        <span>{key.approvalMode === 'approval' ? t('apiKeys.modeApproval') : t('apiKeys.modeYolo')}</span>
                         <span>
                           {key.lastUsedAt
                             ? t('apiKeys.lastUsed').replace('{date}', new Date(key.lastUsedAt).toLocaleDateString())

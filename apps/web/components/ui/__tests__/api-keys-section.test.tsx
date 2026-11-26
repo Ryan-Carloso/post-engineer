@@ -37,6 +37,12 @@ vi.mock('@/lib/i18n/provider', () => {
     'apiKeys.loadError': 'Could not load API keys.',
     'apiKeys.showAll': 'Show all {count} keys',
     'apiKeys.showFewer': 'Show fewer keys',
+    'apiKeys.colMode': 'Mode',
+    'apiKeys.modeLabel': 'Mode',
+    'apiKeys.modeYolo': 'Yolo',
+    'apiKeys.modeApproval': 'Approval',
+    'apiKeys.modeYoloHint': 'Posts publish automatically.',
+    'apiKeys.modeApprovalHint': 'Posts wait for approval.',
   };
   return {
     useI18n: () => ({
@@ -58,6 +64,7 @@ function makeKey(index: number): {
   name: string;
   keyPrefix: string;
   personaIds: string[] | null;
+  approvalMode: 'yolo' | 'approval';
   createdAt: string;
   lastUsedAt: null;
   revokedAt: null;
@@ -67,6 +74,7 @@ function makeKey(index: number): {
     name: `Agent ${index}`,
     keyPrefix: `pe_live_test${index}...`,
     personaIds: null,
+    approvalMode: 'yolo',
     createdAt: '2026-09-18T10:00:00.000Z',
     lastUsedAt: null,
     revokedAt: null,
@@ -163,6 +171,46 @@ describe('ApiKeysSection', () => {
     expect(screen.queryByTestId('api-key-scope-specific')).not.toBeInTheDocument();
   });
 
+  it('create form defaults the mode to yolo and sends approval when chosen', async () => {
+    vi.mocked(useApiKeysQuery).mockReturnValue({
+      data: [],
+      isLoading: false,
+      isError: false,
+    } as never);
+    const mutateAsync = vi.fn().mockResolvedValue({
+      id: 'key-1',
+      name: 'Approval Agent',
+      key: 'pe_live_abcdef1234567890abcdef1234567890',
+      keyPrefix: 'pe_live_abcdef12...',
+      createdAt: '2026-09-18T10:00:00.000Z',
+    });
+    vi.mocked(useCreateApiKeyMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    renderSection();
+
+    fireEvent.click(screen.getByTestId('generate-api-key-btn'));
+    expect(screen.getByTestId('api-key-mode-yolo')).toBeChecked();
+    fireEvent.click(screen.getByTestId('api-key-mode-approval'));
+    fireEvent.change(screen.getByTestId('api-key-name-input'), { target: { value: 'Approval Agent' } });
+    fireEvent.click(screen.getByTestId('submit-create-key-btn'));
+
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalledWith({ name: 'Approval Agent', personaIds: null, approvalMode: 'approval' });
+    });
+  });
+
+  it('shows each key mode in the table', () => {
+    vi.mocked(useApiKeysQuery).mockReturnValue({
+      data: [makeKey(1), { ...makeKey(2), approvalMode: 'approval' as const }],
+      isLoading: false,
+      isError: false,
+    } as never);
+    renderSection();
+
+    expect(screen.getByText('Mode')).toBeInTheDocument();
+    expect(screen.getAllByText('Yolo')).toHaveLength(2);
+    expect(screen.getAllByText('Approval')).toHaveLength(2);
+  });
+
   it('closes the create form on cancel', () => {
     vi.mocked(useApiKeysQuery).mockReturnValue({
       data: [],
@@ -200,7 +248,7 @@ describe('ApiKeysSection', () => {
     fireEvent.click(screen.getByTestId('submit-create-key-btn'));
 
     await waitFor(() => {
-      expect(mutateAsync).toHaveBeenCalledWith({ name: 'CI Agent', personaIds: null });
+      expect(mutateAsync).toHaveBeenCalledWith({ name: 'CI Agent', personaIds: null, approvalMode: 'yolo' });
     });
     expect(await screen.findByTestId('api-key-created-banner')).toBeInTheDocument();
     expect(onKeyCreated).toHaveBeenCalledExactlyOnceWith('pe_live_abcdef1234567890abcdef1234567890');
@@ -319,7 +367,7 @@ describe('ApiKeysSection', () => {
     fireEvent.click(screen.getByTestId('submit-create-key-btn'));
 
     await waitFor(() => {
-      expect(mutateAsync).toHaveBeenCalledWith({ name: 'Scoped Agent', personaIds: null });
+      expect(mutateAsync).toHaveBeenCalledWith({ name: 'Scoped Agent', personaIds: null, approvalMode: 'yolo' });
     });
     expect(await screen.findByTestId('api-key-created-banner')).toBeInTheDocument();
   });

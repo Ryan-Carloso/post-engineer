@@ -54,6 +54,7 @@ describe('/api/api-keys endpoints', () => {
           name: 'OpenCode CLI',
           key_prefix: 'pe_live_abc12345...',
           persona_ids: null,
+          approval_mode: 'yolo',
           created_at: '2026-09-18T10:00:00.000Z',
           last_used_at: null,
           revoked_at: null,
@@ -63,6 +64,7 @@ describe('/api/api-keys endpoints', () => {
           name: 'Scoped Agent',
           key_prefix: 'pe_live_def67890...',
           persona_ids: ['11111111-1111-4111-8111-111111111111'],
+          approval_mode: 'approval',
           created_at: '2026-09-18T10:00:00.000Z',
           last_used_at: null,
           revoked_at: null,
@@ -88,7 +90,9 @@ describe('/api/api-keys endpoints', () => {
       expect(data.keys).toHaveLength(2);
       expect(data.keys[0].name).toBe('OpenCode CLI');
       expect(data.keys[0].personaIds).toBeNull();
+      expect(data.keys[0].approvalMode).toBe('yolo');
       expect(data.keys[1].personaIds).toEqual(['11111111-1111-4111-8111-111111111111']);
+      expect(data.keys[1].approvalMode).toBe('approval');
     });
   });
 
@@ -99,16 +103,17 @@ describe('/api/api-keys endpoints', () => {
     function mockSupabaseForCreate(ownedIds: string[]) {
       const insert = vi.fn().mockReturnValue({
         select: vi.fn().mockReturnValue({
-          single: vi.fn().mockResolvedValue({
+          single: vi.fn(async () => ({
             data: {
               id: 'key-new-id',
               name: 'My Custom Agent',
               key_prefix: 'pe_live_12345678...',
               persona_ids: ownedIds.length > 0 ? ownedIds : null,
+              approval_mode: (insert.mock.calls[0]?.[0] as { approval_mode?: string } | undefined)?.approval_mode ?? 'yolo',
               created_at: '2026-09-18T10:00:00.000Z',
             },
             error: null,
-          }),
+          })),
         }),
       });
       const mockSupabase = {
@@ -193,6 +198,68 @@ describe('/api/api-keys endpoints', () => {
       expect(insert).toHaveBeenCalledWith(
         expect.objectContaining({ persona_ids: [PERSONA_A, PERSONA_B] }),
       );
+    });
+
+    it('creates an approval-mode key when approvalMode is approval', async () => {
+      vi.mocked(requireSupabaseSession).mockResolvedValue({
+        auth: { userId: 'user-1', accessToken: 'token' },
+        error: null,
+      });
+      const { insert } = mockSupabaseForCreate([]);
+
+      const request = new Request('http://localhost:3434/api/api-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Approval Agent', approvalMode: 'approval' }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(201);
+      const data = await response.json();
+      expect(data.success).toBe(true);
+      expect(data.approvalMode).toBe('approval');
+      expect(insert).toHaveBeenCalledWith(
+        expect.objectContaining({ approval_mode: 'approval' }),
+      );
+    });
+
+    it('defaults the mode to yolo when approvalMode is absent', async () => {
+      vi.mocked(requireSupabaseSession).mockResolvedValue({
+        auth: { userId: 'user-1', accessToken: 'token' },
+        error: null,
+      });
+      const { insert } = mockSupabaseForCreate([]);
+
+      const request = new Request('http://localhost:3434/api/api-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Plain Agent' }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(201);
+      expect(insert).toHaveBeenCalledWith(
+        expect.objectContaining({ approval_mode: 'yolo' }),
+      );
+    });
+
+    it('rejects an unknown approvalMode', async () => {
+      vi.mocked(requireSupabaseSession).mockResolvedValue({
+        auth: { userId: 'user-1', accessToken: 'token' },
+        error: null,
+      });
+      mockSupabaseForCreate([]);
+
+      const request = new Request('http://localhost:3434/api/api-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Weird Agent', approvalMode: 'sometimes' }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(400);
+      const data = await response.json();
+      expect(data.success).toBe(false);
     });
 
     it('rejects personaIds from another user', async () => {
