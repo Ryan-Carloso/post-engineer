@@ -8,7 +8,7 @@ import {
 
 const FORBIDDEN_DESCRIPTION_WORDS = [
   'nude', 'naked', 'topless', 'lingerie', 'bikini', 'underwear', 'thong', 'revealing', 'sheer', 'transparent',
-  'see-through', 'sexy', 'sexual', 'erotic', 'swimsuit', 'cleavage',
+  'see-through', 'sexy', 'sexual', 'erotic', 'swimsuit', 'swimwear', 'swim', 'bathing', 'cleavage',
 ];
 
 describe('card styles', () => {
@@ -37,7 +37,7 @@ describe('card styles', () => {
     const card = {
       version: 1,
       identity: { body: { height: 'tall' } },
-      defaults: { outfit: { top: `${label}, ${description}`.slice(0, 80) } },
+      defaults: { outfit: { top: `${label}, ${description}` } },
     };
     expect(parseIdentityCardValue(card).ok).toBe(true);
     const scene = { pose: description, setting: label, lighting: 'studio', framing: 'waist_up' };
@@ -45,9 +45,9 @@ describe('card styles', () => {
   });
 
   it('pins the safe wording of the styles that could drift toward revealing clothes', () => {
-    expect(STYLE_PROMPT.sensual).toEqual({ label: 'sensual', description: 'fitted, elegant, confident' });
-    expect(STYLE_PROMPT.beach).toEqual({ label: 'beachwear', description: 'linen, sundress, no swimwear' });
-    expect(STYLE_PROMPT.party).toEqual({ label: 'party', description: 'festive evening outfit, no swimwear' });
-    expect(STYLE_PROMPT.glamorous).toEqual({ label: 'glamorous', description: 'polished evening look, no swimwear' });
+    expect(STYLE_PROMPT.sensual).toEqual({ label: 'sensual', description: 'fitted, elegant, confident, fully covered' });
+    expect(STYLE_PROMPT.beach).toEqual({ label: 'beachwear', description: 'linen shirt, sundress, covered resort wear' });
+    expect(STYLE_PROMPT.party).toEqual({ label: 'party', description: 'festive cocktail outfit' });
+    expect(STYLE_PROMPT.glamorous).toEqual({ label: 'glamorous', description: 'polished evening gown or tailored suit' });
   });
 });
