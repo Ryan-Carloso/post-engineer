@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mentionsIdentity } from '@/lib/contracts/persona-identity-card-filter';
+import { mentionsAny, mentionsIdentity, SEXUALISED_WORDS } from '@/lib/contracts/persona-identity-card-filter';
 import { parseIdentityCardValue, parseSceneValue } from '@/lib/contracts/persona-identity-card';
 import { FIXTURE_SCENE } from '@/test/identity-card-fixtures';
 
@@ -206,6 +206,145 @@ describe('scene filter for the v2 identity words', () => {
 
   it.each(['long-leg jeans', 'short-leg trousers', 'bare-leg jeans'])(
     'still rejects the hyphenated body descriptor "%s" in an outfit slot',
+    (text) => {
+      expect(parseSceneValue({ ...FIXTURE_SCENE, outfit: { bottom: text } }).ok).toBe(false);
+    },
+  );
+
+  it.each([
+    'her leg',
+    'the leg',
+    'my leg',
+    'showing leg',
+    'lifting leg',
+    'crossing leg',
+    'bending leg',
+    'raising leg',
+  ])('rejects the pronoun or verb phrase "%s" in an outfit slot', (text) => {
+    expect(parseSceneValue({ ...FIXTURE_SCENE, outfit: { bottom: text } }).ok).toBe(false);
+  });
+
+  it.each([
+    'longer leg',
+    'longest leg',
+    'shorter leg',
+    'thinner leg',
+    'taller leg',
+    'slender leg',
+    'lean leg',
+    'lithe leg',
+    'curvy leg',
+    'athletic leg',
+    'sculpted leg',
+    'flabby leg',
+    'graceful leg',
+    'delicate leg',
+    'longish leg',
+    'barefoot leg',
+    'inflamed leg',
+    'bruised leg',
+    'sprained leg',
+    'fractured leg',
+    'twisted leg',
+    'veiny leg',
+    'scaly leg',
+    'wrinkled leg',
+  ])('rejects the comparative or synonym phrase "%s" in an outfit slot', (text) => {
+    expect(parseSceneValue({ ...FIXTURE_SCENE, outfit: { bottom: text } }).ok).toBe(false);
+  });
+
+  it.each(['tattooed leg', 'freckled leg', 'bearded leg', 'tattooed-leg jeans'])(
+    'rejects the identity-first phrase "%s" in an outfit slot',
+    (text) => {
+      expect(parseSceneValue({ ...FIXTURE_SCENE, outfit: { bottom: text } }).ok).toBe(false);
+    },
+  );
+
+  it.each(['sexy leg', 'sheer leg', 'revealing leg', 'transparent leg'])(
+    'rejects the sexualised phrase "%s" in an outfit slot',
+    (text) => {
+      expect(parseSceneValue({ ...FIXTURE_SCENE, outfit: { bottom: text } }).ok).toBe(false);
+    },
+  );
+
+  it.each(['sexy leg', 'sheer leg', 'revealing leg', 'transparent leg'])(
+    'still flags the sexualised word in "%s" instead of stripping it away',
+    (text) => {
+      expect(mentionsAny(text, SEXUALISED_WORDS)).toBe(true);
+      expect(mentionsIdentity(text)).toBe(true);
+    },
+  );
+
+  it('rejects "her leg in the frame" in a scene setting', () => {
+    expect(parseSceneValue({ ...FIXTURE_SCENE, setting: 'her leg in the frame' }).ok).toBe(false);
+  });
+
+  it.each(['her long leg', 'the left leg', 'her bare leg', 'very long leg', 'more muscular leg', 'long left leg'])(
+    'still rejects the multi-word body description "%s" in an outfit slot',
+    (text) => {
+      expect(parseSceneValue({ ...FIXTURE_SCENE, outfit: { bottom: text } }).ok).toBe(false);
+    },
+  );
+
+  it.each(['long legs', 'tattooed legs'])(
+    'still rejects the plural body description "%s" in an outfit slot',
+    (text) => {
+      expect(parseSceneValue({ ...FIXTURE_SCENE, outfit: { bottom: text } }).ok).toBe(false);
+    },
+  );
+
+  it.each(['cargo-leg jeans', 'full-leg trousers', 'slimfit-leg jeans'])(
+    'rejects the non-lexicon cut "%s" in an outfit slot',
+    (text) => {
+      expect(parseSceneValue({ ...FIXTURE_SCENE, outfit: { bottom: text } }).ok).toBe(false);
+    },
+  );
+
+  it.each(['hip bags', 'hip huggers', 'hip pockets', 'hip belts', 'hip yokes', 'hip seams'])(
+    'accepts the plural garment "%s" in an outfit slot',
+    (text) => {
+      expect(parseSceneValue({ ...FIXTURE_SCENE, outfit: { bottom: text } }).ok).toBe(true);
+    },
+  );
+
+  it.each(['hip bags', 'hip huggers', 'hip pockets', 'hip belts', 'hip yokes', 'hip seams'])(
+    'accepts the plural garment "%s" in a default outfit slot',
+    (text) => {
+      const result = parseIdentityCardValue({
+        version: 2,
+        identity: { face: { eyes: 'green' } },
+        defaults: { outfit: { bottom: text } },
+      });
+      expect(result.ok).toBe(true);
+    },
+  );
+
+  it.each([
+    'ear cuffs',
+    'eye masks',
+    'hair clips',
+    'hair ties',
+    'hairpins',
+    'ear muff',
+    'leg warmer',
+    'arm warmer',
+  ])('accepts the plural or singular accessory "%s" in an accessories slot', (text) => {
+    expect(mentionsIdentity(text)).toBe(false);
+    expect(parseSceneValue({ ...FIXTURE_SCENE, outfit: { accessories: text } }).ok).toBe(true);
+  });
+
+  it.each([
+    'leg press',
+    'leg curl',
+    'leg press at the gym',
+    'leg curls at the gym',
+    'doing leg press at the gym',
+  ])('accepts the bare exercise phrase "%s" in a scene setting', (text) => {
+    expect(parseSceneValue({ ...FIXTURE_SCENE, setting: text }).ok).toBe(true);
+  });
+
+  it.each(['leg press', 'leg curl'])(
+    'still rejects the scene-only phrase "%s" in an outfit slot',
     (text) => {
       expect(parseSceneValue({ ...FIXTURE_SCENE, outfit: { bottom: text } }).ok).toBe(false);
     },
