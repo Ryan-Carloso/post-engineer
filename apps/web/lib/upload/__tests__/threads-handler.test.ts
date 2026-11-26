@@ -109,7 +109,8 @@ describe('handleThreadsUpload', () => {
   it('logs a failed permalink read without failing the publish', async () => {
     await handleThreadsUpload(formData(), 'user-1');
     const { onPermalinkError } = vi.mocked(publishThreadsMedia).mock.calls[0][0];
-    onPermalinkError(new Error('THREADS_PERMALINK_FAILED: nope'));
+    expect(typeof onPermalinkError).toBe('function');
+    onPermalinkError?.(new Error('THREADS_PERMALINK_FAILED: nope'));
     expect(logger.warn).toHaveBeenCalledWith('upload-content/threads: permalink read failed', {
       accountId: '42',
       error: 'Error: THREADS_PERMALINK_FAILED: nope',
