@@ -1,7 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { actionDescription, actionShape, byAction } from './action-tool.js';
 import type { PostEngineerClient } from './client.js';
-import { withRecipeNudge, type RecipeSession } from './recipe-session.js';
 import { DESTRUCTIVE, READ_ONLY } from './tool-annotations.js';
 import { POINTER_POSTS_SCHEDULES } from './server-instructions.js';
 import {
@@ -18,15 +17,12 @@ import {
   GetSlotShape,
   ListPostsShape,
   ListSchedulesShape,
-  ListTokenTransactionsShape,
   UpdateSlotTitleShape,
   handleCancelSchedule,
   handleDeleteSlot,
   handleGetSlot,
   handleListSchedules,
-  handleListTokenTransactions,
   handleUpdateSlotTitle,
-  handleGetTokenBalance,
 } from './tools.js';
 import {
   GetLast24hMetricsShape,
@@ -59,13 +55,11 @@ const INSIGHTS_SPECS = {
   share_link_revoke: RevokeShareLinkShape,
 };
 
-const BILLING_SPECS = { balance: {}, transactions: ListTokenTransactionsShape };
-
-export function registerLibraryTools(server: McpServer, client: PostEngineerClient, session: RecipeSession): void {
+export function registerLibraryTools(server: McpServer, client: PostEngineerClient): void {
   server.tool(
     'schedules',
     actionDescription(
-      `Your scheduled videos (future slots). list: the schedules. get_slot / update_slot_title / delete_slot: one slot of a schedule. cancel: cancels a whole schedule: unpublished slots are removed, but only slots whose generation never ran get their prepaid tokens back (a generating or ready slot keeps its charge); a post already publishing or published is not recalled; a cancelled video of a discounted batch returns the discount the batch no longer earns. ${POINTER_POSTS_SCHEDULES}`,
+      `Your scheduled posts (future slots). list: the schedules. get_slot / update_slot_title / delete_slot: one slot of a schedule. cancel: cancels a whole schedule: unpublished slots are removed; a post already publishing or published is not recalled. ${POINTER_POSTS_SCHEDULES}`,
       SCHEDULES_SPECS,
     ),
     actionShape(SCHEDULES_SPECS),
@@ -85,7 +79,7 @@ export function registerLibraryTools(server: McpServer, client: PostEngineerClie
 
   server.tool(
     'posts',
-    actionDescription(`Your published and scheduled posts. list: the recent posts with their status and links. get: one post by slot id or generation id, with its publish results. ${POINTER_POSTS_SCHEDULES}`, POSTS_SPECS),
+    actionDescription(`Your published and scheduled posts. list: the recent posts with their status and links. get: one post by slot id, with its publish results. ${POINTER_POSTS_SCHEDULES}`, POSTS_SPECS),
     actionShape(POSTS_SPECS),
     READ_ONLY,
     byAction(
@@ -114,21 +108,6 @@ export function registerLibraryTools(server: McpServer, client: PostEngineerClie
       },
       INSIGHTS_SPECS,
       'insights',
-    ),
-  );
-
-  server.tool(
-    'billing',
-    actionDescription('Your prepaid tokens. balance: the current balance. transactions: the ledger of spends and credits, newest first.', BILLING_SPECS),
-    actionShape(BILLING_SPECS),
-    READ_ONLY,
-    byAction(
-      {
-        balance: withRecipeNudge(session, 'billing_balance', async () => handleGetTokenBalance(client)),
-        transactions: async (args) => handleListTokenTransactions(client, args),
-      },
-      BILLING_SPECS,
-      'billing',
     ),
   );
 }

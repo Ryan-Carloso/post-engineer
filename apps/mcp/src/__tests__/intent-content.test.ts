@@ -3,7 +3,6 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createPostEngineerMcpServer } from '../index.js';
 import type { PostEngineerClient } from '../client.js';
-import { IMAGE_AS_SHORT_NOTE } from '../contracts/providers.js';
 
 vi.mock('../analytics.js', async (importOriginal) => {
   const original = await importOriginal<typeof import('../analytics.js')>();
@@ -30,12 +29,9 @@ async function publishVideoDescription(transport: 'stdio' | 'http'): Promise<str
 }
 
 describe('publish_video description', () => {
-  it.each(['stdio', 'http'] as const)('lists YouTube as an image network and says why the image becomes a Short (%s)', async (transport) => {
+  it.each(['stdio', 'http'] as const)('lists the image networks and leaves YouTube out of them (%s)', async (transport) => {
     const description = await publishVideoDescription(transport);
-    expect(description).toContain('images: youtube/instagram/bluesky/linkedin/threads/facebook/pinterest/telegram;');
-    expect(description).toContain(IMAGE_AS_SHORT_NOTE);
-    expect(IMAGE_AS_SHORT_NOTE).toContain('https://developers.google.com/youtube/data/reference/rest/v3/posts');
-    expect(IMAGE_AS_SHORT_NOTE).toContain('GA planned for 2027');
-    expect(IMAGE_AS_SHORT_NOTE).toContain('8-second vertical Short');
+    expect(description).toContain('images: instagram/bluesky/linkedin/threads/facebook/pinterest/telegram only; YouTube and the other networks take video');
+    expect(description).not.toContain('Short');
   });
 });

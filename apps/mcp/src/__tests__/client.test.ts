@@ -1,12 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { connectTelegramAccount } from '../client-telegram.js';
-import {
-  PostEngineerClient,
-  MAX_LIBRARY_IMAGE_BYTES,
-  MAX_LIBRARY_TAG_LENGTH,
-  MAX_LIBRARY_DESCRIPTION_LENGTH,
-} from '../client.js';
-import { ImageTooLargeError } from '../errors.js';
+import { PostEngineerClient } from '../client.js';
 
 describe('PostEngineerClient', () => {
   let client: PostEngineerClient;
@@ -16,127 +10,6 @@ describe('PostEngineerClient', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     client = new PostEngineerClient({ apiKey });
-  });
-
-  it('creates persona successfully', async () => {
-    const mockResponse = {
-      success: true,
-      personaId: 'persona-123',
-      imageIds: [],
-    };
-
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify(mockResponse),
-    });
-
-    const result = await client.createPersona({
-      accounts: { youtube: ['acct-1'] },
-      name: 'Tech Creator',
-      avatarUrl: 'https://example.com/avatar.png',
-      voiceId: 'voice-alloy',
-      language: 'pt-BR',
-      videoAspect: '9:16',
-      scriptPrompt: 'Create tech reviews',
-      niche: 'Technology',
-    });
-
-    expect(global.fetch).toHaveBeenCalledWith(
-      `${baseUrl}/api/persona`,
-      expect.objectContaining({
-        method: 'POST',
-        headers: expect.objectContaining({
-          Authorization: `Bearer ${apiKey}`,
-        }),
-      })
-    );
-    const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
-    expect(request?.body).toBeInstanceOf(FormData);
-    const formData = request?.body as FormData;
-    expect(formData.get('name')).toBe('Tech Creator');
-    expect(formData.get('avatarUrl')).toBe('https://example.com/avatar.png');
-    expect(formData.get('personaMode')).toBeNull();
-    expect(formData.get('faceMixPercent')).toBeNull();
-    expect(formData.get('faceQuality')).toBe('very_good');
-    expect(new Headers(request?.headers).get('content-type')).toBeNull();
-    expect(result).toEqual(mockResponse);
-  });
-
-  it('createPersona sends the CTA intent as flat fields (issue #639)', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify({ success: true, personaId: 'persona-123', imageIds: [] }),
-    });
-
-    await client.createPersona({
-      accounts: { youtube: ['acct-1'] },
-      name: 'Tech Creator',
-      avatarUrl: 'https://example.com/avatar.png',
-      voiceId: 'voice-alloy',
-      cta: { type: 'link', url: 'https://example.com/course' },
-    });
-
-    const formData = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
-    expect(formData.get('ctaType')).toBe('link');
-    expect(formData.get('ctaUrl')).toBe('https://example.com/course');
-    expect(formData.get('ctaInstruction')).toBeNull();
-  });
-
-  it('createPersona omits CTA fields when no cta is given', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify({ success: true, personaId: 'persona-123', imageIds: [] }),
-    });
-
-    await client.createPersona({
-      accounts: { youtube: ['acct-1'] },
-      name: 'Tech Creator',
-      avatarUrl: 'https://example.com/avatar.png',
-      voiceId: 'voice-alloy',
-    });
-
-    const formData = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
-    expect(formData.has('ctaType')).toBe(false);
-    expect(formData.has('ctaUrl')).toBe(false);
-    expect(formData.has('ctaInstruction')).toBe(false);
-  });
-
-  it('rejects a malformed create 200 without imageIds', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify({ success: true, personaId: 'persona-123' }),
-    });
-    await expect(
-      client.createPersona({
-        accounts: { youtube: ['acct-1'] },
-        name: 'Tech Creator',
-        avatarUrl: 'https://example.com/avatar.png',
-        voiceId: 'voice-alloy',
-      }),
-    ).rejects.toThrow('Malformed response from POST /api/persona');
-  });
-
-  it('createPersona sends the binding as publishingAccounts JSON (issue #572)', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify({ success: true, personaId: 'persona-123', imageIds: [] }),
-    });
-
-    await client.createPersona({
-      accounts: { youtube: ['acct-1'] },
-      name: 'Tech Creator',
-      avatarUrl: 'https://example.com/avatar.png',
-      voiceId: 'voice-alloy',
-    });
-
-    const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
-    const formData = request?.body as FormData;
-    expect(JSON.parse(String(formData.get('publishingAccounts')))).toEqual({ youtube: ['acct-1'] });
   });
 
   it.each([
@@ -156,44 +29,7 @@ describe('PostEngineerClient', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it('createPersona defaults the hook layout to standard', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify({ success: true, personaId: 'persona-123', imageIds: [] }),
-    });
-
-    await client.createPersona({
-      accounts: { youtube: ['acct-1'] },
-      name: 'No Layout',
-      avatarUrl: 'https://example.com/avatar.png', voiceId: 'chatterbox:en_us_male_01',
-    });
-
-    const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
-    const formData = request?.body as FormData;
-    expect(formData.get('videoLayout')).toBe('standard');
-  });
-
-  it('createPersona forwards an explicit react layout', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify({ success: true, personaId: 'persona-123', imageIds: [] }),
-    });
-
-    await client.createPersona({
-      accounts: { youtube: ['acct-1'] },
-      name: 'Reacts',
-      avatarUrl: 'https://example.com/avatar.png', voiceId: 'chatterbox:en_us_male_01',
-      videoLayout: 'react',
-    });
-
-    const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
-    const formData = request?.body as FormData;
-    expect(formData.get('videoLayout')).toBe('react');
-  });
-
-  it('updatePersona omits the layout when the caller does not provide one', async () => {
+  it('updatePersona sends only the given name', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -204,70 +40,37 @@ describe('PostEngineerClient', () => {
 
     const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
     const formData = request?.body as FormData;
-    expect(formData.has('videoLayout')).toBe(false);
+    expect([...formData.keys()]).toEqual(['name']);
   });
 
-  it('updatePersona sends the layout when provided', async () => {
+  it('createPersona posts the name and the binding with no photo when no avatarPath is given', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true, personaId: 'persona-123' }),
+    });
+
+    const result = await client.createPersona({ accounts: { youtube: ['acct-1'] }, name: 'No Photo' });
+
+    expect(global.fetch).toHaveBeenCalledWith(`${baseUrl}/api/persona`, expect.objectContaining({ method: 'POST' }));
+    const formData = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
+    expect(formData.get('name')).toBe('No Photo');
+    expect(JSON.parse(String(formData.get('publishingAccounts')))).toEqual({ youtube: ['acct-1'] });
+    expect(formData.has('photo')).toBe(false);
+    expect([...formData.keys()].sort()).toEqual(['name', 'publishingAccounts']);
+    expect(result).toEqual({ success: true, personaId: 'persona-123' });
+  });
+
+  it('rejects a malformed create 200 without a personaId', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
       text: async () => JSON.stringify({ success: true }),
     });
-
-    await client.updatePersona({ personaId: 'p-1', videoLayout: 'react' });
-
-    const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
-    const formData = request?.body as FormData;
-    expect(formData.get('videoLayout')).toBe('react');
+    await expect(client.createPersona({ accounts: { youtube: ['acct-1'] }, name: 'X' })).rejects.toThrow(
+      'Malformed response from POST /api/persona',
+    );
   });
-
-  it('updatePersona sends faceQuality when provided and omits it otherwise', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify({ success: true }),
-    });
-
-    await client.updatePersona({ personaId: 'p-1', faceQuality: 'ok' });
-    const sent = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
-    expect(sent.get('faceQuality')).toBe('ok');
-
-    await client.updatePersona({ personaId: 'p-1', name: 'Renamed' });
-    const omitted = vi.mocked(global.fetch).mock.calls[1]?.[1]?.body as FormData;
-    expect(omitted.has('faceQuality')).toBe(false);
-  });
-
-  it('updatePersona sends only the provided CTA facts (issue #639)', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify({ success: true }),
-    });
-
-    await client.updatePersona({
-      personaId: 'p-1',
-      cta: { type: 'other', instruction: 'Invite to the WhatsApp group' },
-    });
-    const sent = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
-    expect(sent.get('ctaType')).toBe('other');
-    expect(sent.get('ctaInstruction')).toBe('Invite to the WhatsApp group');
-    expect(sent.has('ctaUrl')).toBe(false);
-
-    await client.updatePersona({ personaId: 'p-1', name: 'Renamed' });
-    const omitted = vi.mocked(global.fetch).mock.calls[1]?.[1]?.body as FormData;
-    expect(omitted.has('ctaType')).toBe(false);
-  });
-
-  it.each([undefined, null, ''])(
-    'createPersona rejects %p avatarUrl with no avatarPath before any fetch',
-    async (avatarUrl) => {
-      global.fetch = vi.fn();
-      await expect(
-        client.createPersona({ accounts: { youtube: ['acct-1'] }, name: 'No Face', avatarUrl } as never),
-      ).rejects.toThrow(/avatarUrl or avatarPath is required/);
-      expect(global.fetch).not.toHaveBeenCalled();
-    },
-  );
 
   it('lists personas successfully', async () => {
     const emptyAccounts = {
@@ -286,8 +89,8 @@ describe('PostEngineerClient', () => {
     const mockList = {
       authenticated: true,
       personas: [
-        { id: 'p1', name: 'Persona 1', createdAt: '2026-01-01T00:00:00Z', hookPanel: true, boundAccounts: emptyAccounts },
-        { id: 'p2', name: 'Persona 2', createdAt: '2026-01-02T00:00:00Z', hookPanel: false, boundAccounts: emptyAccounts },
+        { id: 'p1', name: 'Persona 1', createdAt: '2026-01-01T00:00:00Z', boundAccounts: emptyAccounts },
+        { id: 'p2', name: 'Persona 2', createdAt: '2026-01-02T00:00:00Z', boundAccounts: emptyAccounts },
       ],
     };
 
@@ -321,180 +124,6 @@ describe('PostEngineerClient', () => {
     );
   });
 
-  it('lists voices successfully', async () => {
-    const mockVoices = {
-      voices: [
-        {
-          id: 'calm',
-          label: 'Calm',
-          provider: 'kokoro',
-          gender: 'female',
-          accent: 'us',
-          kind: 'standard',
-          description: 'A calm voice.',
-        },
-        {
-          id: 'energetic',
-          label: 'Energetic',
-          provider: 'phonon',
-          gender: 'male',
-          accent: 'gb',
-          kind: 'character',
-          description: null,
-        },
-      ],
-    };
-
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify(mockVoices),
-    });
-
-    const result = await client.listVoices();
-    expect(global.fetch).toHaveBeenCalledWith(
-      `${baseUrl}/api/persona/voices`,
-      expect.objectContaining({
-        method: 'GET',
-        headers: expect.objectContaining({
-          Authorization: `Bearer ${apiKey}`,
-        }),
-      })
-    );
-    expect(result).toEqual(mockVoices);
-  });
-
-  it('throws when listing voices fails', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: false, headers: new Headers(),
-      status: 502,
-      text: async () => 'Voices unavailable.',
-    });
-
-    await expect(client.listVoices()).rejects.toThrow(/Failed to list voices: 502/);
-  });
-
-  it('rejects a malformed voices 200 with a partial entry', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify({ voices: [{ id: 'calm' }] }),
-    });
-
-    await expect(client.listVoices()).rejects.toThrow(
-      'Malformed response from GET /api/persona/voices',
-    );
-  });
-
-
-  it('lists faces successfully', async () => {
-    const mockFaces = {
-      faces: [
-        {
-          id: 'file-1',
-          url: 'https://post-engineer.com/caracter-samples/file-1.png',
-          name: 'Character 1',
-          gender: 'female',
-          age: 23,
-          ethnicity: 'White',
-          hair: 'shoulder-length wavy blonde',
-          description: 'Young blonde woman with light eyes, smiling in a casual selfie wearing a white tank top.',
-        },
-      ],
-    };
-
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify(mockFaces),
-    });
-
-    const result = await client.listFaces();
-    expect(global.fetch).toHaveBeenCalledWith(
-      `${baseUrl}/api/persona/faces`,
-      expect.objectContaining({
-        method: 'GET',
-        headers: expect.objectContaining({
-          Authorization: `Bearer ${apiKey}`,
-        }),
-      })
-    );
-    expect(result).toEqual(mockFaces);
-  });
-
-  it('rejects a malformed faces 200 with a partial entry', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify({ faces: [{ id: 'file-1', url: 'https://example.test/f1.png' }] }),
-    });
-    await expect(client.listFaces()).rejects.toThrow(
-      'Malformed response from GET /api/persona/faces',
-    );
-  });
-
-  it('throws when listing faces fails', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: false, headers: new Headers(),
-      status: 502,
-      text: async () => 'Faces unavailable.',
-    });
-
-    await expect(client.listFaces()).rejects.toThrow(/Failed to list faces: 502/);
-  });
-
-  it('updates persona with only provided fields as multipart', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify(({ success: true })),
-    });
-
-    const result = await client.updatePersona({ personaId: 'persona-123', voiceId: 'energetic' });
-
-    expect(global.fetch).toHaveBeenCalledWith(
-      `${baseUrl}/api/persona?personaId=persona-123`,
-      expect.objectContaining({
-        method: 'PATCH',
-        headers: expect.objectContaining({
-          Authorization: `Bearer ${apiKey}`,
-        }),
-      })
-    );
-    const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
-    expect(request?.body).toBeInstanceOf(FormData);
-    const formData = request?.body as FormData;
-    expect(formData.get('voiceId')).toBe('energetic');
-    expect(formData.get('name')).toBeNull();
-    expect(new Headers(request?.headers).get('content-type')).toBeNull();
-    expect(result).toEqual({ success: true });
-  });
-
-  it('rejects a malformed update 200 with a false success flag', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify({ success: false }),
-    });
-    await expect(client.updatePersona({ personaId: 'persona-123', voiceId: 'energetic' })).rejects.toThrow(
-      'Malformed response from PATCH /api/persona',
-    );
-  });
-
-  it('updatePersona omits empty-string avatarUrl (consistent with createPersona voiceover mode)', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify(({ success: true })),
-    });
-
-    const result = await client.updatePersona({ personaId: 'persona-123', avatarUrl: '' });
-
-    const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
-    const formData = request?.body as FormData;
-    expect(formData.has('avatarUrl')).toBe(false);
-    expect(result).toEqual({ success: true });
-  });
 
   it('throws when updating persona fails', async () => {
     global.fetch = vi.fn().mockResolvedValue({
@@ -596,17 +225,11 @@ describe('PostEngineerClient', () => {
         {
           id: 'up-1',
           slot_at: '2026-09-24T10:00:00Z',
-          status: 'awaiting',
+          status: 'ready',
           title: 'Next',
           error: null,
           published_at: null,
           schedule_id: 's1',
-          task_id: null,
-          progress: 0,
-          stage: null,
-          queuePosition: null,
-          queueTotal: null,
-          retryable: null,
           postUrl: null,
         },
       ],
@@ -619,12 +242,6 @@ describe('PostEngineerClient', () => {
           error: null,
           published_at: '2026-09-20T10:05:00Z',
           schedule_id: 's1',
-          task_id: 'task-1',
-          progress: 100,
-          stage: 'done',
-          queuePosition: null,
-          queueTotal: null,
-          retryable: null,
           postUrl: 'https://post-engineer.com/posts/re-1',
         },
       ],
@@ -701,20 +318,12 @@ describe('PostEngineerClient', () => {
         id: 'slot-1',
         scheduleId: 'sched-1',
         slotAt: '2026-10-10T20:00:00Z',
-        status: 'awaiting',
+        status: 'ready',
         title: 'Hello',
-        taskId: null,
-        progress: 0,
-        stage: null,
         error: null,
         publishedAt: null,
         postUrl: null,
         publishLinks: [],
-        progressHistory: [],
-        scriptAngle: null,
-        retryable: null,
-        queuePosition: null,
-        queueTotal: null,
         userNotices: [],
         providerFailures: [],
       },
@@ -738,16 +347,6 @@ describe('PostEngineerClient', () => {
         publishMode: 'scheduled',
       },
       persona: null,
-      generation: {
-        voiceover: true,
-        language: null,
-        voiceId: null,
-        videoAspect: '9:16',
-        videoLayout: null,
-        niche: null,
-        paragraphNumber: null,
-        faceQuality: null,
-      },
     };
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -798,146 +397,6 @@ describe('PostEngineerClient', () => {
     );
   });
 
-  it('gets the token balance successfully', async () => {
-    const mockBalance = { success: true, balance: 8, free: 3 };
-
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify(mockBalance),
-    });
-
-    const result = await client.getTokenBalance();
-    expect(global.fetch).toHaveBeenCalledWith(
-      `${baseUrl}/api/billing/tokens`,
-      expect.objectContaining({ method: 'GET' })
-    );
-    expect(result).toEqual(mockBalance);
-  });
-
-  it('lists video generations with an optional limit', async () => {
-    const mockHistory = {
-      success: true,
-      generations: [
-        {
-          id: 'row-1',
-          generationId: 'gen-1',
-          engineTaskId: 'task-1',
-          personaName: 'Ava',
-          videoSubject: 'Launch day',
-          status: 'completed',
-          errorCode: null,
-          tokensRefunded: false,
-          createdAt: '2026-10-08T10:00:00Z',
-          completedAt: '2026-10-08T10:05:00Z',
-        },
-      ],
-    };
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify(mockHistory),
-    });
-
-    const result = await client.listVideoGenerations(10);
-    expect(global.fetch).toHaveBeenCalledWith(
-      `${baseUrl}/api/persona/video-generations?limit=10`,
-      expect.objectContaining({ method: 'GET' })
-    );
-    expect(result).toEqual(mockHistory);
-
-    await client.listVideoGenerations();
-    expect(global.fetch).toHaveBeenCalledWith(
-      `${baseUrl}/api/persona/video-generations`,
-      expect.objectContaining({ method: 'GET' })
-    );
-  });
-
-  it('fails fast on an out-of-range generations limit without fetching', async () => {
-    global.fetch = vi.fn();
-    await expect(client.listVideoGenerations(0)).rejects.toThrow(/limit must be an integer between 1 and 200/);
-    await expect(client.listVideoGenerations(201)).rejects.toThrow(/limit must be an integer between 1 and 200/);
-    await expect(client.listVideoGenerations(1.5)).rejects.toThrow(/limit must be an integer between 1 and 200/);
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
-  it('gets one video generation by id', async () => {
-    const mockGeneration = {
-      success: true,
-      generation: {
-        id: 'row-1',
-        generationId: 'gen-1',
-        engineTaskId: 'task-1',
-        personaName: 'Ava',
-        videoSubject: 'Launch day',
-        status: 'completed',
-        errorCode: null,
-        tokensRefunded: false,
-        createdAt: '2026-10-08T10:00:00Z',
-        completedAt: '2026-10-08T10:05:00Z',
-      },
-    };
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify(mockGeneration),
-    });
-
-    const result = await client.getVideoGeneration('gen-1');
-    expect(global.fetch).toHaveBeenCalledWith(
-      `${baseUrl}/api/persona/video-generations/gen-1`,
-      expect.objectContaining({ method: 'GET' })
-    );
-    expect(result).toEqual(mockGeneration);
-  });
-
-  it('lists token transactions with limit and offset', async () => {
-    const mockLedger = {
-      success: true,
-      transactions: [
-        {
-          id: 'tx-1',
-          amount: -1,
-          type: 'spend',
-          description: 'Video generation',
-          reason: 'generation_completed',
-          generationId: 'gen-1',
-          createdAt: '2026-10-08T10:00:00Z',
-        },
-      ],
-      total: 42,
-      limit: 20,
-      offset: 0,
-    };
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify(mockLedger),
-    });
-
-    const result = await client.listTokenTransactions(20, 40);
-    expect(global.fetch).toHaveBeenCalledWith(
-      `${baseUrl}/api/billing/transactions?limit=20&offset=40`,
-      expect.objectContaining({ method: 'GET' })
-    );
-    expect(result).toEqual(mockLedger);
-
-    await client.listTokenTransactions();
-    expect(global.fetch).toHaveBeenCalledWith(
-      `${baseUrl}/api/billing/transactions`,
-      expect.objectContaining({ method: 'GET' })
-    );
-  });
-
-  it('fails fast on out-of-range ledger paging without fetching', async () => {
-    global.fetch = vi.fn();
-    await expect(client.listTokenTransactions(0)).rejects.toThrow(/limit must be an integer between 1 and 100/);
-    await expect(client.listTokenTransactions(101)).rejects.toThrow(/limit must be an integer between 1 and 100/);
-    await expect(client.listTokenTransactions(20, -1)).rejects.toThrow(/offset must be a non-negative integer/);
-    await expect(client.listTokenTransactions(20, 1.5)).rejects.toThrow(/offset must be a non-negative integer/);
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
   it('gets a persona delete preview by persona id', async () => {
     const mockPreview = {
       success: true,
@@ -947,14 +406,7 @@ describe('PostEngineerClient', () => {
         upcomingSlots: 2,
         publishedSlots: 3,
         failedSlots: 0,
-        generatedVideos: 4,
-        personaImages: 5,
       },
-      videos: [
-        { taskId: 'task-1', title: 'Video 1', status: 'completed', downloadUrl: null },
-      ],
-      videosTruncated: false,
-      linksIncomplete: false,
     };
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -1030,506 +482,17 @@ describe('PostEngineerClient', () => {
     );
     expect(global.fetch).not.toHaveBeenCalled();
   });
-
-describe('generate and schedule video client', () => {
-  const baseUrl = 'https://post-engineer.com';
-  let client: PostEngineerClient;
-
-  const baseInput = {
-    personaId: 'persona-123',
-    title: 'Launch a SaaS in days',
-    description: 'Agent description.',
-    providers: ['youtube', 'bluesky'] as ('youtube' | 'bluesky')[],
-    youtubeAccountIds: ['chan-1'],
-    blueskyAccountIds: ['did:plc:abc'],
-    startAt: '2026-10-05T20:00:00',
-    times: ['20:00'],
-    timezone: 'Europe/Lisbon',
-    options: { videoType: 'hook_lipsync' as const },
-  };
-
-  const GENERATE_RESPONSE = {
-    success: true,
-    schedule: { id: 'sch-1', mode: 'scheduled' },
-    slots: [{ slotId: 'slot-1', slotAt: '2026-10-05T20:00:00Z', title: 'Launch a SaaS in days', taskId: 'task-1', status: 'scheduled' }],
-    replayed: false,
-  };
-  const VALIDATE_RESPONSE = {
-    success: true,
-    valid: true,
-    segmentCount: 1,
-    totalWords: 3,
-    hookWords: 3,
-    contentWords: 0,
-    mediaCount: 0,
-    hookWindowSeconds: { min: 8, max: 12 },
-    measuredDurationSeconds: null,
-    measured: 'pending',
-    measuredReason: 'No hook-only TTS endpoint exists yet, so the measured hook duration cannot be checked in this phase.',
-  };
-
-  beforeEach(() => {
-    client = new PostEngineerClient({ apiKey: 'test-token-123' });
-    global.fetch = vi.fn().mockImplementation(async (url: unknown) => ({
-      ok: true,
-      status: 200,
-      text: async () =>
-        JSON.stringify(String(url).includes('/api/videos/validate-script') ? VALIDATE_RESPONSE : GENERATE_RESPONSE),
-    }));
-  });
-
-  function requestBody(callIndex = 0): Record<string, unknown> {
-    const request = vi.mocked(global.fetch).mock.calls[callIndex]?.[1];
-    return JSON.parse(String(request?.body)) as Record<string, unknown>;
-  }
-
-  function lastRequestBody(): Record<string, unknown> {
-    const calls = vi.mocked(global.fetch).mock.calls;
-    return requestBody(calls.length - 1);
-  }
-
-  it('posts to the unified generate-and-schedule endpoint with the mapped body', async () => {
-    const result = await client.generatePersonaVideo(baseInput);
-
-    expect(global.fetch).toHaveBeenCalledWith(
-      `${baseUrl}/api/videos/generate-and-schedule`,
-      expect.objectContaining({
-        method: 'POST',
-        headers: expect.objectContaining({
-          Authorization: 'Bearer test-token-123',
-          'Content-Type': 'application/json',
-        }),
-      })
-    );
-    const body = lastRequestBody();
-    expect(body.personaId).toBe('persona-123');
-    expect(body.title).toBe('Launch a SaaS in days');
-    expect(body).not.toHaveProperty('topics');
-    expect(body.publishing).toEqual({
-      mode: 'scheduled',
-      providers: ['youtube', 'bluesky'],
-      accounts: { youtube: ['chan-1'], bluesky: ['did:plc:abc'] },
-      schedule: {
-        startAt: '2026-10-05T20:00:00',
-        times: ['20:00'],
-        timezone: 'Europe/Lisbon',
-      },
-    });
-    expect(result).toEqual(GENERATE_RESPONSE);
-  });
-
-  it('generatePersonaVideo forwards the per-video CTA override, including an explicit null (issue #639)', async () => {
-    await client.generatePersonaVideo({
-      ...baseInput,
-      cta: { type: 'comment' },
-      options: { videoType: 'hook_lipsync', segments: [{ kind: 'hook', text: 'Hook here.' }, { kind: 'content', text: 'What did you think?', cta: true }] },
-    });
-    expect(lastRequestBody().cta).toEqual({ type: 'comment' });
-
-    await client.generatePersonaVideo({ ...baseInput, cta: null });
-    expect(lastRequestBody().cta).toBeNull();
-
-    await client.generatePersonaVideo(baseInput);
-    expect(lastRequestBody()).not.toHaveProperty('cta');
-  });
-
-  it('posts segments to the validate-script endpoint and returns its payload', async () => {
-    const segments = [{ kind: 'hook', text: 'Hook text here.' }];
-    const result = await client.validateScript(segments);
-
-    expect(global.fetch).toHaveBeenCalledWith(
-      `${baseUrl}/api/videos/validate-script`,
-      expect.objectContaining({
-        method: 'POST',
-        headers: expect.objectContaining({
-          'Content-Type': 'application/json',
-        }),
-      })
-    );
-    expect(lastRequestBody().segments).toEqual(segments);
-    expect(lastRequestBody().videoType).toBe('hook_lipsync');
-    expect(result).toEqual(VALIDATE_RESPONSE);
-  });
-
-  it('reports a malformed generate 200 as an error instead of an empty result', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify({ success: true }),
-    });
-    await expect(client.generatePersonaVideo(baseInput)).rejects.toThrow(
-      'Malformed response from POST /api/videos/generate-and-schedule',
-    );
-  });
-
-  it('carries the voice-fallback warning objects the route returns', async () => {
-    const withWarnings = {
-      ...GENERATE_RESPONSE,
-      warnings: [{ code: 'voice_fallback_applied', fromVoice: '', toVoice: 'chatterbox:kokoro_af_heart' }],
-    };
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify(withWarnings),
-    });
-    const result = await client.generatePersonaVideo(baseInput);
-    expect(result).toEqual(withWarnings);
-  });
-
-  it('reports string warnings as a malformed generate 200', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify({ ...GENERATE_RESPONSE, warnings: ['voice_fallback_applied'] }),
-    });
-    await expect(client.generatePersonaVideo(baseInput)).rejects.toThrow(
-      'Malformed response from POST /api/videos/generate-and-schedule at warnings.0',
-    );
-  });
-
-  it('reports a malformed validate 200 as an error instead of an empty result', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify({ success: true }),
-    });
-    await expect(client.validateScript([{ kind: 'hook', text: 'Hook text here.' }])).rejects.toThrow(
-      'Malformed response from POST /api/videos/validate-script',
-    );
-  });
-
-  it('nests each provider account array under publishing.accounts', async () => {
-    await client.generatePersonaVideo({
-      ...baseInput,
-      instagramAccountIds: ['ig-1'],
-      linkedinAccountIds: ['li-1'],
-    });
-    const publishing = lastRequestBody().publishing as Record<string, unknown>;
-    expect(publishing.accounts).toEqual({
-      youtube: ['chan-1'],
-      bluesky: ['did:plc:abc'],
-      instagram: ['ig-1'],
-      linkedin: ['li-1'],
-    });
-  });
-
-  it('sends the agent-supplied description at the top level of the body', async () => {
-    await client.generatePersonaVideo({
-      ...baseInput,
-      description: 'Watch to the end.',
-    });
-    const body = lastRequestBody();
-    expect(body.description).toBe('Watch to the end.');
-  });
-
-  it('always sends description at the top level of the body (required, no fallback)', async () => {
-    await client.generatePersonaVideo(baseInput);
-    expect(lastRequestBody().description).toBe('Agent description.');
-  });
-
-  it('nests the threads and facebook account arrays under their own providers', async () => {
-    await client.generatePersonaVideo({
-      ...baseInput,
-      providers: ['threads', 'facebook'],
-      threadsAccountIds: ['th-1'],
-      facebookAccountIds: ['page-1', 'page-2'],
-    });
-    const publishing = lastRequestBody().publishing as Record<string, unknown>;
-    expect(publishing.accounts).toEqual({
-      youtube: ['chan-1'],
-      bluesky: ['did:plc:abc'],
-      threads: ['th-1'],
-      facebook: ['page-1', 'page-2'],
-    });
-    expect(publishing.providers).toEqual(['threads', 'facebook']);
-  });
-
-  it('nests the pinterest account array and board id under publishing', async () => {
-    await client.generatePersonaVideo({
-      ...baseInput,
-      providers: ['pinterest'],
-      pinterestAccountIds: ['user-9'],
-      pinterestBoardId: 'b1',
-    });
-    const publishing = lastRequestBody().publishing as Record<string, unknown>;
-    expect(publishing.accounts).toEqual({
-      youtube: ['chan-1'],
-      bluesky: ['did:plc:abc'],
-      pinterest: ['user-9'],
-    });
-    expect(publishing.providers).toEqual(['pinterest']);
-    expect(publishing.pinterestBoardId).toBe('b1');
-  });
-
-  it('nests the 3speak account array under its own provider', async () => {
-    await client.generatePersonaVideo({
-      ...baseInput,
-      providers: ['3speak'],
-      threespeakAccountIds: ['alice'],
-    });
-    const publishing = lastRequestBody().publishing as Record<string, unknown>;
-    expect(publishing.accounts).toEqual({
-      youtube: ['chan-1'],
-      bluesky: ['did:plc:abc'],
-      '3speak': ['alice'],
-    });
-    expect(publishing.providers).toEqual(['3speak']);
-  });
-
-  it('nests the rumble channel ids under their own provider', async () => {
-    await client.generatePersonaVideo({
-      ...baseInput,
-      providers: ['rumble'],
-      rumbleAccountIds: ['chan-1', 'chan-2'],
-    });
-    const publishing = lastRequestBody().publishing as Record<string, unknown>;
-    expect(publishing.accounts).toEqual({
-      youtube: ['chan-1'],
-      bluesky: ['did:plc:abc'],
-      rumble: ['chan-1', 'chan-2'],
-    });
-    expect(publishing.providers).toEqual(['rumble']);
-  });
-
-  it('nests the fanvue account array under its own provider', async () => {
-    await client.generatePersonaVideo({
-      ...baseInput,
-      providers: ['fanvue'],
-      fanvueAccountIds: ['fan-1'],
-    });
-    const publishing = lastRequestBody().publishing as Record<string, unknown>;
-    expect(publishing.accounts).toEqual({
-      youtube: ['chan-1'],
-      bluesky: ['did:plc:abc'],
-      fanvue: ['fan-1'],
-    });
-    expect(publishing.providers).toEqual(['fanvue']);
-  });
-
-  it('omits personaId entirely when the caller sends no persona', async () => {
-    const { personaId: _personaId, ...rest } = baseInput;
-    await client.generatePersonaVideo({
-      ...rest,
-      options: { videoType: 'voiceover', voiceId: 'calm', videoAspect: '16:9' },
-    });
-    const body = lastRequestBody();
-    expect('personaId' in body).toBe(false);
-    expect(body.options).toEqual({ videoType: 'voiceover', voiceId: 'calm', videoAspect: '16:9' });
-  });
-
-  it('sends an empty accounts record when no account arrays are provided', async () => {
-    const { youtubeAccountIds: _yt, blueskyAccountIds: _bsky, ...rest } = baseInput;
-    await client.generatePersonaVideo(rest);
-    const publishing = lastRequestBody().publishing as Record<string, unknown>;
-    expect(publishing.accounts).toEqual({});
-  });
-
-  it('defaults the schedule timezone to UTC when omitted', async () => {
-    const { timezone: _timezone, ...rest } = baseInput;
-    await client.generatePersonaVideo(rest);
-    const publishing = lastRequestBody().publishing as Record<string, unknown>;
-    expect((publishing.schedule as Record<string, unknown>).timezone).toBe('UTC');
-  });
-
-  it('forwards options and omits the key when options are absent', async () => {
-    await client.generatePersonaVideo({
-      ...baseInput,
-      options: { videoType: 'voiceover', voiceId: 'v-1' },
-    });
-    expect(lastRequestBody().options).toEqual({ videoType: 'voiceover', voiceId: 'v-1' });
-
-    const { options: _options, ...withoutOptions } = baseInput;
-    await client.generatePersonaVideo(withoutOptions);
-    expect('options' in lastRequestBody()).toBe(false);
-  });
-
-  it('forwards a caller-supplied idempotencyKey', async () => {
-    await client.generatePersonaVideo({ ...baseInput, idempotencyKey: 'key-123' });
-    expect(lastRequestBody().idempotencyKey).toBe('key-123');
-  });
-
-  it('generates a UUID idempotencyKey per call when omitted', async () => {
-    await client.generatePersonaVideo(baseInput);
-    const first = requestBody(0).idempotencyKey;
-    await client.generatePersonaVideo(baseInput);
-    const second = requestBody(1).idempotencyKey;
-    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    expect(first).toMatch(uuid);
-    expect(second).toMatch(uuid);
-    expect(first).not.toBe(second);
-  });
-
-  it("sends mode 'scheduled' explicitly by default", async () => {
-    await client.generatePersonaVideo(baseInput);
-    const publishing = lastRequestBody().publishing as Record<string, unknown>;
-    expect(publishing.mode).toBe('scheduled');
-  });
-
-  it("sends mode 'asap' with no schedule plan and a display timezone", async () => {
-    const { startAt: _startAt, times: _times, ...rest } = baseInput;
-    await client.generatePersonaVideo({ ...rest, mode: 'asap' });
-    const publishing = lastRequestBody().publishing as Record<string, unknown>;
-    expect(publishing).toEqual({
-      mode: 'asap',
-      providers: ['youtube', 'bluesky'],
-      accounts: { youtube: ['chan-1'], bluesky: ['did:plc:abc'] },
-      timezone: 'Europe/Lisbon',
-    });
-    expect('schedule' in publishing).toBe(false);
-  });
-
-  it("fails fast when startAt or times ride along with mode 'asap'", async () => {
-    const withStartAt: unknown = await client
-      .generatePersonaVideo({ ...baseInput, mode: 'asap' })
-      .catch((e: unknown) => e);
-    expect(withStartAt).toBeInstanceOf(Error);
-    expect((withStartAt as Error).message).toMatch(/must not be set/i);
-
-    const { startAt: _startAt, ...withTimes } = baseInput;
-    const withTimesOnly: unknown = await client
-      .generatePersonaVideo({ ...withTimes, mode: 'asap' })
-      .catch((e: unknown) => e);
-    expect((withTimesOnly as Error).message).toMatch(/must not be set/i);
-
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
-  it("fails fast when startAt or times are missing in scheduled mode", async () => {
-    const { startAt: _startAt, ...noStartAt } = baseInput;
-    const missingStartAt: unknown = await client
-      .generatePersonaVideo(noStartAt)
-      .catch((e: unknown) => e);
-    expect((missingStartAt as Error).message).toMatch(/startAt and times are required/i);
-
-    const { times: _times, ...noTimes } = baseInput;
-    const missingTimes: unknown = await client
-      .generatePersonaVideo(noTimes)
-      .catch((e: unknown) => e);
-    expect((missingTimes as Error).message).toMatch(/startAt and times are required/i);
-
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
-  it('fails fast on an empty title without fetching', async () => {
-    const error: unknown = await client
-      .generatePersonaVideo({ ...baseInput, title: '   ' })
-      .catch((e: unknown) => e);
-    expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toMatch(/title must be a non-empty string/i);
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
-  it('throws a structured ApiError carrying code and field on API errors', async () => {
-    const { ApiError } = await import('../errors.js');
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: false, headers: new Headers(),
-      status: 422,
-      text: async () =>
-        JSON.stringify({
-          success: false,
-          error: 'title must be a non-empty string.',
-          code: 'VALIDATION_FAILED',
-          field: 'title',
-        }),
-    });
-
-    const error: unknown = await client
-      .generatePersonaVideo(baseInput)
-      .catch((e: unknown) => e);
-
-    if (!(error instanceof ApiError)) {
-      throw new Error(`expected ApiError, got: ${String(error)}`);
-    }
-    expect(error.code).toBe('VALIDATION_FAILED');
-    expect(error.field).toBe('title');
-    expect(error.message).toContain('Failed to generate and schedule video: 422');
-    expect(error.message).toContain('title must be a non-empty string.');
-  });
-
-  it('surfaces every listed validation problem, not only the first (#351)', async () => {
-    const { ApiError } = await import('../errors.js');
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: false, headers: new Headers(),
-      status: 400,
-      text: async () =>
-        JSON.stringify({
-          success: false,
-          error: 'title must be a non-empty string: the slot label for this video.',
-          code: 'VALIDATION_FAILED',
-          field: 'title',
-          errors: [
-            { code: 'VALIDATION_FAILED', field: 'title', message: 'title must be a non-empty string: the slot label for this video.' },
-            { code: 'VALIDATION_FAILED', field: 'publishing.providers', message: 'Invalid provider: "myspace". Use one of youtube.' },
-          ],
-        }),
-    });
-
-    const error: unknown = await client
-      .generatePersonaVideo(baseInput)
-      .catch((e: unknown) => e);
-
-    if (!(error instanceof ApiError)) {
-      throw new Error(`expected ApiError, got: ${String(error)}`);
-    }
-    expect(error.field).toBe('title');
-    expect(error.message).toContain('title must be a non-empty string');
-    expect(error.message).toContain('Invalid provider: "myspace"');
-  });
-
-  it('carries status and delivered into ApiError on a delivered 410', async () => {
-    const { ApiError } = await import('../errors.js');
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: false, headers: new Headers(),
-      status: 410,
-      text: async () =>
-        JSON.stringify({
-          success: false,
-          terminal: true,
-          delivered: true,
-          error: 'The video task no longer exists on the generation engine.',
-        }),
-    });
-
-    const error: unknown = await client.getVideoStatus('task-abc-123').catch((e: unknown) => e);
-
-    if (!(error instanceof ApiError)) {
-      throw new Error(`expected ApiError, got: ${String(error)}`);
-    }
-    expect(error.status).toBe(410);
-    expect(error.delivered).toBe(true);
-  });
 });
 
-  it('retrieves video task status', async () => {
-    const mockStatus = {
-      status: 200,
-      message: 'success',
-      body: {
-        task_id: 'task-abc-123',
-        state: 1,
-        progress: 100,
-        stage: null,
-        error: null,
-        postUrl: null,
-      },
-    };
+describe('PostEngineerClient accounts', () => {
+  const baseUrl = 'https://post-engineer.com';
+  const apiKey = 'test-token-123';
+  let client: PostEngineerClient;
 
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify(mockStatus),
-    });
-
-    const result = await client.getVideoStatus('task-abc-123');
-    expect(global.fetch).toHaveBeenCalledWith(
-      `${baseUrl}/api/persona/video-status/task-abc-123`,
-      expect.objectContaining({
-        method: 'GET',
-      })
-    );
-    expect(result).toEqual(mockStatus);
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    client = new PostEngineerClient({ apiKey });
   });
-
 
   it('gets the OAuth connect URL for a provider', async () => {
     const mockResponse = {
@@ -1959,37 +922,6 @@ describe('PostEngineerClient configuration', () => {
     await expect(new PostEngineerClient({ apiKey: 'k' }).deleteSlot('slot-1')).rejects.toThrow('Malformed response from DELETE /api/schedule/slots/:slotId');
   });
 
-  it('rejects a malformed generations 200 instead of listing a partial row', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify({ success: true, generations: [{ generationId: 'gen-1' }] }),
-    });
-
-    await expect(new PostEngineerClient({ apiKey: 'k' }).listVideoGenerations()).rejects.toThrow('Malformed response from GET /api/persona/video-generations');
-  });
-
-  it('rejects a malformed generation 200 instead of presenting a partial row', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify({ success: true, generation: { generationId: 'gen-1' } }),
-    });
-
-    await expect(new PostEngineerClient({ apiKey: 'k' }).getVideoGeneration('gen-1')).rejects.toThrow('Malformed response from GET /api/persona/video-generations/:generationId');
-  });
-
-  it('rejects a malformed video status 200 without the engine envelope', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () =>
-        JSON.stringify({ success: true, status: 'completed', videoUrl: 'https://cdn.example.com/video.mp4' }),
-    });
-
-    await expect(new PostEngineerClient({ apiKey: 'k' }).getVideoStatus('task-abc-123')).rejects.toThrow('Malformed response from GET /api/persona/video-status/:taskId');
-  });
-
   it('rejects a non-http(s) POST_ENGINEER_API_URL override', () => {
     expect(() => new PostEngineerClient({ apiKey: 'k', baseUrl: 'javascript:alert(1)' })).toThrow(
       /POST_ENGINEER_API_URL/
@@ -2113,14 +1045,6 @@ describe('PostEngineerClient error truncation', () => {
   });
 });
 
-const FULL_LIBRARY_IMAGE_ROW = {
-  id: 'img-1',
-  tag: 'casual',
-  description: 'smiling at the beach',
-  is_primary: false,
-  created_at: '2026-01-01T00:00:00Z',
-};
-
 function mockFetchJson(body: unknown): void {
   global.fetch = vi.fn().mockResolvedValue({
     ok: true,
@@ -2129,10 +1053,8 @@ function mockFetchJson(body: unknown): void {
   });
 }
 
-describe('PostEngineerClient persona image library', () => {
+describe('PostEngineerClient request timeouts', () => {
   let client: PostEngineerClient;
-  const baseUrl = 'https://post-engineer.com';
-  const tempDirs: string[] = [];
 
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -2142,383 +1064,6 @@ describe('PostEngineerClient persona image library', () => {
       status: 200,
       text: async () => JSON.stringify({ success: true }),
     });
-  });
-
-  afterEach(async () => {
-    const { rm } = await import('node:fs/promises');
-    await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
-  });
-
-  async function writeTempImage(name: string, size = 4): Promise<string> {
-    const { mkdtempSync } = await import('node:fs');
-    const { writeFile } = await import('node:fs/promises');
-    const { tmpdir } = await import('node:os');
-    const { join } = await import('node:path');
-    const dir = mkdtempSync(join(tmpdir(), 'pe-mcp-test-'));
-    tempDirs.push(dir);
-    const path = join(dir, name);
-    await writeFile(path, Buffer.alloc(size, 0xff));
-    return path;
-  }
-
-  function formDataOf(): FormData {
-    const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
-    return request?.body as FormData;
-  }
-
-  it('createPersona uploads library images with parallel tags and descriptions', async () => {
-    mockFetchJson({ success: true, personaId: 'persona-123', imageIds: ['img-1', 'img-2'] });
-    const first = await writeTempImage('a.jpg');
-    const second = await writeTempImage('b.png');
-    await client.createPersona({
-      accounts: { youtube: ['acct-1'] },
-      name: 'Tech Creator',
-      avatarUrl: 'https://example.com/avatar.png', voiceId: 'chatterbox:en_us_male_01',
-      images: [
-        { path: first, tag: 'casual', description: 'smiling at the beach' },
-        { path: second, tag: 'formal' },
-      ],
-      imagePrimaryIndex: 1,
-    });
-
-    const formData = formDataOf();
-    expect(formData.getAll('images')).toHaveLength(2);
-    expect(JSON.parse(String(formData.get('imageTags')))).toEqual(['casual', 'formal']);
-    expect(JSON.parse(String(formData.get('imageDescriptions')))).toEqual(['smiling at the beach', '']);
-    expect(formData.get('imagePrimaryIndex')).toBe('1');
-  });
-
-  it('createPersona rejects more than 10 library images', async () => {
-    const images = Array.from({ length: 11 }, (_, i) => ({ path: `/tmp/img-${i}.jpg` }));
-    await expect(
-      client.createPersona({ accounts: { youtube: ['acct-1'] }, name: 'X', avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01', images })
-    ).rejects.toThrow(/At most 10 library images/);
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
-  it('createPersona rejects an out-of-range imagePrimaryIndex', async () => {
-    const path = await writeTempImage('a.jpg');
-    await expect(
-      client.createPersona({
-        accounts: { youtube: ['acct-1'] },
-        name: 'X',
-        avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
-        images: [{ path }],
-        imagePrimaryIndex: 1,
-      })
-    ).rejects.toThrow(/out of range/);
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
-  it('createPersona validates imagePrimaryIndex before reading any file', async () => {
-    await expect(
-      client.createPersona({
-        accounts: { youtube: ['acct-1'] },
-        name: 'X',
-        avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
-        images: [{ path: '/tmp/does-not-exist.jpg' }],
-        imagePrimaryIndex: 5,
-      })
-    ).rejects.toThrow(/out of range/);
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
-  it('createPersona normalizes whitespace-only tag/description to empty strings (server stores \'\' on both paths)', async () => {
-    mockFetchJson({ success: true, personaId: 'persona-123', imageIds: ['img-1'] });
-    const path = await writeTempImage('a.jpg');
-    await client.createPersona({
-      accounts: { youtube: ['acct-1'] },
-      name: 'Tech Creator',
-      avatarUrl: 'https://example.com/avatar.png', voiceId: 'chatterbox:en_us_male_01',
-      images: [{ path, tag: '  casual  ', description: '   ' }],
-    });
-
-    const formData = formDataOf();
-    expect(JSON.parse(String(formData.get('imageTags')))).toEqual(['casual']);
-    expect(JSON.parse(String(formData.get('imageDescriptions')))).toEqual(['']);
-  });
-
-  it('createPersona rejects an oversized tag before uploading', async () => {
-    const path = await writeTempImage('a.jpg');
-    await expect(
-      client.createPersona({
-        accounts: { youtube: ['acct-1'] },
-        name: 'X',
-        avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
-        images: [{ path, tag: 'x'.repeat(101) }],
-      })
-    ).rejects.toThrow(/exceeds 100 characters/);
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
-  it('createPersona rejects an oversized description before uploading', async () => {
-    const path = await writeTempImage('a.jpg');
-    await expect(
-      client.createPersona({
-        accounts: { youtube: ['acct-1'] },
-        name: 'X',
-        avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
-        images: [{ path, description: 'x'.repeat(501) }],
-      })
-    ).rejects.toThrow(/exceeds 500 characters/);
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
-  it('createPersona rejects imagePrimaryIndex when no images are supplied', async () => {
-    await expect(
-      client.createPersona({
-        accounts: { youtube: ['acct-1'] },
-        name: 'X',
-        avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
-        imagePrimaryIndex: 0,
-      })
-    ).rejects.toThrow(/requires images/);
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
-  it('createPersona reports the full path for zero-byte image files', async () => {
-    const path = await writeTempImage('empty.jpg', 0);
-    await expect(
-      client.createPersona({
-        accounts: { youtube: ['acct-1'] },
-        name: 'X',
-        avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
-        images: [{ path }],
-      })
-    ).rejects.toThrow(path);
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
-  it('createPersona rejects library images larger than 10MB', async () => {
-    const path = await writeTempImage('big.jpg', 11 * 1024 * 1024);
-    await expect(
-      client.createPersona({
-        accounts: { youtube: ['acct-1'] },
-        name: 'X',
-        avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
-        images: [{ path }],
-      })
-    ).rejects.toThrow(/10MB/);
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
-  it('createPersona rejects oversized images with the typed ImageTooLargeError (never re-wrapped)', async () => {
-    const path = await writeTempImage('big.jpg', 11 * 1024 * 1024);
-    const error: unknown = await client
-      .createPersona({
-        accounts: { youtube: ['acct-1'] },
-        name: 'X',
-        avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
-        images: [{ path }],
-      })
-      .catch((e: unknown) => e);
-    if (!(error instanceof ImageTooLargeError)) {
-      throw new Error(`expected ImageTooLargeError, got: ${String(error)}`);
-    }
-    expect(error.path).toBe(path);
-    expect(error.sizeBytes).toBe(11 * 1024 * 1024);
-    expect(error.message).toContain(path);
-    expect(error.message).not.toContain('Failed to read image');
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
-  it('createPersona still wraps stat failures as "Failed to read image"', async () => {
-    await expect(
-      client.createPersona({
-        accounts: { youtube: ['acct-1'] },
-        name: 'X',
-        avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
-        images: [{ path: '/tmp/pe-mcp-test-does-not-exist.jpg' }],
-      })
-    ).rejects.toThrow(/Failed to read image/);
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
-  it('addPersonaImage throws the typed size error with the full path before uploading', async () => {
-    const size = MAX_LIBRARY_IMAGE_BYTES + 1;
-    const path = await writeTempImage('over.jpg', size);
-    let error: unknown;
-    try {
-      await client.addPersonaImage('p-1', { path });
-    } catch (e: unknown) {
-      error = e;
-    }
-    if (!(error instanceof ImageTooLargeError)) {
-      throw new Error(`expected ImageTooLargeError, got: ${String(error)}`);
-    }
-    expect(error.path).toBe(path);
-    expect(error.sizeBytes).toBe(size);
-    expect(error.message).toBe(`Image "${path}" is too large (${size} bytes; max 10MB).`);
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
-  it('addPersonaImage uploads an image of exactly the size limit', async () => {
-    mockFetchJson({ success: true, image: FULL_LIBRARY_IMAGE_ROW });
-    const path = await writeTempImage('edge.png', MAX_LIBRARY_IMAGE_BYTES);
-    await client.addPersonaImage('p-1', { path });
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-  });
-
-  it('addPersonaImage rejects unsupported file extensions', async () => {
-    const path = await writeTempImage('x.bmp');
-    await expect(client.addPersonaImage('p-1', { path })).rejects.toThrow(
-      /JPG\/JPEG, PNG, or WebP/
-    );
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
-  it('addPersonaImage rejects an oversized tag before uploading', async () => {
-    const path = await writeTempImage('a.jpg');
-    await expect(
-      client.addPersonaImage('p-1', { path, tag: 'x'.repeat(101) })
-    ).rejects.toThrow(/exceeds 100 characters/);
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
-  it('addPersonaImage rejects an oversized description before uploading', async () => {
-    const path = await writeTempImage('a.jpg');
-    await expect(
-      client.addPersonaImage('p-1', { path, description: 'x'.repeat(501) })
-    ).rejects.toThrow(/exceeds 500 characters/);
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
-  it('addPersonaImage rejects library images larger than 10MB', async () => {
-    const path = await writeTempImage('big.png', 11 * 1024 * 1024);
-    await expect(client.addPersonaImage('p-1', { path })).rejects.toThrow(/10MB/);
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
-  it('listPersonaImages hits the library endpoint', async () => {
-    mockFetchJson({ success: true, images: [{ ...FULL_LIBRARY_IMAGE_ROW, image_url: 'https://example.test/signed' }] });
-    await client.listPersonaImages('p-1');
-    expect(global.fetch).toHaveBeenCalledWith(
-      `${baseUrl}/api/persona/images?personaId=p-1`,
-      expect.objectContaining({ method: 'GET' })
-    );
-  });
-
-  it('addPersonaImage uploads a single image as multipart', async () => {
-    mockFetchJson({ success: true, image: FULL_LIBRARY_IMAGE_ROW });
-    const path = await writeTempImage('c.webp');
-    await client.addPersonaImage('p-1', { path, tag: 'gym', description: 'training', isPrimary: true });
-
-    const request = vi.mocked(global.fetch).mock.calls[0];
-    expect(request?.[0]).toBe(`${baseUrl}/api/persona/images`);
-    expect(request?.[1]).toMatchObject({ method: 'POST' });
-    const formData = request?.[1]?.body as FormData;
-    expect(formData.get('personaId')).toBe('p-1');
-    expect(formData.getAll('image')).toHaveLength(1);
-    expect(formData.get('tag')).toBe('gym');
-    expect(formData.get('description')).toBe('training');
-    expect(formData.get('isPrimary')).toBe('true');
-  });
-
-  it('addPersonaImage omits empty tag/description keys (the server stores \'\' on both upload paths)', async () => {
-    mockFetchJson({ success: true, image: FULL_LIBRARY_IMAGE_ROW });
-    const path = await writeTempImage('d.png');
-    await client.addPersonaImage('p-1', { path, tag: '   ', description: '' });
-
-    const request = vi.mocked(global.fetch).mock.calls[0];
-    const formData = request?.[1]?.body as FormData;
-    expect(formData.has('tag')).toBe(false);
-    expect(formData.has('description')).toBe(false);
-  });
-
-  it('updatePersonaImage sends a PATCH with the metadata', async () => {
-    mockFetchJson({ success: true, image: { ...FULL_LIBRARY_IMAGE_ROW, tag: 'casual', is_primary: true } });
-    await client.updatePersonaImage({ id: 'img-1', tag: 'casual', isPrimary: true });
-    expect(global.fetch).toHaveBeenCalledWith(
-      `${baseUrl}/api/persona/images`,
-      expect.objectContaining({
-        method: 'PATCH',
-        body: JSON.stringify({ id: 'img-1', tag: 'casual', isPrimary: true }),
-      })
-    );
-  });
-
-  it('updatePersonaImage throws client-side when no fields are provided', async () => {
-    await expect(client.updatePersonaImage({ id: 'img-1' })).rejects.toThrow(
-      /at least one of tag, description, or isPrimary/
-    );
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
-  it('addPersonaImage rejects a dotfile (".PNG") as an unsupported extension', async () => {
-    const path = await writeTempImage('.PNG');
-    await expect(client.addPersonaImage('p-1', { path })).rejects.toThrow(
-      /Unsupported image extension "\(none\)"/
-    );
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
-  it('updatePersonaImage rejects an over-length tag locally instead of a server 400', async () => {
-    await expect(
-      client.updatePersonaImage({ id: 'img-1', tag: 'x'.repeat(MAX_LIBRARY_TAG_LENGTH + 1) })
-    ).rejects.toThrow(/tag.*exceeds/);
-    await expect(
-      client.updatePersonaImage({
-        id: 'img-1',
-        description: 'y'.repeat(MAX_LIBRARY_DESCRIPTION_LENGTH + 1),
-      })
-    ).rejects.toThrow(/description.*exceeds/);
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
-  it('updatePersonaImage rejects isPrimary:false locally instead of a server 400', async () => {
-    await expect(
-      client.updatePersonaImage({ id: 'img-1', isPrimary: false })
-    ).rejects.toThrow(/cannot be false.*mark another image/i);
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
-  it('addPersonaImage wraps a missing file in an actionable error', async () => {
-    await expect(
-      client.addPersonaImage('p-1', { path: '/tmp/does-not-exist-a1b2c3.jpg' })
-    ).rejects.toThrow(/Failed to read image "\/tmp\/does-not-exist-a1b2c3\.jpg"/);
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
-  it('createPersona uses the longer upload timeout for file-carrying requests', async () => {
-    mockFetchJson({ success: true, personaId: 'persona-123', imageIds: [] });
-    const path = await writeTempImage('a.jpg');
-    const timeouts: number[] = [];
-    const realTimeout = AbortSignal.timeout;
-    const spy = vi
-      .spyOn(AbortSignal, 'timeout')
-      .mockImplementation((ms: number) => {
-        timeouts.push(ms);
-        return realTimeout(ms);
-      });
-    try {
-      await client.createPersona({
-        accounts: { youtube: ['acct-1'] },
-        name: 'X',
-        avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
-        images: [{ path }],
-      });
-    } finally {
-      spy.mockRestore();
-    }
-    expect(timeouts).toContain(120_000);
-  });
-
-  it('createPersona always uses the upload timeout (multipart request)', async () => {
-    mockFetchJson({ success: true, personaId: 'persona-123', imageIds: [] });
-    const timeouts: number[] = [];
-    const realTimeout = AbortSignal.timeout;
-    const spy = vi
-      .spyOn(AbortSignal, 'timeout')
-      .mockImplementation((ms: number) => {
-        timeouts.push(ms);
-        return realTimeout(ms);
-      });
-    try {
-      await client.createPersona({ accounts: { youtube: ['acct-1'] }, name: 'X', avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01' });
-    } finally {
-      spy.mockRestore();
-    }
-    expect(timeouts).toEqual([120_000]);
   });
 
   it('listPersonas uses the default timeout', async () => {
@@ -2539,42 +1084,6 @@ describe('PostEngineerClient persona image library', () => {
     expect(timeouts).toEqual([30_000]);
   });
 
-  it('rejects a malformed images list 200 with a partial row', async () => {
-    mockFetchJson({ success: true, images: [{ id: 'img-1', tag: 'casual' }] });
-    await expect(client.listPersonaImages('p-1')).rejects.toThrow(
-      'Malformed response from GET /api/persona/images',
-    );
-  });
-
-  it('rejects a malformed add-image 200 with a partial row', async () => {
-    const path = await writeTempImage('e.jpg');
-    mockFetchJson({ success: true, image: { id: 'img-1', tag: 'casual' } });
-    await expect(client.addPersonaImage('p-1', { path })).rejects.toThrow(
-      'Malformed response from POST /api/persona/images',
-    );
-  });
-
-  it('rejects a malformed update-image 200 without an image', async () => {
-    mockFetchJson({ success: true });
-    await expect(client.updatePersonaImage({ id: 'img-1', tag: 'casual' })).rejects.toThrow(
-      'Malformed response from PATCH /api/persona/images',
-    );
-  });
-
-  it('rejects a malformed delete-image 200 with a false success flag', async () => {
-    mockFetchJson({ success: false });
-    await expect(client.deletePersonaImage('img-1')).rejects.toThrow(
-      'Malformed response from DELETE /api/persona/images',
-    );
-  });
-
-  it('deletePersonaImage sends a DELETE with the id query', async () => {
-    await client.deletePersonaImage('img-1');
-    expect(global.fetch).toHaveBeenCalledWith(
-      `${baseUrl}/api/persona/images?id=img-1`,
-      expect.objectContaining({ method: 'DELETE' })
-    );
-  });
 });
 
 describe('publishVideoDirect', () => {

@@ -9,7 +9,7 @@ import type { McpToolResponse } from './tools-call.js';
 type DeletePreview = ResponseOf<typeof getPersonaDeletePreviewContract>;
 
 function digest(personaId: string, preview: DeletePreview): string {
-  const stable = { personaId, counts: preview.counts, tasks: preview.videos.map((video) => video.taskId), truncated: preview.videosTruncated };
+  const stable = { personaId, counts: preview.counts };
   return createHash('sha256').update(JSON.stringify(stable)).digest('hex').slice(0, 16);
 }
 
@@ -18,8 +18,7 @@ function previewText(preview: DeletePreview, confirmToken: string, note: string)
   const summary =
     `Deleting persona "${preview.persona.name}" would remove ` +
     `${counts.schedules} schedule(s), ${counts.upcomingSlots} upcoming slot(s), ` +
-    `${counts.publishedSlots} published slot(s), ${counts.generatedVideos} generated video(s), ` +
-    `and ${counts.personaImages} library image(s). No token refunds.`;
+    `${counts.publishedSlots} published slot(s) and ${counts.failedSlots} failed slot(s).`;
   return `${note}\n${summary}\n${JSON.stringify(preview, null, 2)}\nNothing was deleted. To delete, call personas with action "delete", the same persona and confirmToken "${confirmToken}".`;
 }
 

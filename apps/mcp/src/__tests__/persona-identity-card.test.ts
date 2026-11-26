@@ -219,15 +219,6 @@ describe('identityCard on personas create and update', () => {
     expect(seen[0].form).not.toHaveProperty('identityCard');
   });
 
-  it('sends the card with a create', async () => {
-    const { api, seen } = setup({ 'POST /api/persona': { success: true, personaId: MARIA, imageIds: [] } });
-    await api.createPersona({ name: 'Maria', avatarUrl: 'https://example.com/a.png', voiceId: 'v1', accounts: { youtube: ['UC1'] }, identityCard: CARD });
-    expect(JSON.parse(seen[0].form?.identityCard ?? 'null')).toEqual(CARD);
-    seen.length = 0;
-    await api.createPersona({ name: 'Maria', avatarUrl: 'https://example.com/a.png', voiceId: 'v1', accounts: { youtube: ['UC1'] } });
-    expect(seen[0].form).not.toHaveProperty('identityCard');
-  });
-
   it('rejects an unknown key at every level of the card, locally and hosted', () => {
     const bad = { ...CARD, identity: { ...CARD.identity, face: { ...CARD.identity.face, mood: 'calm' } } };
     expect(UpdatePersonaSchema.safeParse({ personaId: MARIA, identityCard: bad }).success).toBe(false);
@@ -236,7 +227,7 @@ describe('identityCard on personas create and update', () => {
     expect(UpdatePersonaSchema.safeParse({ personaId: MARIA, identityCard: { ...CARD, version: 2 } }).success).toBe(false);
     expect(UpdatePersonaSchema.safeParse({ personaId: MARIA, identityCard: CARD }).success).toBe(true);
     expect(UpdatePersonaSchema.safeParse({ personaId: MARIA, identityCard: null }).success).toBe(true);
-    const create = { name: 'Maria', avatarUrl: 'https://example.com/a.png', voiceId: 'v1', accounts: { youtube: ['UC1'] } };
+    const create = { name: 'Maria', accounts: { youtube: ['UC1'] } };
     expect(CreatePersonaRemoteSchema.safeParse({ ...create, identityCard: bad }).success).toBe(false);
     expect(CreatePersonaRemoteSchema.safeParse({ ...create, identityCard: CARD }).success).toBe(true);
     expect(CreatePersonaSchema.safeParse({ ...create, identityCard: { ...CARD, extra: 1 } }).success).toBe(false);

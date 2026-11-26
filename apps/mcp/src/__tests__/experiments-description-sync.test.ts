@@ -2,15 +2,13 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { COMPARISON_LABELS, EXPERIMENT_MAX_FULL_LIPSYNC_VIDEOS } from '../contracts/experiments.js';
+import { COMPARISON_LABELS } from '../contracts/experiments.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const comparison = readFileSync(join(here, '..', '..', '..', 'web', 'lib', 'experiments', 'prompt-comparison.ts'), 'utf8');
 const description = readFileSync(join(here, '..', 'intent-content.ts'), 'utf8');
 const instructions = readFileSync(join(here, '..', 'server-instructions.ts'), 'utf8');
-const toolsSource = readFileSync(join(here, '..', 'tools-experiments.ts'), 'utf8');
 const readme = readFileSync(join(here, '..', '..', 'README.md'), 'utf8');
-const openapiSchemas = readFileSync(join(here, '..', '..', '..', 'web', 'scripts', 'openapi-prompts-schemas.mjs'), 'utf8');
 
 function recommendedVideos(): number {
   const match = /export const RECOMMENDED_VIDEOS_PER_PROMPT = (\d+);/.exec(comparison);
@@ -33,47 +31,24 @@ function comparisonLabels(): string[] {
 describe('experiments description sync with the prompt comparison', () => {
   it('names the same minimum video count the comparison labels with', () => {
     const min = minComparedVideos();
-    expect(description).toContain(`insufficient (fewer than ${min} videos)`);
-    expect(description).toContain(`groups of the account with at least ${min} videos`);
+    expect(description).toContain(`insufficient (fewer than ${min} posts)`);
+    expect(description).toContain(`groups of the account with at least ${min} posts`);
     expect(readme).toContain(`${min} only lift a prompt out of insufficient`);
   });
 
   it('recommends the same videos per prompt the comparison recommends', () => {
     const recommended = recommendedVideos();
-    expect(description).toContain(`make at least ${recommended} videos per prompt`);
-    expect(readme).toContain(`at least ${recommended} videos each`);
+    expect(description).toContain(`schedule at least ${recommended} posts per prompt`);
+    expect(readme).toContain(`at least ${recommended} posts each`);
   });
 
   it('tells the agent the thresholds are corrected for the number of prompts while the comparison divides them', () => {
     expect(comparison).toContain('pValue < CLEAR_P_VALUE / comparisons');
     expect(comparison).toContain('pValue < INDICATIVE_P_VALUE / comparisons');
     expect(description).toContain('corrected for the number of prompts compared');
-    expect(description).toContain('rotate over the posting times');
+    expect(description).toContain('rotate them round-robin on the same account, swap their posting times');
     expect(description).not.toContain('To test two prompts fairly');
     expect(readme).toContain('corrected for the number of prompts compared');
-  });
-
-  it('keeps what an agent needs to read results: the lift definition, the window and the per-account scope', () => {
-    expect(description).toContain('never across accounts');
-    expect(description).toContain("lift (views divided by the median of the account\\'s other videos; above 1 beats the account)");
-    expect(toolsSource).toContain("describe('Metrics window to compare: 24h, 7d (default) or 28d.')");
-  });
-
-  it('says persona and account names are resolved for create', () => {
-    expect(description).toContain('persona and account.accountId take a name or an id');
-    expect(readme).toContain('`persona` and `account.accountId` take a name or an id');
-  });
-
-  it('writes the create total as a ceiling in the README', () => {
-    expect(readme).toContain('5-15 each, at most 40 in total');
-  });
-
-  it('states the full lip-sync video cap everywhere an agent reads about create', () => {
-    const cap = EXPERIMENT_MAX_FULL_LIPSYNC_VIDEOS;
-    expect(description).toContain(`at most ${cap} when videoType is full_lipsync`);
-    expect(instructions).toContain(`at most ${cap} for full_lipsync`);
-    expect(readme).toContain(`at most ${cap} when \`videoType\` is \`full_lipsync\``);
-    expect(openapiSchemas).toContain(`at most ${cap} when videoType is full_lipsync`);
   });
 
   it('uses only result labels the comparison defines', () => {

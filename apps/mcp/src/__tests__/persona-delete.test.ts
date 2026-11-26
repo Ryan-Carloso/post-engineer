@@ -4,7 +4,7 @@ import { ApiError } from '../errors.js';
 import { handlePersonaDelete } from '../persona-delete.js';
 import type { McpToolResponse } from '../tools-call.js';
 
-function client(preview: { counts: Record<string, number>; videos?: Array<{ taskId: string; downloadUrl: string }> }) {
+function client(preview: { counts: Record<string, number> }) {
   const getPersonaDeletePreview = vi.fn(async () => ({
     success: true,
     persona: { id: 'p1', name: 'Maria' },
@@ -13,13 +13,8 @@ function client(preview: { counts: Record<string, number>; videos?: Array<{ task
       upcomingSlots: 0,
       publishedSlots: 0,
       failedSlots: 0,
-      generatedVideos: 0,
-      personaImages: 0,
       ...preview.counts,
     },
-    videos: (preview.videos ?? []).map((video) => ({ title: 'Untitled', status: 'completed', ...video })),
-    videosTruncated: false,
-    linksIncomplete: false,
   }));
   const deletePersona = vi.fn(async () => ({ success: true }));
   return { client: { getPersonaDeletePreview, deletePersona } as unknown as PostEngineerClient, getPersonaDeletePreview, deletePersona };
@@ -30,7 +25,7 @@ const tokenOf = (response: McpToolResponse): string => /confirmToken "([0-9a-f]+
 
 describe('personas · delete', () => {
   it('without a token only previews: shows what would be removed, gives a token and deletes nothing', async () => {
-    const { client: c, deletePersona } = client({ counts: { schedules: 2, personaImages: 3 } });
+    const { client: c, deletePersona } = client({ counts: { schedules: 2, failedSlots: 3 } });
     const response = await handlePersonaDelete(c, { personaId: 'p1' });
     expect(response.isError).not.toBe(true);
     expect(text(response)).toContain('Preview only');
@@ -64,14 +59,6 @@ describe('personas · delete', () => {
     expect(response.isError).toBe(true);
     expect(after.deletePersona).not.toHaveBeenCalled();
     expect(tokenOf(response)).not.toBe(token);
-  });
-
-  it('ignores the per-call download links, which change on every preview', async () => {
-    const first = client({ counts: { schedules: 1 }, videos: [{ taskId: 't1', downloadUrl: 'https://x/sig=1' }] });
-    const second = client({ counts: { schedules: 1 }, videos: [{ taskId: 't1', downloadUrl: 'https://x/sig=2' }] });
-    const token = tokenOf(await handlePersonaDelete(first.client, { personaId: 'p1' }));
-    await handlePersonaDelete(second.client, { personaId: 'p1', confirmToken: token });
-    expect(second.deletePersona).toHaveBeenCalledWith('p1');
   });
 
   it('binds the token to the persona id', async () => {
@@ -115,20 +102,16 @@ describe('personas · delete', () => {
     expect(c.deletePersona).not.toHaveBeenCalled();
   });
 
-  it('previews the counts and the per-video download links', async () => {
+  it('previews the counts of schedules and slots', async () => {
     const c = {
       getPersonaDeletePreview: vi.fn(async () => ({
         success: true,
         persona: { id: 'persona-1', name: 'Ava' },
-        counts: { schedules: 2, upcomingSlots: 5, publishedSlots: 10, failedSlots: 1, generatedVideos: 12, personaImages: 4 },
-        videos: [{ taskId: 'task-1', title: 'Gym', status: 'completed', downloadUrl: 'https://cdn.test/v1.mp4' }],
-        videosTruncated: false,
-        linksIncomplete: false,
+        counts: { schedules: 2, upcomingSlots: 5, publishedSlots: 10, failedSlots: 1 },
       })),
       deletePersona: vi.fn(),
     } as unknown as PostEngineerClient;
     const response = await handlePersonaDelete(c, { personaId: 'persona-1' });
-    expect(text(response)).toContain('Deleting persona "Ava" would remove 2 schedule(s), 5 upcoming slot(s), 10 published slot(s), 12 generated video(s), and 4 library image(s).');
-    expect(text(response)).toContain('"downloadUrl": "https://cdn.test/v1.mp4"');
+    expect(text(response)).toContain('Deleting persona "Ava" would remove 2 schedule(s), 5 upcoming slot(s), 10 published slot(s) and 1 failed slot(s).');
   });
 });

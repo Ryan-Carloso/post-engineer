@@ -3,10 +3,10 @@ import { randomUUID } from 'node:crypto';
 import type { PostEngineerClient } from './client.js';
 import type { PublishExistingInput, PublishExistingResult } from './client-types.js';
 import { publishExisting } from './client-publish-existing.js';
-import { readLocalImage } from './client-user-media.js';
+import { readLocalImage } from './local-image.js';
 import { ApiError, getErrorMessage } from './errors.js';
 import { IMAGE_PROVIDERS, isImageProvider, type SocialProvider as Provider } from './contracts/providers.js';
-import { boundAccounts } from './generate-video.js';
+import { boundAccounts } from './bound-accounts.js';
 import { PublishExistingSchema, type PublishExistingArgs } from './publish-existing-shape.js';
 import { createRefResolvers } from './refs.js';
 import { sanitizeEngineError } from './tools.js';
@@ -60,7 +60,6 @@ async function resolveTargets(
 }
 
 async function resolveMedia(args: PublishExistingArgs): Promise<Resolved<PublishExistingInput['media']>> {
-  if (args.mediaKind === 'task' && args.taskId !== undefined) return { kind: 'ok', value: { kind: 'task', taskId: args.taskId } };
   if (args.mediaKind === 'upload' && args.uploadId !== undefined) return { kind: 'ok', value: { kind: 'upload', uploadId: args.uploadId } };
   if (args.imagePath !== undefined) {
     let image: { buffer: Buffer; mimeType: string };
@@ -147,6 +146,7 @@ export async function handlePublishExisting(client: PostEngineerClient, args: Pu
       tags: input.tags,
       privacyStatus: input.privacyStatus,
       boardId: input.boardId,
+      promptVersionId: input.promptVersionId,
       idempotencyKey: input.idempotencyKey ?? randomUUID(),
     });
     return { content: [{ type: 'text', text: summary(result, input.mediaKind, targets.value.note) }] };

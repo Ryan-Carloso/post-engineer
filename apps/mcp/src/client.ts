@@ -1,41 +1,22 @@
 import { apiErrorFromResponse } from './errors.js';
 import { redactSecretFromError } from './secret-redaction.js';
-import {
-  MAX_LIBRARY_IMAGE_BYTES, MAX_LIBRARY_IMAGE_MB,
-  MAX_UPLOAD_VIDEO_BYTES, MAX_UPLOAD_VIDEO_GB, VIDEO_LAYOUTS,
-} from './limits.js';
+import { MAX_UPLOAD_VIDEO_BYTES, MAX_UPLOAD_VIDEO_GB } from './limits.js';
 
-export {
-  MAX_LIBRARY_IMAGE_BYTES,
-  MAX_LIBRARY_IMAGE_MB,
-  MAX_UPLOAD_VIDEO_BYTES,
-  MAX_UPLOAD_VIDEO_GB,
-  VIDEO_LAYOUTS,
-};
+export { MAX_UPLOAD_VIDEO_BYTES, MAX_UPLOAD_VIDEO_GB };
 
 import type {
   CreatePersonaInput,
   DirectPublishResult,
-  GeneratePersonaVideoInput,
-  PersonaLibraryImageInput,
   PostEngineerClientOptions,
   PublishVideoDirectInput,
-  UpdatePersonaInput, VideoType,
+  UpdatePersonaInput,
 } from './client-types.js';
 import { requirePublishingAccounts } from './require-publishing-accounts.js';
 import { resolveBaseUrl } from './client-base-url.js';
 import { appendCreatePersonaFields, appendUpdatePersonaFields } from './persona-form-fields.js';
 import { publishVideoDirect } from './client-publish-uploaded.js';
-import {
-  getTokenBalance,
-  listTokenTransactions,
-} from './client-billing.js';
 import type { ResponseOf } from './contracts/endpoint.js';
 import { parseContractResponse } from './contract-response.js';
-import {
-  getTokenBalance as getTokenBalanceContract,
-  listTokenTransactions as listTokenTransactionsContract,
-} from './contracts/billing.js';
 import {
   connectBlueskyAccount as connectBlueskyAccountContract,
   connectRumbleAccount as connectRumbleAccountContract,
@@ -52,87 +33,30 @@ import {
   listSchedules as listSchedulesContract,
   updateSlotTitle as updateSlotTitleContract,
 } from './contracts/schedule.js';
-import {
-  VIDEO_GENERATIONS_MAX_LIMIT,
-  getVideoGeneration as getVideoGenerationContract,
-  getVideoStatus as getVideoStatusContract,
-  listVideoGenerations as listVideoGenerationsContract,
-} from './contracts/video-tasks.js';
-import {
-  listVoices as listVoicesContract,
-} from './contracts/voices.js';
 import { isSocialProvider, SOCIAL_PROVIDERS } from './contracts/providers.js';
 import {
-  generateAndSchedule as generateAndScheduleContract,
-  validateScript as validateScriptContract,
-} from './contracts/videos.js';
-import {
-  MAX_DESCRIPTION_LENGTH as MAX_LIBRARY_DESCRIPTION_LENGTH,
-  MAX_LIBRARY_IMAGES,
-  MAX_TAG_LENGTH as MAX_LIBRARY_TAG_LENGTH,
-  addPersonaImage as addPersonaImageContract,
   createPersona as createPersonaContract,
   deletePersona as deletePersonaContract,
-  deletePersonaImage as deletePersonaImageContract,
   getPersonaDeletePreview as getPersonaDeletePreviewContract,
-  listFaces as listFacesContract,
-  listPersonaImages as listPersonaImagesContract,
   listPersonas as listPersonasContract,
   updatePersona as updatePersonaContract,
-  updatePersonaImage as updatePersonaImageContract,
 } from './contracts/personas.js';
 
 export type {
   CreatePersonaInput,
   DirectPublishAccountResult,
   DirectPublishResult,
-  GeneratePersonaVideoInput,
-  PersonaLibraryImageInput,
   PostEngineerClientOptions,
   PublishVideoDirectInput,
   UpdatePersonaInput,
-  VideoLayout,
 } from './client-types.js';
 import { requireTitle } from './require-title.js';
-import { basename } from 'node:path';
-import { randomUUID } from 'node:crypto';
 import { mcpTelemetryHeaders } from './analytics.js';
 
 const REQUEST_TIMEOUT_MS = 30_000;
 const UPLOAD_TIMEOUT_MS = 120_000;
-export {
-  MAX_LIBRARY_DESCRIPTION_LENGTH,
-  MAX_LIBRARY_IMAGES,
-  MAX_LIBRARY_TAG_LENGTH,
-};
 
-import { appendPersonaAvatar, imageFormFile } from './persona-avatar.js';
-
-function checkLibraryMetadataLengths(
-  tag: string | undefined,
-  description: string | undefined,
-  label?: string,
-): void {
-  const where = label ? ` for "${label}"` : '';
-  if (tag !== undefined && tag.length > MAX_LIBRARY_TAG_LENGTH) {
-    throw new Error(`Image tag${where} exceeds ${MAX_LIBRARY_TAG_LENGTH} characters.`);
-  }
-  if (description !== undefined && description.length > MAX_LIBRARY_DESCRIPTION_LENGTH) {
-    throw new Error(
-      `Image description${where} exceeds ${MAX_LIBRARY_DESCRIPTION_LENGTH} characters.`,
-    );
-  }
-}
-
-function normalizeLibraryMetadata(
-  image: { tag?: string; description?: string },
-  label?: string,
-): { tag: string; description: string } {
-  const tag = image.tag?.trim() ?? '';
-  const description = image.description?.trim() ?? '';
-  checkLibraryMetadataLengths(tag, description, label);
-  return { tag, description };
-}
+import { appendPersonaAvatar } from './persona-avatar.js';
 
 export class PostEngineerClient {
   readonly baseUrl: string;
@@ -180,35 +104,8 @@ export class PostEngineerClient {
   async createPersona(input: CreatePersonaInput): Promise<ResponseOf<typeof createPersonaContract>> {
     const formData = new FormData();
     formData.set('publishingAccounts', JSON.stringify(requirePublishingAccounts(input.accounts)));
-    await appendPersonaAvatar(formData, input, true);
+    await appendPersonaAvatar(formData, input);
     appendCreatePersonaFields(formData, input);
-    const images = input.images ?? [];
-    if (input.imagePrimaryIndex !== undefined && images.length === 0) {
-      throw new Error('imagePrimaryIndex requires images: provide at least one library image.');
-    }
-    if (images.length > 0) {
-      if (images.length > MAX_LIBRARY_IMAGES) {
-        throw new Error(`At most ${MAX_LIBRARY_IMAGES} library images are allowed per persona.`);
-      }
-      if (input.imagePrimaryIndex !== undefined) {
-        if (input.imagePrimaryIndex < 0 || input.imagePrimaryIndex >= images.length) {
-          throw new Error(
-            `imagePrimaryIndex ${input.imagePrimaryIndex} is out of range: ${images.length} images provided.`,
-          );
-        }
-        formData.set('imagePrimaryIndex', String(input.imagePrimaryIndex));
-      }
-      const tags: string[] = [];
-      const descriptions: string[] = [];
-      for (const image of images) {
-        const { tag, description } = normalizeLibraryMetadata(image, basename(image.path));
-        formData.append('images', await imageFormFile(image.path), basename(image.path));
-        tags.push(tag);
-        descriptions.push(description);
-      }
-      formData.set('imageTags', JSON.stringify(tags));
-      formData.set('imageDescriptions', JSON.stringify(descriptions));
-    }
     const raw = await this.request(
       '/api/persona',
       { method: 'POST', headers: this.getHeaders(false), body: formData },
@@ -227,28 +124,10 @@ export class PostEngineerClient {
     return parseContractResponse(listPersonasContract, raw);
   }
 
-  async listVoices(): Promise<ResponseOf<typeof listVoicesContract>> {
-    const raw = await this.request(
-      '/api/persona/voices',
-      { method: 'GET', headers: this.getHeaders() },
-      'list voices'
-    );
-    return parseContractResponse(listVoicesContract, raw);
-  }
-
-  async listFaces(): Promise<ResponseOf<typeof listFacesContract>> {
-    const raw = await this.request(
-      '/api/persona/faces',
-      { method: 'GET', headers: this.getHeaders() },
-      'list faces'
-    );
-    return parseContractResponse(listFacesContract, raw);
-  }
-
   async updatePersona(input: UpdatePersonaInput): Promise<ResponseOf<typeof updatePersonaContract>> {
     const formData = new FormData();
     if (input.name !== undefined) formData.set('name', input.name);
-    await appendPersonaAvatar(formData, input, false);
+    await appendPersonaAvatar(formData, input);
     appendUpdatePersonaFields(formData, input);
     const raw = await this.request(
       `/api/persona?personaId=${encodeURIComponent(input.personaId)}`,
@@ -368,36 +247,6 @@ export class PostEngineerClient {
     return parseContractResponse(deleteSlotContract, raw);
   }
 
-  async getTokenBalance(): Promise<ResponseOf<typeof getTokenBalanceContract>> {
-    return getTokenBalance(this);
-  }
-
-  async listVideoGenerations(limit?: number): Promise<ResponseOf<typeof listVideoGenerationsContract>> {
-    if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > VIDEO_GENERATIONS_MAX_LIMIT)) {
-      throw new Error(`limit must be an integer between 1 and ${VIDEO_GENERATIONS_MAX_LIMIT}.`);
-    }
-    const query = limit !== undefined ? `?limit=${encodeURIComponent(String(limit))}` : '';
-    const raw = await this.request(
-      `/api/persona/video-generations${query}`,
-      { method: 'GET', headers: this.getHeaders() },
-      'list video generations'
-    );
-    return parseContractResponse(listVideoGenerationsContract, raw);
-  }
-
-  async getVideoGeneration(generationId: string): Promise<ResponseOf<typeof getVideoGenerationContract>> {
-    const raw = await this.request(
-      `/api/persona/video-generations/${encodeURIComponent(generationId)}`,
-      { method: 'GET', headers: this.getHeaders() },
-      'get video generation'
-    );
-    return parseContractResponse(getVideoGenerationContract, raw);
-  }
-
-  async listTokenTransactions(limit?: number, offset?: number): Promise<ResponseOf<typeof listTokenTransactionsContract>> {
-    return listTokenTransactions(this, limit, offset);
-  }
-
   async getPersonaDeletePreview(personaId: string): Promise<ResponseOf<typeof getPersonaDeletePreviewContract>> {
     const raw = await this.request(
       `/api/persona/delete-preview?personaId=${encodeURIComponent(personaId)}`,
@@ -433,150 +282,6 @@ export class PostEngineerClient {
       'disconnect account'
     );
     return parseContractResponse(disconnectAccountContract, raw);
-  }
-
-  async validateScript(segments: unknown, videoType: VideoType = 'hook_lipsync', hookTitle?: string): Promise<ResponseOf<typeof validateScriptContract>> {
-    const raw = await this.request(
-      '/api/videos/validate-script',
-      {
-        method: 'POST',
-        headers: this.getHeaders(),
-        body: JSON.stringify({ segments, videoType, hookTitle }),
-      },
-      'validate script'
-    );
-    return parseContractResponse(validateScriptContract, raw);
-  }
-
-  async generatePersonaVideo(input: GeneratePersonaVideoInput): Promise<ResponseOf<typeof generateAndScheduleContract>> {
-    const title = requireTitle(input.title);
-    const accounts: Record<string, string[]> = {};
-    const byProvider = { youtube: input.youtubeAccountIds, instagram: input.instagramAccountIds, linkedin: input.linkedinAccountIds, bluesky: input.blueskyAccountIds, threads: input.threadsAccountIds, facebook: input.facebookAccountIds, pinterest: input.pinterestAccountIds, fanvue: input.fanvueAccountIds, '3speak': input.threespeakAccountIds, rumble: input.rumbleAccountIds, telegram: input.telegramAccountIds };
-    for (const [provider, ids] of Object.entries(byProvider)) if (ids !== undefined) accounts[provider] = ids;
-    const mode = input.mode ?? 'scheduled';
-    if (mode === 'asap' && (input.startAt !== undefined || input.times !== undefined)) {
-      throw new Error("startAt and times must not be set when mode is 'asap'.");
-    }
-    if (mode === 'scheduled' && (input.startAt === undefined || input.times === undefined)) {
-      throw new Error("startAt and times are required when mode is 'scheduled'.");
-    }
-    const raw = await this.request(
-      '/api/videos/generate-and-schedule',
-      {
-        method: 'POST',
-        headers: this.getHeaders(),
-        body: JSON.stringify({
-          ...(input.personaId !== undefined ? { personaId: input.personaId } : {}),
-          title,
-          description: input.description,
-          publishing: {
-            mode,
-            providers: input.providers, ...(input.pinterestBoardId ? { pinterestBoardId: input.pinterestBoardId } : {}),
-            accounts,
-            ...(mode === 'asap'
-              ? { timezone: input.timezone ?? 'UTC' }
-              : {
-                  schedule: {
-                    startAt: input.startAt,
-                    times: input.times,
-                    timezone: input.timezone ?? 'UTC',
-                  },
-                }),
-          },
-          options: input.options ?? undefined,
-          ...(input.promptVersionId !== undefined ? { promptVersionId: input.promptVersionId } : {}),
-          ...(input.cta !== undefined ? { cta: input.cta } : {}),
-          idempotencyKey: input.idempotencyKey ?? randomUUID(),
-        }),
-      },
-      'generate and schedule video'
-    );
-    return parseContractResponse(generateAndScheduleContract, raw);
-  }
-
-  async getVideoStatus(taskId: string): Promise<ResponseOf<typeof getVideoStatusContract>> {
-    const raw = await this.request(
-      `/api/persona/video-status/${encodeURIComponent(taskId)}`,
-      { method: 'GET', headers: this.getHeaders() },
-      'get video status'
-    );
-    return parseContractResponse(getVideoStatusContract, raw);
-  }
-
-  async listPersonaImages(personaId: string): Promise<ResponseOf<typeof listPersonaImagesContract>> {
-    const raw = await this.request(
-      `/api/persona/images?personaId=${encodeURIComponent(personaId)}`,
-      { method: 'GET', headers: this.getHeaders() },
-      'list persona images'
-    );
-    return parseContractResponse(listPersonaImagesContract, raw);
-  }
-
-  async addPersonaImage(
-    personaId: string,
-    image: PersonaLibraryImageInput & { isPrimary?: true }
-  ): Promise<ResponseOf<typeof addPersonaImageContract>> {
-    const formData = new FormData();
-    formData.set('personaId', personaId);
-    formData.append('image', await imageFormFile(image.path), basename(image.path));
-    const { tag, description } = normalizeLibraryMetadata(image);
-    if (tag) formData.set('tag', tag);
-    if (description) formData.set('description', description);
-    if (image.isPrimary) formData.set('isPrimary', 'true');
-    const raw = await this.request(
-      '/api/persona/images',
-      { method: 'POST', headers: this.getHeaders(false), body: formData },
-      'add persona image',
-      UPLOAD_TIMEOUT_MS,
-    );
-    return parseContractResponse(addPersonaImageContract, raw);
-  }
-
-  async updatePersonaImage(input: {
-    id: string;
-    tag?: string;
-    description?: string;
-    isPrimary?: boolean;
-  }): Promise<ResponseOf<typeof updatePersonaImageContract>> {
-    if (
-      input.tag === undefined &&
-      input.description === undefined &&
-      input.isPrimary === undefined
-    ) {
-      throw new Error('updatePersonaImage requires at least one of tag, description, or isPrimary.');
-    }
-    if (input.isPrimary === false) {
-      throw new Error(
-        'updatePersonaImage: isPrimary cannot be false — mark another image as primary instead (the swap atomically demotes the old one).'
-      );
-    }
-    const tag = input.tag?.trim();
-    const description = input.description?.trim();
-    checkLibraryMetadataLengths(tag, description);
-    const raw = await this.request(
-      '/api/persona/images',
-      {
-        method: 'PATCH',
-        headers: this.getHeaders(),
-        body: JSON.stringify({
-          id: input.id,
-          ...(tag !== undefined ? { tag } : {}),
-          ...(description !== undefined ? { description } : {}),
-          ...(input.isPrimary !== undefined ? { isPrimary: input.isPrimary } : {}),
-        }),
-      },
-      'update persona image'
-    );
-    return parseContractResponse(updatePersonaImageContract, raw);
-  }
-
-  async deletePersonaImage(id: string): Promise<ResponseOf<typeof deletePersonaImageContract>> {
-    const raw = await this.request(
-      `/api/persona/images?id=${encodeURIComponent(id)}`,
-      { method: 'DELETE', headers: this.getHeaders() },
-      'delete persona image'
-    );
-    return parseContractResponse(deletePersonaImageContract, raw);
   }
 
   async publishVideoDirect(input: PublishVideoDirectInput): Promise<DirectPublishResult> {

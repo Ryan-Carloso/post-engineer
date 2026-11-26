@@ -13,17 +13,6 @@
     "POST /api/api-keys": {
       "kind": "bearer-rejected"
     },
-    "POST /api/billing/check-tokens": {
-      "kind": "secret-auth",
-      "mechanism": "engine-secret"
-    },
-    "POST /api/billing/checkout": {
-      "kind": "session-only"
-    },
-    "POST /api/billing/webhook": {
-      "kind": "secret-auth",
-      "mechanism": "stripe-signature"
-    },
     "GET /api/coverage": {
       "kind": "ops-public"
     },
@@ -74,23 +63,6 @@
     },
     "POST /api/logout": {
       "kind": "session-only"
-    },
-    "GET /api/moneyprint/health": {
-      "kind": "session-only"
-    },
-    "POST /api/persona/avatar": {
-      "kind": "session-only"
-    },
-    "POST /api/persona/cloned-voices/denoise-preview": {
-      "kind": "session-only"
-    },
-    "GET /api/persona/video-download/[taskId]/[...path]": {
-      "kind": "returned-url",
-      "endpoint": "GET /api/persona/video-status/[taskId]"
-    },
-    "GET /api/persona/video-events/[taskId]": {
-      "kind": "event-stream",
-      "polledBy": "GET /api/persona/video-status/[taskId]"
     },
     "GET /api/version": {
       "kind": "ops-public"

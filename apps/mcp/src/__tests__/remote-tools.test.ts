@@ -1,5 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { EventEmitter } from 'node:events';
+import { describe, expect, it, vi } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createPostEngineerMcpServer } from '../index.js';
@@ -10,17 +9,6 @@ import {
   UpdatePersonaRemoteSchema,
   UpdatePersonaRemoteShape,
 } from '../remote-shapes.js';
-import {
-  CreateClonedVoiceRemoteSchema,
-  CreateClonedVoiceRemoteShape,
-} from '../cloned-voice-tools.js';
-
-const { httpsRequestMock } = vi.hoisted(() => ({ httpsRequestMock: vi.fn() }));
-
-vi.mock('node:https', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:https')>();
-  return { ...actual, request: httpsRequestMock };
-});
 
 vi.mock('../analytics.js', () => ({
   mcpTelemetryHeaders: () => ({}),
@@ -32,23 +20,26 @@ vi.mock('../analytics.js', () => ({
 }));
 
 const FILE_ONLY_ACTIONS: Array<[string, string]> = [['publish_video', 'from_file']];
-const PERSONA = '11111111-1111-4111-8111-111111111111';
 
 function actionsOf(tools: Awaited<ReturnType<typeof listTools>>, name: string): string[] {
   const action = (tools.find((tool) => tool.name === name)?.inputSchema.properties as Record<string, { enum?: string[] }> | undefined)?.action;
   return action?.enum ?? [];
 }
 
-async function listTools(transport: 'stdio' | 'http') {
-  const server = createPostEngineerMcpServer({} as unknown as PostEngineerClient, transport);
+async function connect(client: PostEngineerClient, transport: 'stdio' | 'http') {
+  const server = createPostEngineerMcpServer(client, transport);
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  const client = new Client({ name: 'test-client', version: '0.0.0' });
-  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  const mcpClient = new Client({ name: 'test-client', version: '0.0.0' });
+  await Promise.all([server.connect(serverTransport), mcpClient.connect(clientTransport)]);
+  return mcpClient;
+}
+
+async function listTools(transport: 'stdio' | 'http') {
+  const mcpClient = await connect({} as unknown as PostEngineerClient, transport);
   try {
-    const { tools } = await client.listTools();
-    return tools;
+    return (await mcpClient.listTools()).tools;
   } finally {
-    await client.close();
+    await mcpClient.close();
   }
 }
 
@@ -63,10 +54,8 @@ describe('remote (http) tool surface', () => {
   it('still offers the JSON actions on http', async () => {
     const tools = await listTools('http');
     const names = tools.map((t) => t.name);
-    for (const tool of ['personas', 'voices', 'media', 'generate_video']) expect(names).toContain(tool);
+    for (const tool of ['personas', 'publish_video', 'schedules', 'posts']) expect(names).toContain(tool);
     expect(actionsOf(tools, 'personas')).toEqual(expect.arrayContaining(['create', 'update', 'list']));
-    expect(actionsOf(tools, 'voices')).toContain('create_clone');
-    expect(actionsOf(tools, 'media')).toEqual(['upload', 'check']);
     expect(actionsOf(tools, 'publish_video')).toEqual(['create_upload', 'complete_upload', 'publish_upload', 'publish_existing']);
   });
 
@@ -77,269 +66,52 @@ describe('remote (http) tool surface', () => {
     }
   });
 
-  it('offers imageUrl instead of path on the remote image actions', async () => {
-    const tools = await listTools('http');
-    const fields = new Map(tools.map((t) => [t.name, Object.keys(t.inputSchema.properties ?? {})]));
-    expect(fields.get('media')).toContain('imageUrl');
-    expect(fields.get('persona_media')).toContain('imageUrl');
-    expect(fields.get('media')).not.toContain('path');
-    expect(fields.get('persona_media')).not.toContain('path');
-    const stdio = new Map((await listTools('stdio')).map((t) => [t.name, Object.keys(t.inputSchema.properties ?? {})]));
-    expect(stdio.get('media')).toContain('path');
-    expect(stdio.get('media')).not.toContain('imageUrl');
+  it('exposes no local-path field on http schemas and keeps avatarPath on stdio', async () => {
+    const http = new Map((await listTools('http')).map((t) => [t.name, t.inputSchema.properties ?? {}]));
+    const stdio = new Map((await listTools('stdio')).map((t) => [t.name, t.inputSchema.properties ?? {}]));
+    expect(http.get('personas')).not.toHaveProperty('avatarPath');
+    expect(stdio.get('personas')).toHaveProperty('avatarPath');
   });
 
-  it('exposes no local-path field on http schemas', async () => {
-    const tools = await listTools('http');
-    const byName = new Map(tools.map((t) => [t.name, t.inputSchema.properties ?? {}]));
-    expect(byName.get('personas')).toHaveProperty('avatarUrl');
-    expect(byName.get('personas')).not.toHaveProperty('avatarPath');
-    expect(byName.get('personas')).not.toHaveProperty('images');
-    expect(byName.get('personas')).not.toHaveProperty('imagePrimaryIndex');
-    expect(byName.get('voices')).toHaveProperty('audioUrl');
-    expect(byName.get('voices')).not.toHaveProperty('audioPath');
-  });
-
-  it('keeps local-path fields on stdio schemas', async () => {
-    const tools = await listTools('stdio');
-    const byName = new Map(tools.map((t) => [t.name, t.inputSchema.properties ?? {}]));
-    expect(byName.get('personas')).toHaveProperty('avatarPath');
-    expect(byName.get('personas')).toHaveProperty('images');
-    expect(byName.get('voices')).toHaveProperty('audioPath');
+  it('registers no generation, voice, billing or media-check tool', async () => {
+    const names = (await listTools('stdio')).map((tool) => tool.name);
+    for (const gone of ['generate_video', 'video_tasks', 'cancel_video', 'voices', 'billing', 'media', 'check_script']) {
+      expect(names).not.toContain(gone);
+    }
   });
 });
 
 describe('remote schemas reject local paths', () => {
-  it('create_persona remote shape has no path or library fields', () => {
+  it('create_persona remote shape has no path field', () => {
     expect(Object.keys(CreatePersonaRemoteShape)).not.toContain('avatarPath');
-    expect(Object.keys(CreatePersonaRemoteShape)).not.toContain('images');
     expect(Object.keys(UpdatePersonaRemoteShape)).not.toContain('avatarPath');
   });
 
-  it('persona remote schemas accept the CTA intent and reject an incoherent one (issue #639)', () => {
-    const base = { name: 'Ava', avatarUrl: 'https://example.com/face.png', voiceId: 'alloy', accounts: { youtube: ['UC-1'] } };
-    expect(CreatePersonaRemoteSchema.safeParse({ ...base, cta: { type: 'link', url: 'https://example.com/course' } }).success).toBe(true);
-    expect(CreatePersonaRemoteSchema.safeParse({ ...base, cta: { type: 'link' } }).success).toBe(false);
-    expect(UpdatePersonaRemoteSchema.safeParse({ personaId: 'p1', cta: { type: 'other', instruction: 'Invite to the WhatsApp group' } }).success).toBe(true);
-    expect(UpdatePersonaRemoteSchema.safeParse({ personaId: 'p1', cta: { type: 'other' } }).success).toBe(false);
-  });
-
-  it('create_cloned_voice remote schema accepts a URL and rejects a path', () => {
-    const base = { audioUrl: 'https://example.com/voice.mp3', language: 'en', consent: true as const, denoise: true };
-    expect(CreateClonedVoiceRemoteSchema.safeParse(base).success).toBe(true);
-    expect(CreateClonedVoiceRemoteSchema.safeParse({ ...base, audioPath: '/tmp/voice.mp3' }).success).toBe(false);
-    expect(Object.keys(CreateClonedVoiceRemoteShape)).not.toContain('audioPath');
-  });
-
-  it('runs the persona handlers on both transports and the local-file handlers on stdio', async () => {
-    async function callTool(transport: 'stdio' | 'http', name: string, args: Record<string, unknown>) {
-      const server = createPostEngineerMcpServer({} as unknown as PostEngineerClient, transport);
-      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-      const client = new Client({ name: 'test-client', version: '0.0.0' });
-      await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-      try {
-        return await client.callTool({ name, arguments: args });
-      } finally {
-        await client.close();
-      }
-    }
-
-    for (const transport of ['http', 'stdio'] as const) {
-      const created = await callTool(transport, 'personas', {
-        action: 'create',
-        name: 'Ava',
-        avatarUrl: 'https://example.com/face.png',
-        voiceId: 'alloy',
-      });
-      const updated = await callTool(transport, 'personas', { action: 'update', persona: PERSONA, name: 'Ava 2' });
-      expect(created.isError).toBe(true);
-      expect(updated.isError).toBe(true);
-    }
-
-    for (const [name, args] of [
-      ['media', { action: 'upload', path: '/no/such-image.png' }],
-      ['persona_media', { action: 'add_image', persona: PERSONA, path: '/no/such-image.png' }],
-      ['publish_video', { action: 'from_file', provider: 'instagram', videoPath: '/no/such-video.mp4', accountIds: ['ig-1'], caption: 'hi' }],
-    ] as const) {
-      const result = await callTool('stdio', name, args);
-      expect(result.isError).toBe(true);
-    }
-  });
-
   it('create_persona remote schema requires at least one bound account (issue #572)', () => {
-    const base = { name: 'Ava', avatarUrl: 'https://example.com/face.png', voiceId: 'alloy' };
-    expect(CreatePersonaRemoteSchema.safeParse(base).success).toBe(false);
-    expect(
-      CreatePersonaRemoteSchema.safeParse({ ...base, accounts: { youtube: [] } }).success,
-    ).toBe(false);
-    expect(
-      CreatePersonaRemoteSchema.safeParse({ ...base, accounts: { youtube: ['UC-1'] } }).success,
-    ).toBe(true);
+    expect(CreatePersonaRemoteSchema.safeParse({ name: 'Ava' }).success).toBe(false);
+    expect(CreatePersonaRemoteSchema.safeParse({ name: 'Ava', accounts: { youtube: [] } }).success).toBe(false);
+    expect(CreatePersonaRemoteSchema.safeParse({ name: 'Ava', accounts: { youtube: ['UC-1'] } }).success).toBe(true);
   });
 
   it('persona remote schemas reject smuggled path fields', () => {
-    const update = UpdatePersonaRemoteSchema.safeParse({ personaId: 'p1', avatarPath: '/etc/passwd.png' });
-    expect(update.success).toBe(false);
-    const create = CreatePersonaRemoteSchema.safeParse({
-      name: 'Ava',
-      avatarUrl: 'https://example.com/face.png',
-      avatarPath: '/etc/passwd.png',
-    });
-    expect(create.success).toBe(false);
+    expect(CreatePersonaRemoteSchema.safeParse({ name: 'Ava', accounts: { youtube: ['UC-1'] }, avatarPath: '/etc/passwd' }).success).toBe(false);
+    expect(UpdatePersonaRemoteSchema.safeParse({ personaId: 'p1', avatarPath: '/etc/passwd' }).success).toBe(false);
   });
 });
 
 describe('remote smuggled paths are dropped by the SDK, never read', () => {
-  const realFetch = global.fetch;
-
-  afterEach(() => {
-    global.fetch = realFetch;
-    httpsRequestMock.mockClear();
-  });
-
-  function armHttpsAudio(bytes: number[]): void {
-    httpsRequestMock.mockImplementation(
-      (_url: unknown, _options: unknown, callback: (res: unknown) => void) => {
-        const stream = (async function* () {
-          for (const byte of bytes) yield new Uint8Array([byte]);
-        })();
-        const response = Object.assign(stream, {
-          statusCode: 200,
-          headers: { 'content-type': 'audio/mpeg' },
-          resume: vi.fn(),
-          destroy: vi.fn(),
-        });
-        const req = new EventEmitter() as EventEmitter & {
-          end: () => void;
-          destroy: () => void;
-        };
-        req.end = () => {
-          callback(response);
-        };
-        req.destroy = () => {};
-        return req;
-      },
-    );
-  }
-
-  function stubClient() {
-    const createPersona = vi.fn().mockResolvedValue({ id: 'p1', name: 'Ava' });
-    const updatePersona = vi.fn().mockResolvedValue({ id: 'p1', name: 'Ava 2' });
-    const request = vi.fn().mockResolvedValue({ success: true, voice: { id: 'v1', status: 'ready', language: 'en', voice_id: 'chatterbox:u1', error_code: null, consent_at: null, created_at: null, updated_at: null } });
-    const client = {
-      createPersona,
-      updatePersona,
-      getHeaders: vi.fn(() => ({ Authorization: 'Bearer test' })),
-      request,
-      baseUrl: 'https://api.test',
-    } as unknown as PostEngineerClient;
-    return { client, createPersona, updatePersona, request };
-  }
-
-  async function callRemoteTool(client: PostEngineerClient, name: string, args: Record<string, unknown>) {
-    const server = createPostEngineerMcpServer(client, 'http');
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    const mcpClient = new Client({ name: 'test-client', version: '0.0.0' });
-    await Promise.all([server.connect(serverTransport), mcpClient.connect(clientTransport)]);
+  it('personas create over HTTP drops a smuggled avatarPath before the handler', async () => {
+    const createPersona = vi.fn().mockResolvedValue({ success: true, personaId: 'p1' });
+    const mcpClient = await connect({ createPersona } as unknown as PostEngineerClient, 'http');
     try {
-      return await mcpClient.callTool({ name, arguments: args });
+      await mcpClient.callTool({
+        name: 'personas',
+        arguments: { action: 'create', name: 'Ava', accounts: { youtube: ['UC-1'] }, avatarPath: '/etc/passwd' },
+      });
     } finally {
       await mcpClient.close();
     }
-  }
-
-  function isRecord(value: unknown): value is Record<string, unknown> {
-    return typeof value === 'object' && value !== null;
-  }
-
-  function firstText(result: unknown): string {
-    if (!isRecord(result)) return '';
-    const content = result.content;
-    if (!Array.isArray(content)) return '';
-    const block = content[0];
-    if (!isRecord(block)) return '';
-    return typeof block.text === 'string' ? block.text : '';
-  }
-
-  it('personas create over HTTP with only a smuggled avatarPath fails the face check', async () => {
-    const { client, createPersona } = stubClient();
-    const result = await callRemoteTool(client, 'personas', {
-      action: 'create',
-      name: 'Ava',
-      voiceId: 'no-voice',
-      avatarPath: '/etc/passwd.png',
-      accounts: { youtube: ['UC-1'] },
-    });
-    expect(result.isError).toBe(true);
-    expect(firstText(result)).toContain('avatarUrl or avatarPath is required');
-    expect(createPersona).not.toHaveBeenCalled();
-  });
-
-  it('personas create over HTTP with avatarUrl and a smuggled avatarPath keeps only the URL', async () => {
-    const { client, createPersona } = stubClient();
-    const result = await callRemoteTool(client, 'personas', {
-      action: 'create',
-      name: 'Ava',
-      voiceId: 'no-voice',
-      avatarUrl: 'https://example.com/face.png',
-      avatarPath: '/etc/passwd.png',
-      accounts: { youtube: ['UC-1'] },
-    });
-    expect(result.isError).toBeUndefined();
-    expect(createPersona).toHaveBeenCalledTimes(1);
-    expect(createPersona.mock.calls[0][0]).toEqual(
-      expect.objectContaining({ avatarUrl: 'https://example.com/face.png' }),
-    );
-    expect(createPersona.mock.calls[0][0]).not.toHaveProperty('avatarPath');
-  });
-
-  it('personas update over HTTP with only a smuggled avatarPath updates nothing from the path', async () => {
-    const { client, updatePersona } = stubClient();
-    const result = await callRemoteTool(client, 'personas', {
-      action: 'update',
-      persona: PERSONA,
-      avatarPath: '/etc/passwd.png',
-    });
-    expect(result.isError).toBeUndefined();
-    expect(updatePersona).toHaveBeenCalledTimes(1);
-    expect(updatePersona).toHaveBeenCalledWith({ personaId: PERSONA });
-  });
-
-  it('voices create_clone over HTTP with a smuggled audioPath clones from the URL', async () => {
-    const { client, request } = stubClient();
-    armHttpsAudio([1, 2, 3]);
-    const result = await callRemoteTool(client, 'voices', {
-      action: 'create_clone',
-      audioUrl: 'https://93.184.216.34/voice.mp3',
-      audioPath: '/tmp/voice.mp3',
-      language: 'en',
-      consent: true,
-      denoise: true,
-    });
-    expect(result.isError).toBeUndefined();
-    expect(httpsRequestMock).toHaveBeenCalledWith(
-      'https://93.184.216.34/voice.mp3',
-      expect.anything(),
-      expect.any(Function),
-    );
-    expect(request).toHaveBeenCalledWith(
-      '/api/persona/cloned-voices',
-      expect.objectContaining({ method: 'POST' }),
-      'create cloned voice',
-      expect.any(Number),
-    );
-    const body = request.mock.calls[0][1].body as FormData;
-    expect((body.get('file') as File).name).toBe('reference.bin');
-  });
-
-  it('remote URL field descriptions never name the local-path field', async () => {
-    const tools = await listTools('http');
-    const byName = new Map(tools.map((t) => [t.name, t.inputSchema.properties ?? {}]));
-    const personaProps = byName.get('personas') as Record<string, { description?: string }>;
-    expect(personaProps.avatarUrl.description).toBeDefined();
-    expect(personaProps.avatarUrl.description).not.toContain('avatarPath');
-    const voiceProps = byName.get('voices') as Record<string, { description?: string }>;
-    expect(voiceProps.audioUrl.description).toBeDefined();
-    expect(voiceProps.audioUrl.description).not.toContain('audioPath');
+    const [input] = createPersona.mock.calls[0] ?? [];
+    expect(input).toEqual({ name: 'Ava', accounts: { youtube: ['UC-1'] } });
   });
 });

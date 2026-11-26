@@ -15,17 +15,14 @@ type MetricsCase = { args: Record<string, string>; accept: boolean };
 const METRICS_CASES: MetricsCase[] = [
   { args: { window: '7d' }, accept: true },
   {
-    args: { window: '24h', persona: PERSONA, account: 'UC-1', provider: 'youtube', angle: 'hot take' },
+    args: { window: '24h', persona: PERSONA, account: 'UC-1', provider: 'youtube' },
     accept: true,
   },
   { args: { window: '28d', persona: METRICS_NONE }, accept: true },
-  { args: { window: '28d', angle: METRICS_NONE }, accept: true },
-  { args: { window: '7d', angle: 'a'.repeat(200) }, accept: true },
   { args: { window: '30d' }, accept: false },
   { args: { window: '7d', persona: 'not-a-uuid' }, accept: false },
   { args: { window: '7d', provider: 'tiktok' }, accept: false },
   { args: { window: '7d', account: '' }, accept: false },
-  { args: { window: '7d', angle: 'a'.repeat(201) }, accept: false },
 ];
 
 function metricsParams(args: Record<string, string>): URLSearchParams {
@@ -34,7 +31,6 @@ function metricsParams(args: Record<string, string>): URLSearchParams {
     personaId: args.persona ?? null,
     accountId: args.account ?? null,
     provider: (args.provider ?? null) as SocialProvider | null,
-    angle: args.angle ?? null,
   });
 }
 

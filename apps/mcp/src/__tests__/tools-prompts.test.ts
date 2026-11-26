@@ -26,7 +26,7 @@ const CATALOG = [
 const VERSION_ID = '44444444-4444-4444-8444-444444444444';
 
 const PROMPT_TEXT: Record<string, string> = {
-  'daily-news': 'Daily news recipe: call validate_script, then generate_persona_video.',
+  'daily-news': 'Daily news recipe: write the post.',
   'full-setup': 'Full setup recipe: list_personas, get_token_balance, then generate_persona_video.',
 };
 
@@ -152,7 +152,7 @@ describe('handleGetPrompt', () => {
     expect(result.isError).toBeFalsy();
     expect(textOf(result)).toBe(recipeRunText({ slug: 'daily-news', prompt: PROMPT_TEXT['daily-news'] ?? '', source: 'own', visibility: 'public', verified: false, versionId: VERSION_ID }));
     expect(textOf(result).startsWith(PROMPT_TEXT['daily-news'] ?? '-')).toBe(true);
-    expect(textOf(result)).toContain(`pass recipe: "daily-news" and promptVersionId: "${VERSION_ID}"`);
+    expect(textOf(result)).toContain(`pass promptVersionId: "${VERSION_ID}"`);
     expect(requestedPaths()).toEqual(['/api/prompts/daily-news']);
   });
 
@@ -197,7 +197,7 @@ describe('SERVER_INSTRUCTIONS', () => {
   it('points topic-shaped requests at the prompts tool before any scripting', () => {
     expect(SERVER_INSTRUCTIONS).toContain('call prompts (action: list) first');
     expect(SERVER_INSTRUCTIONS).toContain('prompts (action: get)');
-    expect(SERVER_INSTRUCTIONS).toContain('instead of assembling the script yourself');
+    expect(SERVER_INSTRUCTIONS).toContain('instead of assembling the copy yourself');
   });
 });
 
@@ -254,14 +254,13 @@ describe('prompt tools over MCP', () => {
     expect(knownHeaders()).toEqual(['false', 'false', 'false', 'true']);
   });
 
-  it('keeps generate_video pointing topic-shaped requests back at the recipes', async () => {
+  it('keeps prompts pointing topic-shaped requests at the prompt library', async () => {
     await withMcpClient(async (mcp) => {
       const { tools } = await mcp.listTools();
-      const generate = tools.find((tool) => tool.name === 'generate_video');
-      expect(generate?.description).toContain('call prompts (action: list) first');
-      expect(generate?.description).toContain('prompts (action: get)');
-      expect(generate?.description).toContain('(news, a place, a product, GitHub PRs)');
-      expect(generate?.description).toContain("pass that prompt's versionId as promptVersionId on each video");
+      const prompts = tools.find((tool) => tool.name === 'prompts');
+      expect(prompts?.description).toContain('Call this BEFORE writing copy');
+      expect(prompts?.description).toContain('prompts (action: get)');
+      expect(prompts?.description).toContain("pass its versionId as promptVersionId on publish_video");
     });
   });
 
@@ -349,7 +348,7 @@ describe('prompts from users', () => {
     fetchMock.mockResolvedValueOnce(userPrompt('community'));
     const result = await handleGetPrompt(client(), { slug: 'their-prompt' });
     expect(textOf(result).startsWith(`${COMMUNITY_PROMPT_NOTICE}\n\nFollow these steps.\n\n`)).toBe(true);
-    expect(textOf(result)).toContain(`pass recipe: "their-prompt" and promptVersionId: "${VERSION_ID}"`);
+    expect(textOf(result)).toContain(`pass promptVersionId: "${VERSION_ID}"`);
   });
 
   it('serves a verified community prompt without the unverified-content notice', async () => {
@@ -357,14 +356,14 @@ describe('prompts from users', () => {
     const result = await handleGetPrompt(client(), { slug: 'their-prompt' });
     expect(textOf(result).startsWith('Follow these steps.\n\n')).toBe(true);
     expect(textOf(result)).not.toContain(COMMUNITY_PROMPT_NOTICE);
-    expect(textOf(result)).toContain(`pass recipe: "their-prompt" and promptVersionId: "${VERSION_ID}"`);
+    expect(textOf(result)).toContain(`pass promptVersionId: "${VERSION_ID}"`);
   });
 
   it('returns the caller own prompt as stored, followed only by its version footer', async () => {
     fetchMock.mockResolvedValueOnce(userPrompt('own'));
     const result = await handleGetPrompt(client(), { slug: 'their-prompt' });
     expect(textOf(result)).toBe(
-      `Follow these steps.\n\nWhen you call generate_video with a script written from this prompt, pass promptVersionId: "${VERSION_ID}" on each video, so experiments (action: results) can compare this prompt.`,
+      `Follow these steps.\n\nWhen you schedule a post written from this prompt with publish_video (action: publish_existing), pass promptVersionId: "${VERSION_ID}", so experiments (action: results) can compare this prompt.`,
     );
   });
 
@@ -384,7 +383,7 @@ describe('prompts from users', () => {
     expect(listed.prompts.map((prompt) => prompt.title)).toEqual(['Checked']);
   });
 
-  it('does not record a private prompt as a fetched recipe, so its slug never reaches generate_video telemetry', async () => {
+  it('does not record a private prompt as a fetched recipe, so its slug never reaches the request telemetry', async () => {
     const server = createPostEngineerMcpServer(client(), 'stdio');
     const [a, b] = InMemoryTransport.createLinkedPair();
     const mcp = new Client({ name: 't', version: '0.0.0' });
@@ -393,7 +392,7 @@ describe('prompts from users', () => {
       fetchMock.mockResolvedValueOnce(userPrompt('own'));
       await mcp.callTool({ name: 'prompts', arguments: { action: 'get', slug: 'their-prompt' } });
       fetchMock.mockResolvedValueOnce(json(200, { success: true }));
-      await mcp.callTool({ name: 'billing', arguments: { action: 'balance' } });
+      await mcp.callTool({ name: 'personas', arguments: { action: 'list' } });
       const lastHeaders = fetchMock.mock.calls.at(-1)?.[1].headers as Record<string, string>;
       expect(Object.values(lastHeaders)).not.toContain('their-prompt');
     } finally {

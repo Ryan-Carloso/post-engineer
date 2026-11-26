@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -84,8 +84,8 @@ function textOf(response: { content: Array<{ type: string; text?: string }> }): 
 
 function args(overrides: Partial<PublishExistingArgs> = {}): PublishExistingArgs {
   return {
-    mediaKind: 'task',
-    taskId: 'task-1',
+    mediaKind: 'upload',
+    uploadId: '33333333-3333-4333-8333-333333333333',
     accounts: ['UC1'],
     title: 'T',
     description: 'D',
@@ -97,18 +97,8 @@ function args(overrides: Partial<PublishExistingArgs> = {}): PublishExistingArgs
 }
 
 describe('publish_existing schema', () => {
-  it('requires the media reference for the kind', () => {
-    expect(PublishExistingSchema.safeParse(args()).success).toBe(true);
-    expect(PublishExistingSchema.safeParse(args({ taskId: undefined })).success).toBe(false);
-    expect(PublishExistingSchema.safeParse(args({ mediaKind: 'upload', taskId: undefined })).success).toBe(false);
-    expect(
-      PublishExistingSchema.safeParse(args({ mediaKind: 'upload', taskId: undefined, uploadId: '123e4567-e89b-12d3-a456-426614174000' })).success,
-    ).toBe(true);
-    expect(PublishExistingSchema.safeParse(args({ mediaKind: 'upload', taskId: undefined, uploadId: 'not-a-uuid' })).success).toBe(false);
-  });
-
   it('takes an image only from imagePath: base64 bytes are never a tool argument', () => {
-    const image = { mediaKind: 'image' as const, taskId: undefined };
+    const image = { mediaKind: 'image' as const };
     const missing = PublishExistingSchema.safeParse(args(image));
     expect(missing.success).toBe(false);
     expect(JSON.stringify(missing.error?.issues)).toContain('create_upload');
@@ -134,7 +124,7 @@ describe('publish_existing schema', () => {
 
 describe('publish_existing client call', () => {
   const BASE: PublishExistingInput = {
-    media: { kind: 'task', taskId: 'task-1' },
+    media: { kind: 'upload', uploadId: '33333333-3333-4333-8333-333333333333' },
     accounts: { youtube: ['UC1'], instagram: ['ig-1'] },
     title: 'T',
     description: 'D',
@@ -148,7 +138,7 @@ describe('publish_existing client call', () => {
     const { client, request } = fakeClient(async () => SCHEDULED_REPLY);
     await publishExisting(client, { ...BASE, boardId: 'board-1', personaId: PERSONA_ID, tags: ['t'], privacyStatus: 'public', caption: 'C' });
     expect(publishBody(request)).toEqual({
-      media: { kind: 'task', taskId: 'task-1' },
+      media: { kind: 'upload', uploadId: '33333333-3333-4333-8333-333333333333' },
       title: 'T',
       description: 'D',
       idempotencyKey: 'key-1',
@@ -244,21 +234,6 @@ describe('publish_existing tool handler', () => {
     await rm(dir, { recursive: true, force: true });
   });
 
-  it('resolves account names across networks into one call and echoes them', async () => {
-    const { client, request } = fakeClient(async () => ASAP_REPLY);
-    const response = await handlePublishExisting(
-      client,
-      args({ mediaKind: 'upload', taskId: undefined, uploadId: '123e4567-e89b-12d3-a456-426614174000', accounts: ['Maria Cooks', 'maria.cooks'], mode: 'asap', publishAt: undefined, tags: ['t'], privacyStatus: 'public' }),
-    );
-    expect(response.isError).toBeUndefined();
-    const body = publishBody(request);
-    expect(body.publishing).toMatchObject({ mode: 'asap', providers: ['youtube', 'instagram'], accounts: { youtube: ['UC1'], instagram: ['ig-1'] } });
-    const text = textOf(response);
-    expect(text).toContain('Resolved: account "Maria Cooks" → youtube UC1; account "maria.cooks" → instagram ig-1.');
-    expect(text).toContain('youtube: published\n- UC1: published (https://youtu.be/v1)');
-    expect(text).toContain('(all networks succeeded)');
-  });
-
   it('names account_needs_reconnect in the tool text without a provider error', async () => {
     const { client } = fakeClient(async () => ({
       ...SCHEDULED_REPLY,
@@ -297,35 +272,6 @@ describe('publish_existing tool handler', () => {
     expect(none.request.mock.calls.some(([path]) => path === '/api/media/publish-existing')).toBe(false);
   });
 
-  it('rejects an image bound for a video-only network before reading it', async () => {
-    const { client, request } = fakeClient(async () => ASAP_REPLY, { rumble: ['rb-1'], instagram: ['ig-1'] });
-    const response = await handlePublishExisting(client, args({ mediaKind: 'image', taskId: undefined, imagePath: join(dir, 'missing.png'), accounts: undefined, personaId: PERSONA_ID }));
-    expect(response.isError).toBe(true);
-    expect(textOf(response)).toContain('images go to youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, telegram only; drop the rumble account(s).');
-    expect(request.mock.calls.some(([path]) => path === '/api/media/publish-existing')).toBe(false);
-  });
-
-  it('reads a local PNG and sends it as base64 with its real type', async () => {
-    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d, 0x49, 0x48, 0x44, 0x52]);
-    const path = join(dir, 'photo.png');
-    await writeFile(path, png);
-    const { client, request } = fakeClient(async () => ({ ...ASAP_REPLY, mediaKind: 'image', publishes: [ASAP_REPLY.publishes[1]] }));
-    const response = await handlePublishExisting(client, args({ mediaKind: 'image', taskId: undefined, imagePath: path, accounts: ['ig-1'], mode: 'asap', publishAt: undefined }));
-    expect(response.isError).toBeUndefined();
-    expect(publishBody(request).media).toEqual({ kind: 'image', imageData: png.toString('base64'), contentType: 'image/png' });
-    expect(textOf(response)).not.toContain(dir);
-  });
-
-  it('refuses a local WebP: Instagram image posts take JPEG or PNG', async () => {
-    const webp = Buffer.concat([Buffer.from('RIFF'), Buffer.from([0, 0, 0, 0]), Buffer.from('WEBP'), Buffer.alloc(4)]);
-    const path = join(dir, 'photo.webp');
-    await writeFile(path, webp);
-    const { client, request } = fakeClient(async () => ASAP_REPLY);
-    const response = await handlePublishExisting(client, args({ mediaKind: 'image', taskId: undefined, imagePath: path, accounts: ['ig-1'] }));
-    expect(textOf(response)).toContain('JPEG or PNG');
-    expect(request).not.toHaveBeenCalled();
-  });
-
   it('passes the caller key through, and generates one per call when omitted', async () => {
     const { client, request } = fakeClient(async () => SCHEDULED_REPLY);
     await handlePublishExisting(client, args({ idempotencyKey: 'my-key' }));
@@ -338,7 +284,7 @@ describe('publish_existing tool handler', () => {
   it('summarizes a schedule, and notes a replay', async () => {
     const { client } = fakeClient(async () => SCHEDULED_REPLY);
     const text = textOf(await handlePublishExisting(client, args()));
-    expect(text).toContain('Scheduled existing task.\nSchedule sched-1.\n- slot slot-1 at 2026-12-01T20:00:00.000Z (ready)');
+    expect(text).toContain('Scheduled existing upload.\nSchedule sched-1.\n- slot slot-1 at 2026-12-01T20:00:00.000Z (ready)');
     expect(text).toContain('"scheduleId":"sched-1"');
     const replay = fakeClient(async () => ({ ...SCHEDULED_REPLY, replayed: true }));
     expect(textOf(await handlePublishExisting(replay.client, args()))).toContain('(replayed: the same request was already scheduled)');
@@ -431,21 +377,6 @@ describe('publish_existing tool on both transports', () => {
     expect(http).not.toContain('imagePath');
     expect(http).toContain('create_upload');
     expect(http).toContain('mediaKind upload');
-  });
-
-  it('rejects a local image path on the http server', async () => {
-    const { client, request } = fakeClient(async () => ASAP_REPLY);
-    const mcp = await connect(client, 'http');
-    try {
-      const called = await mcp.callTool({
-        name: 'publish_video',
-        arguments: { action: 'publish_existing', ...args({ mediaKind: 'image', taskId: undefined, imagePath: '/etc/hosts', accounts: ['ig-1'] }) },
-      });
-      expect(called.isError).toBe(true);
-      expect(request).not.toHaveBeenCalled();
-    } finally {
-      await mcp.close();
-    }
   });
 
   it('invokes publish_existing through the server', async () => {

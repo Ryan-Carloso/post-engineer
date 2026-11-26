@@ -15,11 +15,9 @@ vi.mock('../analytics.js', () => ({
   },
 }));
 
-const READ_ONLY_TOOLS = ['video_tasks', 'posts', 'billing', 'check_script'];
+const READ_ONLY_TOOLS = ['posts', 'experiments', 'persona_media'];
 
-const DESTRUCTIVE_TOOLS = ['cancel_video', 'insights', 'personas', 'persona_media', 'voices', 'accounts', 'schedules', 'publish_video', 'tool_config', 'prompts', 'experiments'];
-
-const MUTATING_TOOLS = ['generate_video', 'media'];
+const DESTRUCTIVE_TOOLS = ['insights', 'personas', 'accounts', 'schedules', 'publish_video', 'tool_config', 'prompts'];
 
 describe('tool annotations over HTTP tools/list', () => {
   it('carries readOnly/destructive/openWorld hints for every tool', async () => {
@@ -33,7 +31,7 @@ describe('tool annotations over HTTP tools/list', () => {
       try {
         const { tools } = await client.listTools();
         const byName = new Map(tools.map((t) => [t.name, t.annotations]));
-        expect([...byName.keys()].sort()).toEqual([...READ_ONLY_TOOLS, ...DESTRUCTIVE_TOOLS, ...MUTATING_TOOLS].sort());
+        expect([...byName.keys()].sort()).toEqual([...READ_ONLY_TOOLS, ...DESTRUCTIVE_TOOLS].sort());
         for (const name of READ_ONLY_TOOLS) {
           expect(byName.get(name), `tool ${name}`).toMatchObject({
             readOnlyHint: true,
@@ -44,12 +42,6 @@ describe('tool annotations over HTTP tools/list', () => {
           expect(byName.get(name), `tool ${name}`).toMatchObject({
             readOnlyHint: false,
             destructiveHint: true,
-          });
-        }
-        for (const name of MUTATING_TOOLS) {
-          expect(byName.get(name), `tool ${name}`).toMatchObject({
-            readOnlyHint: false,
-            destructiveHint: false,
           });
         }
         for (const tool of tools) {
@@ -73,8 +65,8 @@ describe('tool annotations over HTTP tools/list', () => {
       const { tools } = await client.listTools();
       const byName = new Map(tools.map((t) => [t.name, t.annotations]));
       expect(byName.get('publish_video')).toMatchObject({ readOnlyHint: false, destructiveHint: true });
-      expect(byName.get('media')).toMatchObject({ readOnlyHint: false, destructiveHint: false });
-      expect(byName.get('persona_media')).toMatchObject({ readOnlyHint: false, destructiveHint: true });
+      expect(byName.get('personas')).toMatchObject({ readOnlyHint: false, destructiveHint: true });
+      expect(byName.get('persona_media')).toMatchObject({ readOnlyHint: true, destructiveHint: false });
     } finally {
       await client.close();
     }

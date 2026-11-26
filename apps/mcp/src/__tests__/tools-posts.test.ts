@@ -39,20 +39,41 @@ function textOf(response: unknown): string {
   return block.text;
 }
 
-const GENERATION_DETAIL = {
-  id: 'g-1',
-  generationId: 'g-1',
-  engineTaskId: null,
-  personaName: null,
-  videoSubject: 'Gym',
-  status: 'complete',
-  errorCode: null,
-  tokensRefunded: false,
-  createdAt: '2026-11-07T00:00:00Z',
-  completedAt: '2026-11-07T01:00:00Z',
-  progress: 100,
-  stage: null,
-  scriptAngle: null,
+const SLOT_DETAIL = {
+  success: true,
+  slot: {
+    id: 'slot-1',
+    scheduleId: 'sched-1',
+    slotAt: '2026-11-07T00:00:00Z',
+    status: 'published',
+    title: 'Gym',
+    error: null,
+    publishedAt: '2026-11-07T00:01:00Z',
+    publishLinks: [],
+    userNotices: [],
+    providerFailures: [],
+    postUrl: null,
+  },
+  schedule: {
+    id: 'sched-1',
+    personaId: null,
+    providers: ['youtube'],
+    youtubeAccountIds: ['UC-1'],
+    instagramAccountIds: [],
+    linkedinAccountIds: [],
+    blueskyAccountIds: [],
+    threadsAccountIds: [],
+    facebookAccountIds: [],
+    pinterestAccountIds: [],
+    pinterestBoardId: null,
+    threespeakAccountIds: [],
+    rumbleAccountIds: [],
+    fanvueAccountIds: [],
+    telegramAccountIds: [],
+    timezone: 'UTC',
+    publishMode: 'scheduled',
+  },
+  persona: null,
 };
 
 const METRICS_ROW = {
@@ -61,7 +82,6 @@ const METRICS_ROW = {
   provider: 'youtube',
   accountId: 'UC-1',
   externalId: 'vid_1',
-  scriptAngle: 'hot take',
   publishedAt: '2026-11-12T10:00:00.000Z',
   views: 10,
   likes: 2,
@@ -95,7 +115,7 @@ const RETENTION_RESPONSE = {
 
 describe('getPost', () => {
   it('GETs /api/posts/[id] with the id percent-encoded', async () => {
-    const request = vi.fn().mockResolvedValue({ success: true, kind: 'generation', generation: GENERATION_DETAIL });
+    const request = vi.fn().mockResolvedValue(SLOT_DETAIL);
     await getPost(fakeClient(request), 'batch:s-1:slot:a/b');
     expect(request).toHaveBeenCalledWith(
       '/api/posts/batch%3As-1%3Aslot%3Aa%2Fb',
@@ -105,7 +125,7 @@ describe('getPost', () => {
   });
 
   it('rejects a malformed 200 body', async () => {
-    const request = vi.fn().mockResolvedValue({ success: true, kind: 'slot' });
+    const request = vi.fn().mockResolvedValue({ success: true, slot: {} });
     await expect(getPost(fakeClient(request), 'slot-1')).rejects.toThrow('Malformed response from GET /api/posts/:id');
   });
 });
@@ -119,27 +139,6 @@ describe('getPostMetrics', () => {
       { method: 'GET', headers: HEADERS },
       'get post metrics',
     );
-  });
-
-  it('sends every filter under the route parameter names, encoded', async () => {
-    const request = vi.fn().mockResolvedValue(METRICS_RESPONSE);
-    await getPostMetrics(fakeClient(request), {
-      window: '24h',
-      persona: PERSONA,
-      account: 'UC-1',
-      provider: 'youtube',
-      angle: 'hot take & more',
-    });
-    const path = (request.mock.calls[0] as [string])[0];
-    const url = new URL(path, 'https://api.test');
-    expect(url.pathname).toBe('/api/metrics');
-    expect([...url.searchParams.entries()]).toEqual([
-      ['window', '24h'],
-      ['persona', PERSONA],
-      ['account', 'UC-1'],
-      ['provider', 'youtube'],
-      ['angle', 'hot take & more'],
-    ]);
   });
 
   it('rejects a malformed 200 body', async () => {
@@ -171,17 +170,17 @@ describe('GetPostMetricsSchema', () => {
 
   it('rejects empty and over-length filters like the route does', () => {
     expect(GetPostMetricsSchema.safeParse({ window: '7d', account: '' }).success).toBe(false);
-    expect(GetPostMetricsSchema.safeParse({ window: '7d', angle: 'a'.repeat(201) }).success).toBe(false);
-    expect(GetPostMetricsSchema.safeParse({ window: '7d', angle: 'a'.repeat(200) }).success).toBe(true);
+    expect(GetPostMetricsSchema.safeParse({ window: '7d', account: 'a'.repeat(201) }).success).toBe(false);
+    expect(GetPostMetricsSchema.safeParse({ window: '7d', account: 'a'.repeat(200) }).success).toBe(true);
   });
 });
 
 describe('get_post / get_post_metrics handlers', () => {
   it('handleGetPost returns the unified detail', async () => {
-    const request = vi.fn().mockResolvedValue({ success: true, kind: 'generation', generation: GENERATION_DETAIL });
+    const request = vi.fn().mockResolvedValue(SLOT_DETAIL);
     const result = await handleGetPost(fakeClient(request), { id: 'g-1' });
     expect(result.isError).toBeFalsy();
-    expect(JSON.parse(textOf(result))).toEqual({ success: true, kind: 'generation', generation: GENERATION_DETAIL });
+    expect(JSON.parse(textOf(result))).toEqual(SLOT_DETAIL);
   });
 
   it('handleGetPost maps failures to an error response', async () => {
@@ -254,7 +253,7 @@ describe('registered posts and insights tools', () => {
   }
 
   it('get_post calls GET /api/posts/[id] through the server', async () => {
-    const request = vi.fn().mockResolvedValue({ success: true, kind: 'generation', generation: GENERATION_DETAIL });
+    const request = vi.fn().mockResolvedValue(SLOT_DETAIL);
     const result = await callTool('posts', { action: 'get', id: 'slot-1' }, request);
     expect(result.isError, JSON.stringify(result.content)).toBeFalsy();
     expect(request).toHaveBeenCalledWith('/api/posts/slot-1', { method: 'GET', headers: HEADERS }, 'get post');

@@ -10,8 +10,6 @@ import { registerContentTools } from './intent-content.js';
 import { registerLibraryTools } from './intent-library.js';
 import { registerPersonaMediaTools, registerPersonaTools } from './intent-personas.js';
 import { registerToolConfigTools } from './intent-tool-config.js';
-import { registerVideoTools } from './intent-video.js';
-import { registerVoiceTools } from './intent-voices.js';
 import { parseHttpTransportOptions, serveHttpTransport } from './http-transport.js';
 import { parseHttpAuthOptions } from './http-auth.js';
 import { SERVER_INSTRUCTIONS, registerPromptTools, type McpTransportKind } from './tools-prompts.js';
@@ -35,14 +33,12 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
   registerRemotePrompts(server, apiClient);
   const recipeSession = registerPromptTools(server, apiClient, transport);
 
-  registerVideoTools(server, apiClient, recipeSession);
   registerPersonaTools(server, apiClient, recipeSession, remote);
-  registerPersonaMediaTools(server, apiClient, remote);
-  registerVoiceTools(server, apiClient, remote);
+  registerPersonaMediaTools(server, apiClient);
   registerAccountTools(server, apiClient, recipeSession);
   registerToolConfigTools(server, apiClient);
-  registerLibraryTools(server, apiClient, recipeSession);
-  registerContentTools(server, apiClient, recipeSession, remote);
+  registerLibraryTools(server, apiClient);
+  registerContentTools(server, apiClient, remote);
 
   return server;
 }

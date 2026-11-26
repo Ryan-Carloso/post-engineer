@@ -1,12 +1,5 @@
-import { VIDEO_LAYOUTS } from './limits.js';
-import type { FaceQuality, VideoAspect } from './contracts/personas.js';
-import type { PersonaCtaType } from './contracts/personas.js';
-import type { VideoType } from './video-type.js';
-import type { SubtitlePosition, VideoTransitionMode } from './contracts/videos.js';
 import type { SocialProvider } from './contracts/providers.js';
 import type { IdentityCard } from './contracts/persona-identity-card.js';
-
-export type { VideoType } from './video-type.js';
 
 export interface PostEngineerClientOptions {
   apiKey?: string;
@@ -15,107 +8,17 @@ export interface PostEngineerClientOptions {
   suppressVersionHeader?: boolean;
 }
 
-export interface PersonaLibraryImageInput {
-  path: string;
-  tag?: string;
-  description?: string;
-}
-
-export type VideoLayout = (typeof VIDEO_LAYOUTS)[number];
-
-export interface PersonaCtaInput {
-  type: PersonaCtaType;
-  url?: string;
-  instruction?: string;
-}
-
 export interface CreatePersonaInput {
   name: string;
-  avatarUrl?: string;
   avatarPath?: string;
-  voiceId: string;
-  language?: string;
-  videoAspect?: VideoAspect;
-  videoLayout?: VideoLayout;
-  hookPanel?: boolean;
-  scriptPrompt?: string;
-  paragraphNumber?: number;
-  niche?: string;
-  faceQuality?: FaceQuality;
-  cta?: PersonaCtaInput;
   identityCard?: IdentityCard | null;
   accounts: Record<string, string[]>;
-  images?: PersonaLibraryImageInput[];
-  imagePrimaryIndex?: number;
-}
-
-export interface GeneratePersonaVideoInput {
-  personaId?: string;
-  title: string;
-  description: string;
-  promptVersionId?: string;
-  cta?: PersonaCtaInput | null;
-  providers: SocialProvider[];
-  youtubeAccountIds?: string[];
-  instagramAccountIds?: string[];
-  linkedinAccountIds?: string[];
-  blueskyAccountIds?: string[];
-  threadsAccountIds?: string[];
-  facebookAccountIds?: string[];
-  pinterestAccountIds?: string[];
-  pinterestBoardId?: string;
-  fanvueAccountIds?: string[];
-  threespeakAccountIds?: string[];
-  rumbleAccountIds?: string[];
-  telegramAccountIds?: string[];
-  mode?: 'scheduled' | 'asap';
-  startAt?: string;
-  times?: string[];
-  timezone?: string;
-  options?: {
-    videoType: VideoType;
-    musicMood?: string;
-    audioUrl?: string;
-    imageId?: string;
-    voiceId?: string;
-    webhookUrl?: string;
-    videoAspect?: '9:16' | '16:9' | '1:1';
-    videoLayout?: VideoLayout;
-    hookPanel?: boolean;
-    paragraphNumber?: number;
-    language?: string;
-    niche?: string;
-    hookTitle?: string;
-    videoClipDuration?: number;
-    videoTransitionMode?: VideoTransitionMode;
-    videoVariationSeed?: number;
-    subtitlePosition?: SubtitlePosition;
-    subtitleCustomPosition?: number;
-    segments?: Array<{
-      kind: 'hook' | 'content';
-      text: string;
-      cta?: boolean;
-      media?: Array<{ mediaId?: string; url?: string; overlay?: { title: string; subtitle?: string; badge?: string } }>;
-    }>;
-  };
-  idempotencyKey?: string;
 }
 
 export interface UpdatePersonaInput {
   personaId: string;
   name?: string;
-  avatarUrl?: string;
   avatarPath?: string;
-  voiceId?: string;
-  language?: string;
-  videoAspect?: VideoAspect;
-  videoLayout?: VideoLayout;
-  hookPanel?: boolean;
-  scriptPrompt?: string;
-  paragraphNumber?: number;
-  niche?: string;
-  faceQuality?: FaceQuality;
-  cta?: PersonaCtaInput;
   identityCard?: IdentityCard | null;
 }
 
@@ -161,7 +64,6 @@ export interface CompletedVideoUpload {
 
 export interface PublishExistingInput {
   media:
-    | { kind: 'task'; taskId: string }
     | { kind: 'upload'; uploadId: string }
     | { kind: 'image'; imageData: string; contentType: 'image/jpeg' | 'image/png' };
   accounts: Partial<Record<SocialProvider, string[]>>;
@@ -175,6 +77,7 @@ export interface PublishExistingInput {
   tags?: string[];
   privacyStatus?: 'public' | 'private' | 'unlisted';
   boardId?: string;
+  promptVersionId?: string;
   idempotencyKey: string;
 }
 
@@ -203,7 +106,7 @@ export type PublishExistingResult =
       mode: 'asap';
       success: boolean;
       replayed: boolean;
-      mediaKind: 'task' | 'upload' | 'image';
+      mediaKind: 'upload' | 'image';
       publishes: Array<{ provider: string; success: boolean; results: DirectPublishAccountResult[] }>;
       logId: string;
     };

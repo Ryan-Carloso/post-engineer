@@ -10,10 +10,9 @@ import { PostEngineerClient } from '../client.js';
 import { createPostEngineerMcpServer } from '../index.js';
 import type { McpTransportKind } from '../tools-prompts.js';
 
-const { fileReads, httpsRequests, lookups } = vi.hoisted(() => ({
+const { fileReads, httpsRequests } = vi.hoisted(() => ({
   fileReads: [] as string[],
   httpsRequests: [] as string[],
-  lookups: [] as string[],
 }));
 
 vi.mock('../bounded-file-read.js', async (importOriginal) => {
@@ -34,17 +33,6 @@ vi.mock('node:https', async (importOriginal) => {
     request: (url: unknown) => {
       httpsRequests.push(String(url));
       throw new Error('outbound https is blocked in this test');
-    },
-  };
-});
-
-vi.mock('node:dns/promises', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:dns/promises')>();
-  return {
-    ...actual,
-    lookup: async (hostname: string) => {
-      lookups.push(hostname);
-      return [{ address: '10.0.0.1', family: 4 }];
     },
   };
 });
@@ -92,16 +80,9 @@ function smuggledLocalPaths(): Record<string, unknown> {
     path: image,
     avatarPath: image,
     imagePath: image,
-    images: [{ path: image }],
     videoPath: tempFile('smuggled.mp4'),
-    audioPath: tempFile('smuggled.mp3'),
   };
 }
-
-const INTERNAL_IMAGE_URLS = ['http://127.0.0.1:9/a.png', 'https://169.254.169.254/a.png', 'https://10.0.0.1/a.png', 'https://internal.example/a.png'];
-const IMAGE_URL_ACTIONS = new Set(['media.upload', 'persona_media.add_image']);
-
-const INTERNAL_AUDIO_URLS = ['http://127.0.0.1:9/a.mp3', 'https://169.254.169.254/a.mp3', 'https://10.0.0.1/a.mp3', 'https://internal.example/a.mp3'];
 
 interface ToolCall {
   readonly name: string;
@@ -151,11 +132,9 @@ function sampleCalls(tool: string, action: string | null): ToolCall[] {
 
 const LOCAL_PATH_TWINS: Readonly<Record<string, { readonly drop: readonly string[]; readonly set: Readonly<Record<string, unknown>> }>> = {
   path: { drop: [], set: {} },
-  avatarPath: { drop: ['avatarUrl'], set: {} },
-  imagePath: { drop: ['taskId', 'uploadId'], set: { mediaKind: 'image' } },
-  images: { drop: [], set: {} },
+  avatarPath: { drop: [], set: {} },
+  imagePath: { drop: ['uploadId'], set: { mediaKind: 'image' } },
   videoPath: { drop: [], set: {} },
-  audioPath: { drop: ['audioUrl'], set: {} },
 };
 
 function withOnlyLocalField(args: Record<string, unknown>, field: string, value: unknown): Record<string, unknown> {
@@ -190,29 +169,20 @@ function hostileCalls(tool: string, action: string | null): ToolCall[] {
   return [
     ...samples.flatMap((call) => {
       const smuggled = { ...call, args: { ...call.args, ...smuggledLocalPaths() } };
-      const internalUrls = typeof call.args.audioUrl === 'string' ? INTERNAL_AUDIO_URLS.map((audioUrl) => ({ ...call, args: { ...call.args, audioUrl } })) : [];
-      const internalImages = IMAGE_URL_ACTIONS.has(`${tool}.${action}`) ? INTERNAL_IMAGE_URLS.map((imageUrl) => ({ ...call, args: { ...call.args, imageUrl } })) : [];
-      return [call, smuggled, ...localFieldVariants(call), ...internalUrls, ...internalImages];
+      return [call, smuggled, ...localFieldVariants(call)];
     }),
     ...imageAccountVariants(tool, action, samples),
   ];
 }
 
 const LOCAL_READ_ACTIONS = [
-  'media.upload',
-  'persona_media.add_image',
   'personas.create',
   'personas.update',
   'publish_video.from_file',
   'publish_video.publish_existing',
-  'voices.create_clone',
 ];
 
-const FILE_ONLY_SAMPLES: ReadonlyArray<readonly [string, string]> = [
-  ['media', 'upload'],
-  ['persona_media', 'add_image'],
-  ['publish_video', 'from_file'],
-];
+const FILE_ONLY_SAMPLES: ReadonlyArray<readonly [string, string]> = [['publish_video', 'from_file']];
 
 interface HostIo {
   readonly fileReads: string[];
@@ -226,7 +196,6 @@ const realFetch = globalThis.fetch;
 beforeEach(() => {
   fileReads.length = 0;
   httpsRequests.length = 0;
-  lookups.length = 0;
   foreignFetches.length = 0;
   globalThis.fetch = async (input, init) => {
     const url = input instanceof Request ? input.url : String(input);
@@ -262,7 +231,7 @@ async function hostIoOf(transport: McpTransportKind, call: ToolCall): Promise<Ho
 describe('remote (http) host I/O sweep', () => {
   it('no offered action reads a host file or fetches a non-public caller URL on http, even with smuggled paths', async () => {
     const actions = await offeredActions('http');
-    expect(actions.length).toBeGreaterThan(40);
+    expect(actions.length).toBeGreaterThan(25);
     const violations: string[] = [];
     let calls = 0;
     for (const { tool, action } of actions) {
@@ -287,30 +256,6 @@ describe('remote (http) host I/O sweep', () => {
       }
     }
   });
-
-  it('resolves the clone audio host and refuses a private answer on http', async () => {
-    const call = sampleCalls('voices', 'create_clone').find((entry) => typeof entry.args.audioUrl === 'string');
-    if (call === undefined) throw new Error('create_clone samples must cover audioUrl');
-    lookups.length = 0;
-    const io = await hostIoOf('http', call);
-    expect(lookups).toEqual(['example.com']);
-    expect(io.httpsRequests).toEqual([]);
-    expect(io.foreignFetches).toEqual([]);
-  });
-});
-
-describe('remote image URL actions', () => {
-  it.each([...IMAGE_URL_ACTIONS])('resolves the image host and refuses a private answer on http for %s', async (key) => {
-    const [tool, action] = key.split('.');
-    const call = sampleCalls(tool, action)[0];
-    const withUrl: ToolCall = { ...call, args: { ...call.args, imageUrl: 'https://example.com/a.png' } };
-    lookups.length = 0;
-    const io = await hostIoOf('http', withUrl);
-    expect(lookups).toEqual(['example.com']);
-    expect(io.httpsRequests).toEqual([]);
-    expect(io.foreignFetches).toEqual([]);
-    expect(io.fileReads).toEqual([]);
-  });
 });
 
 describe('stdio host I/O control', () => {
@@ -332,14 +277,5 @@ describe('stdio host I/O control', () => {
       }
       expect(reads.length, `${tool}.${action}`).toBeGreaterThan(0);
     }
-  });
-
-  it('create_clone reads a local audioPath and fetches an audioUrl on stdio', async () => {
-    const calls = sampleCalls('voices', 'create_clone');
-    const fromFile = calls.find((call) => typeof call.args.audioPath === 'string');
-    const fromUrl = calls.find((call) => typeof call.args.audioUrl === 'string');
-    if (fromFile === undefined || fromUrl === undefined) throw new Error('create_clone samples must cover audioPath and audioUrl');
-    expect((await hostIoOf('stdio', fromFile)).fileReads).toEqual([fromFile.args.audioPath]);
-    expect((await hostIoOf('stdio', fromUrl)).foreignFetches).toEqual(['https://example.com/a.mp3']);
   });
 });

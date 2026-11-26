@@ -67,7 +67,7 @@ function narrowPublishExistingResult(value: unknown): PublishExistingResult {
   }
   if (
     typeof value.mediaKind !== 'string' ||
-    !['task', 'upload', 'image'].includes(value.mediaKind) ||
+    !['upload', 'image'].includes(value.mediaKind) ||
     !Array.isArray(value.publishes) ||
     typeof value.logId !== 'string'
   ) {
@@ -88,7 +88,7 @@ function narrowPublishExistingResult(value: unknown): PublishExistingResult {
     mode: 'asap',
     success: value.success === true,
     replayed: value.replayed === true,
-    mediaKind: value.mediaKind as 'task' | 'upload' | 'image',
+    mediaKind: value.mediaKind as 'upload' | 'image',
     publishes,
     logId: value.logId,
   };
@@ -115,6 +115,7 @@ export async function publishExisting(
   if (input.tags !== undefined) body.tags = input.tags;
   if (input.privacyStatus !== undefined) body.privacyStatus = input.privacyStatus;
   if (input.caption !== undefined) body.caption = input.caption;
+  if (input.promptVersionId !== undefined) body.promptVersionId = input.promptVersionId;
 
   const result: unknown = await client.request(
     '/api/media/publish-existing',

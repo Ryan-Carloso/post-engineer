@@ -31,14 +31,14 @@ export class ApiError extends Error {
   }
 }
 
-import { MAX_LIBRARY_IMAGE_MB, MAX_UPLOAD_VIDEO_GB } from './limits.js';
+import { MAX_PERSONA_PHOTO_MB, MAX_UPLOAD_VIDEO_GB } from './limits.js';
 
 export class ImageTooLargeError extends Error {
   readonly path: string;
   readonly sizeBytes: number;
 
   constructor(path: string, sizeBytes: number) {
-    super(`Image "${path}" is too large (${sizeBytes} bytes; max ${MAX_LIBRARY_IMAGE_MB}MB).`);
+    super(`Image "${path}" is too large (${sizeBytes} bytes; max ${MAX_PERSONA_PHOTO_MB}MB).`);
     this.name = 'ImageTooLargeError';
     this.path = path;
     this.sizeBytes = sizeBytes;
@@ -58,6 +58,14 @@ export class VideoTooLargeError extends Error {
 }
 
 const MAX_ERROR_BODY_CHARS = 200;
+
+export const TRIAL_EXPIRED_CODE = 'TRIAL_EXPIRED';
+
+function trialExpiredMessage(contactUrl: unknown): string {
+  const base = 'The 7-day free trial has ended: scheduling and publishing are blocked, reading your data still works.';
+  if (typeof contactUrl !== 'string' || !contactUrl.startsWith('https://')) return `${base} Contact the Post Engineer team to continue.`;
+  return `${base} Contact the Post Engineer team to continue: ${contactUrl.slice(0, 200)}`;
+}
 
 function listedErrorMessages(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -92,6 +100,7 @@ export function readApiFailure(errorText: string): {
       if (typeof record.field === 'string') field = record.field;
       if (record.delivered === true) delivered = true;
       if (typeof record.postUrl === 'string') postUrl = record.postUrl;
+      if (code === TRIAL_EXPIRED_CODE) detail = trialExpiredMessage(record.contactUrl);
     }
   } catch {
   }
