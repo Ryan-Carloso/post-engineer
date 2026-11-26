@@ -1,4 +1,4 @@
-import { PUBLISH_ACCOUNT_FIELDS, isTitleProvider } from '@/lib/contracts/providers';
+import { PUBLISH_ACCOUNT_FIELDS, isAiLabelProvider, isTitleProvider } from '@/lib/contracts/providers';
 import type { SocialProvider } from '@/lib/providers/registry';
 
 export interface ExistingMediaFormFields {
@@ -46,7 +46,7 @@ export function buildExistingMediaForm(
     return formData;
   }
   formData.append('video', file);
-  if (provider === 'threads' || provider === 'facebook' || provider === 'pinterest') {
+  if (isAiLabelProvider(provider)) {
     formData.append('aiLabel', String(fields.aiLabel));
   }
   if (isTitleProvider(provider)) {

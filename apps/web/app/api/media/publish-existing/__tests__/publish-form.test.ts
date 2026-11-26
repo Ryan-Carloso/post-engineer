@@ -70,11 +70,30 @@ describe('buildExistingMediaForm', () => {
     expect(entries).toContainEqual(['aiLabel', 'true']);
   });
 
+  it('builds the threads form (video + caption + ai label)', () => {
+    const form = buildExistingMediaForm('threads', BASE_FIELDS, Buffer.from([1, 2]), 'video/mp4');
+    const entries = formEntries(form);
+    expect(entries).toContainEqual(['provider', 'threads']);
+    expect(entries).toContainEqual(['caption', 'Walking the riverside at sunset.']);
+    expect(entries).toContainEqual(['aiLabel', 'true']);
+    expect(entries).toContainEqual(['threadsAccountIds', 'acc-1']);
+  });
+
+  it('builds the facebook form (video + caption + ai label)', () => {
+    const form = buildExistingMediaForm('facebook', BASE_FIELDS, Buffer.from([1, 2]), 'video/mp4');
+    const entries = formEntries(form);
+    expect(entries).toContainEqual(['provider', 'facebook']);
+    expect(entries).toContainEqual(['caption', 'Walking the riverside at sunset.']);
+    expect(entries).toContainEqual(['aiLabel', 'true']);
+    expect(entries).toContainEqual(['facebookAccountIds', 'acc-1']);
+  });
+
   it('builds the bluesky form (video + caption + did)', () => {
     const form = buildExistingMediaForm('bluesky', BASE_FIELDS, Buffer.from([1, 2]), 'video/mp4');
     const entries = formEntries(form);
     expect(entries).toContainEqual(['did', 'acc-1']);
     expect(entries).toContainEqual(['caption', 'Walking the riverside at sunset.']);
+    expect(entries).not.toContainEqual(['aiLabel', 'true']);
   });
 
   it('builds the rumble form (video + title + description)', () => {
