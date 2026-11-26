@@ -31,6 +31,18 @@ describe('resolveSlotMedia', () => {
     expect(storageFrom).toHaveBeenCalledWith('videos');
   });
 
+  it('signs an image published as an upload as an image', async () => {
+    const { service, storageFrom } = fakeService({
+      upload: { storage_path: 'user-1/direct-uploads/upload-1.jpg', user_id: 'user-1', status: 'ready' },
+      signedUrl: 'https://signed.test/pic.jpg',
+    });
+    const media = await resolveSlotMedia(service, 'slot-1', 'user-1', {
+      media_kind: 'upload', media_ref: 'upload-1', media_content_type: 'image/jpeg', status: 'ready',
+    });
+    expect(media).toEqual({ kind: 'image', url: 'https://signed.test/pic.jpg', contentType: 'image/jpeg' });
+    expect(storageFrom).toHaveBeenCalledWith('videos');
+  });
+
   it('never signs an upload owned by another user', async () => {
     const { service, createSignedUrl } = fakeService({
       upload: { storage_path: 'other/direct-uploads/upload-1.mp4', user_id: 'someone-else', status: 'ready' },

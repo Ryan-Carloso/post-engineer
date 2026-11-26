@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from './logger';
-import type { SlotMedia } from './slot-detail';
+import type { SlotMedia, SlotMediaKind } from './slot-detail';
+import { displayMediaKind } from './slot-detail';
 
 const SIGNED_URL_TTL_SECONDS = 60 * 60;
 const PREVIEW_STATUSES = new Set(['ready', 'publishing']);
@@ -44,12 +45,15 @@ export async function resolveSlotMedia(
   userId: string,
   row: SlotMediaRow,
 ): Promise<SlotMedia | null> {
-  const kind = row.media_kind === 'upload' || row.media_kind === 'image' ? row.media_kind : null;
-  if (kind === null || typeof row.media_ref !== 'string' || row.media_ref.length === 0) return null;
+  const storageKind: SlotMediaKind | null =
+    row.media_kind === 'upload' || row.media_kind === 'image' ? row.media_kind : null;
+  if (storageKind === null || typeof row.media_ref !== 'string' || row.media_ref.length === 0) return null;
+  const kind = displayMediaKind(storageKind, row.media_content_type);
+  if (kind === null) return null;
   const media: SlotMedia = { kind, url: null, contentType: row.media_content_type ?? null };
   if (!PREVIEW_STATUSES.has(row.status)) return media;
   try {
-    if (kind === 'image') {
+    if (storageKind === 'image') {
       if (!row.media_ref.startsWith(`scheduled-media/${userId}/`)) return media;
       media.url = await signMediaUrl(service, 'uploads', row.media_ref, slotId);
       return media;

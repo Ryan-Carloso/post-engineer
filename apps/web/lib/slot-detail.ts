@@ -106,6 +106,20 @@ export function narrowGeneration(value: unknown): GenerationFacts {
 
 export type SlotMediaKind = 'upload' | 'image';
 
+/**
+ * Display kind for a stored media row. `media_kind` is a storage kind, not a
+ * media type: an image published through the upload path is stored as
+ * `upload` with an `image/*` content type, and the page must render it as an
+ * image, not a video.
+ */
+export function displayMediaKind(
+  storageKind: SlotMediaKind | null,
+  contentType: string | null,
+): SlotMediaKind | null {
+  if (contentType !== null && contentType.startsWith('image/')) return 'image';
+  return storageKind;
+}
+
 export interface SlotMedia {
   kind: SlotMediaKind;
   url: string | null;

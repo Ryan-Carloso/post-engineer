@@ -24,6 +24,7 @@ export function presentSlotDetail(detail: ResponseOf<typeof getSlotContract>) {
       queueTotal: slot.queueTotal,
       userNotices: slot.userNotices,
       providerFailures: slot.providerFailures,
+      media: slot.media,
     },
     schedule: {
       id: schedule.id,

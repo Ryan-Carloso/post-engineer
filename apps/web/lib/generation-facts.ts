@@ -1,5 +1,7 @@
+import { displayMediaKind, type SlotMediaKind } from './slot-detail';
+
 export function buildGenerationFacts(
-  row: { voiceover: boolean | null; media_kind?: string | null },
+  row: { voiceover: boolean | null; media_kind?: string | null; media_content_type?: string | null },
   scheduleRow: {
     post_language: string | null;
     post_voice_id: string | null;
@@ -21,7 +23,9 @@ export function buildGenerationFacts(
   faceQuality: string | null;
 } {
   const voiceover = row.voiceover === true;
-  const mediaKind = row.media_kind === 'upload' || row.media_kind === 'image' ? row.media_kind : null;
+  const storageKind: SlotMediaKind | null =
+    row.media_kind === 'upload' || row.media_kind === 'image' ? row.media_kind : null;
+  const mediaKind = displayMediaKind(storageKind, row.media_content_type ?? null);
   const language = scheduleRow.post_language ?? null;
   const voiceId = scheduleRow.post_voice_id ?? null;
   const videoAspect = scheduleRow.post_video_aspect ?? null;
