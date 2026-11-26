@@ -286,7 +286,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   }
 
   let aiLabel = false;
-  if (personaId !== null) {
+  if (personaId !== null && input.publishing.mode === 'asap') {
     const { data: personaRow, error: personaError } = await supabase
       .from('personas')
       .select('ai_label')
@@ -294,6 +294,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
       .eq('user_id', userId)
       .maybeSingle();
     if (personaError) {
+      if (ledger !== null) await releaseAsapLedger(ledger, personaError);
       logger.error('[publish-existing] persona ai_label lookup failed', personaError, { userId });
       return apiErrorResponse(500, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR), {
         route: ROUTE,
