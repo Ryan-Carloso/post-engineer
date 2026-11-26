@@ -1,30 +1,45 @@
 import {
+  CARD_STYLES,
+  IDENTITY_CARD_MAX_BYTES,
+  IDENTITY_CARD_WRITE_VERSION,
   OUTFIT_SLOTS,
   parseIdentityCardValue,
   type IdentityCard,
 } from './contracts/persona-identity-card';
 
-const FACE_LEAVES = ['shape', 'eyes', 'eyebrows', 'nose', 'lips', 'skin'] as const;
-const HAIR_LEAVES = ['color', 'style', 'length'] as const;
-const BODY_LEAVES = ['build', 'height', 'shoulders', 'hands'] as const;
+const FACE_LEAVES = [
+  'shape', 'eyes', 'eye_color', 'eyebrows', 'nose', 'lips', 'teeth', 'smile', 'skin', 'jawline', 'cheekbones', 'chin',
+  'forehead', 'ears',
+] as const;
+const HAIR_LEAVES = ['color', 'style', 'length', 'texture', 'parting'] as const;
+const BODY_LEAVES = ['build', 'height', 'shoulders', 'arms', 'hands', 'waist', 'hips', 'legs', 'posture', 'proportions'] as const;
 
-export const IDENTITY_CARD_FIELDS = [
+const FACE_FIELDS = [
   ...FACE_LEAVES.map((leaf) => `face.${leaf}` as const),
-  ...HAIR_LEAVES.map((leaf) => `face.hair.${leaf}` as const),
   'face.facial_hair',
   'face.marks',
-  ...BODY_LEAVES.map((leaf) => `body.${leaf}` as const),
-  ...OUTFIT_SLOTS.map((slot) => `outfit.${slot}` as const),
+  'face.tattoos',
 ] as const;
+const HAIR_FIELDS = HAIR_LEAVES.map((leaf) => `face.hair.${leaf}` as const);
+const BODY_FIELDS = BODY_LEAVES.map((leaf) => `body.${leaf}` as const);
+const OUTFIT_FIELDS = OUTFIT_SLOTS.map((slot) => `outfit.${slot}` as const);
+
+export const IDENTITY_CARD_TEXT_FIELDS = [...FACE_FIELDS, ...HAIR_FIELDS, ...BODY_FIELDS, ...OUTFIT_FIELDS] as const;
+export const IDENTITY_CARD_FIELDS = [...IDENTITY_CARD_TEXT_FIELDS, 'style'] as const;
 
 export type IdentityCardFieldKey = (typeof IDENTITY_CARD_FIELDS)[number];
+export type IdentityCardTextFieldKey = (typeof IDENTITY_CARD_TEXT_FIELDS)[number];
 export type IdentityCardDraft = Record<IdentityCardFieldKey, string>;
 
-export const IDENTITY_CARD_GROUPS: ReadonlyArray<{ id: 'face' | 'hair' | 'body' | 'outfit'; fields: readonly IdentityCardFieldKey[] }> = [
-  { id: 'face', fields: ['face.shape', 'face.eyes', 'face.eyebrows', 'face.nose', 'face.lips', 'face.skin', 'face.facial_hair', 'face.marks'] },
-  { id: 'hair', fields: ['face.hair.color', 'face.hair.style', 'face.hair.length'] },
-  { id: 'body', fields: ['body.build', 'body.height', 'body.shoulders', 'body.hands'] },
-  { id: 'outfit', fields: OUTFIT_SLOTS.map((slot) => `outfit.${slot}` as const) },
+export const IDENTITY_CARD_GROUPS: ReadonlyArray<{
+  id: 'face' | 'hair' | 'body' | 'style' | 'outfit';
+  fields: readonly IdentityCardFieldKey[];
+}> = [
+  { id: 'face', fields: FACE_FIELDS },
+  { id: 'hair', fields: HAIR_FIELDS },
+  { id: 'body', fields: BODY_FIELDS },
+  { id: 'style', fields: ['style'] },
+  { id: 'outfit', fields: OUTFIT_FIELDS },
 ];
 
 export function emptyIdentityCardDraft(): IdentityCardDraft {
@@ -45,7 +60,10 @@ export function cardToDraft(card: IdentityCard | null): IdentityCardDraft {
   if (card === null) return draft;
   for (const key of IDENTITY_CARD_FIELDS) {
     const [head, ...rest] = key.split('.');
-    draft[key] = head === 'outfit'
+    if (key === 'style') {
+      const style = leafOf(card.defaults, ['style']);
+      draft.style = CARD_STYLES.some((known) => known === style) ? style : '';
+    } else draft[key] = head === 'outfit'
       ? leafOf(card.defaults?.outfit, rest)
       : leafOf(card.identity, [head, ...rest]);
   }
@@ -71,7 +89,7 @@ export function draftToCard(draft: IdentityCardDraft): IdentityCard | null {
   const identity: Record<string, unknown> = {};
   const outfit: Record<string, unknown> = {};
   let filled = 0;
-  for (const key of IDENTITY_CARD_FIELDS) {
+  for (const key of IDENTITY_CARD_TEXT_FIELDS) {
     const value = draft[key].trim();
     if (value === '') continue;
     filled += 1;
@@ -79,9 +97,14 @@ export function draftToCard(draft: IdentityCardDraft): IdentityCard | null {
     if (head === 'outfit') setLeaf(outfit, rest, value);
     else setLeaf(identity, [head, ...rest], value);
   }
+  const style = draft.style.trim();
+  if (style !== '') filled += 1;
   if (filled === 0) return null;
-  const card: Record<string, unknown> = { version: 1, identity };
-  if (Object.keys(outfit).length > 0) card.defaults = { outfit };
+  const defaults: Record<string, unknown> = {};
+  if (style !== '') defaults.style = style;
+  if (Object.keys(outfit).length > 0) defaults.outfit = outfit;
+  const card: Record<string, unknown> = { version: IDENTITY_CARD_WRITE_VERSION, identity };
+  if (Object.keys(defaults).length > 0) card.defaults = defaults;
   return card as IdentityCard;
 }
 
@@ -101,11 +124,17 @@ export type IdentityCardErrorKey =
   | 'identityCard.errContent'
   | 'identityCard.errOutfitIdentity'
   | 'identityCard.errField'
+  | 'identityCard.errTooLarge'
+  | 'identityCard.errStyleOrOutfit'
   | 'identityCard.errGeneric';
 
 export function identityCardErrorKey(message: string): IdentityCardErrorKey {
   if (message.includes('cannot be combined with top or bottom')) return 'identityCard.errOnePiece';
   if (message.includes('at least one trait')) return 'identityCard.errNoTrait';
+  if (message.includes('style or an outfit')) return 'identityCard.errStyleOrOutfit';
+  if (message.includes('too large to store') || message.includes(`at most ${IDENTITY_CARD_MAX_BYTES} bytes`)) {
+    return 'identityCard.errTooLarge';
+  }
   if (message.includes('sexualised')) return 'identityCard.errContent';
   if (message.includes('clothing only')) return 'identityCard.errOutfitIdentity';
   if (message.includes('at most 80 characters') || message.includes('must not be empty') || message.includes('single line')) {

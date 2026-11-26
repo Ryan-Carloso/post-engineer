@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CARD_STYLES,
+  IDENTITY_CARD_ACCEPTED_VERSIONS,
   IDENTITY_CARD_MAX_BYTES,
   IDENTITY_TEXT_MAX_LENGTH,
   IdentityCardSchema,
+  IdentityCardV1Schema,
+  RenderIdentityPromptResponseSchema,
   SCENE_MAX_BYTES,
   SceneSchema,
   parseIdentityCardJson,
@@ -55,7 +59,23 @@ describe('IdentityCardSchema', () => {
     expect(IdentityCardSchema.safeParse(mutated).success).toBe(false);
   });
 
-  it.each([2, '1', 0, null, undefined])('rejects version %s', (version) => {
+  it('keeps the v1 schema pinned to version 1, whatever versions the server accepts', () => {
+    expect(IdentityCardV1Schema.safeParse(FIXTURE_CARD).success).toBe(true);
+    expect(IdentityCardV1Schema.safeParse({ ...clone(FIXTURE_CARD), version: 2 }).success).toBe(false);
+  });
+
+  it('accepts exactly versions 1 and 2 as response card versions', () => {
+    expect(IDENTITY_CARD_ACCEPTED_VERSIONS).toEqual([1, 2]);
+    const base = { success: true, prompt: 'p', suggestedDescription: 'd' };
+    for (const cardVersion of IDENTITY_CARD_ACCEPTED_VERSIONS) {
+      expect(RenderIdentityPromptResponseSchema.safeParse({ ...base, cardVersion }).success).toBe(true);
+    }
+    for (const cardVersion of [0, 3, '1', null]) {
+      expect(RenderIdentityPromptResponseSchema.safeParse({ ...base, cardVersion }).success).toBe(false);
+    }
+  });
+
+  it.each([3, '1', 0, null, undefined])('rejects version %s', (version) => {
     expect(IdentityCardSchema.safeParse({ ...clone(FIXTURE_CARD), version }).success).toBe(false);
   });
 
@@ -130,6 +150,18 @@ describe('SceneSchema', () => {
 
   it.each(['identity', 'face', 'body', 'version', 'defaults'])('rejects the identity-side key %s', (key) => {
     expect(SceneSchema.safeParse({ ...clone(FIXTURE_SCENE), [key]: { eyes: 'green' } }).success).toBe(false);
+  });
+
+  it('accepts every card style as the scene style and rejects anything else', () => {
+    for (const style of CARD_STYLES) {
+      expect(SceneSchema.safeParse({ ...FIXTURE_SCENE, style }).success).toBe(true);
+    }
+    expect(SceneSchema.safeParse({ ...FIXTURE_SCENE, style: 'bikini' }).success).toBe(false);
+    expect(SceneSchema.safeParse({ ...FIXTURE_SCENE, style: 'Business' }).success).toBe(false);
+    expect(SceneSchema.safeParse({ ...FIXTURE_SCENE, style: '' }).success).toBe(false);
+    const result = parseSceneValue({ ...FIXTURE_SCENE, style: 'bikini' });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toBe('scene.style: not an allowed value');
   });
 
   it('rejects a full identity card passed as the scene', () => {
@@ -278,7 +310,7 @@ describe('parseIdentityCardJson and parseSceneJson', () => {
       expect(unknownKey.error).toBe('identityCard: unknown field');
       expect(unknownKey.error).not.toContain('green-value');
     }
-    const badVersion = parseIdentityCardJson(JSON.stringify({ ...clone(FIXTURE_CARD), version: 2 }));
+    const badVersion = parseIdentityCardJson(JSON.stringify({ ...clone(FIXTURE_CARD), version: 3 }));
     expect(badVersion).toEqual({ ok: false, error: 'identityCard.version: unsupported version' });
   });
 

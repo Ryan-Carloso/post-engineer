@@ -19,7 +19,7 @@ describe('parseIdentityCardField', () => {
 
   it('rejects invalid JSON, unknown versions, unknown keys and over-size bodies', () => {
     expect(parseIdentityCardField('{not json')).toEqual({ status: 'invalid', error: 'identityCard: not valid JSON' });
-    expect(parseIdentityCardField(JSON.stringify({ ...FIXTURE_CARD, version: 2 }))).toEqual({
+    expect(parseIdentityCardField(JSON.stringify({ ...FIXTURE_CARD, version: 3 }))).toEqual({
       status: 'invalid',
       error: 'identityCard.version: unsupported version',
     });

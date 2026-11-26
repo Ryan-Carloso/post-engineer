@@ -2,8 +2,8 @@ import { z } from 'zod';
 
 import { defineEndpoint } from './endpoint.js';
 import {
+  IDENTITY_CARD_ACCEPTED_VERSIONS,
   IDENTITY_CARD_MAX_BYTES,
-  IDENTITY_CARD_VERSION,
   IDENTITY_TEXT_MAX_LENGTH,
   OUTFIT_SLOTS,
   SCENE_ASPECTS,
@@ -11,69 +11,11 @@ import {
   SCENE_LIGHTING,
   SCENE_MAX_BYTES,
 } from './persona-identity-card-limits.js';
+import { SEXUALISED_WORDS, mentionsAny, mentionsIdentity, mentionsSeeThrough } from './persona-identity-card-filter.js';
+import { CARD_STYLES } from './persona-identity-card-styles.js';
 
 export * from './persona-identity-card-limits.js';
-
-const IDENTITY_WORDS: ReadonlySet<string> = new Set([
-  'hair', 'eye', 'eyes', 'skin', 'build', 'builds', 'height', 'heights', 'beard', 'bearded', 'muscular',
-  'tattoo', 'tattoos', 'tattooed', 'freckles', 'freckled', 'body', 'bodies', 'face', 'faces', 'taller', 'thinner',
-]);
-
-const IDENTITY_STEMS: readonly string[] = ['hair', 'eye', 'skin', 'freckl', 'tattoo', 'beard'];
-
-const IDENTITY_EXTRA_WORDS: ReadonlySet<string> = new Set([
-  'blonde', 'brunette', 'redhead', 'ginger', 'bald', 'abs',
-  'cabelo', 'loiro', 'loira', 'ruivo', 'ruiva', 'careca', 'calvo',
-]);
-
-const HARMLESS_CLOTHING_WORDS: readonly RegExp[] = [
-  /\b(?:body|bodies) of water\b/g,
-  /\b(?:skinny|skintight|eyewear|eyeglasses|eyelet)\b/g,
-];
-
-const HARMLESS_SCENE_PHRASES: readonly RegExp[] = [
-  /\bginger tea\b/g,
-  /\bbald eagle\b/g,
-  /\bsheer curtains\b/g,
-  /\btransparent glass\b/g,
-];
-
-const SCENE_IDENTITY_WORDS: ReadonlySet<string> = new Set(['skinny']);
-
-function stripHarmless(value: string, scene: boolean): string {
-  const lowered = value.toLowerCase();
-  const stripped = HARMLESS_CLOTHING_WORDS.reduce((text, phrase) => text.replace(phrase, ' '), lowered);
-  return scene
-    ? HARMLESS_SCENE_PHRASES.reduce((text, phrase) => text.replace(phrase, ' '), stripped)
-    : stripped;
-}
-
-function mentionsIdentity(value: string, scene = false): boolean {
-  if (scene && wordsOf(value).some((word) => SCENE_IDENTITY_WORDS.has(word))) return true;
-  return wordsOf(stripHarmless(value, scene)).some(
-    (word) =>
-      IDENTITY_WORDS.has(word) ||
-      IDENTITY_EXTRA_WORDS.has(word) ||
-      IDENTITY_STEMS.some((stem) => word.startsWith(stem)),
-  );
-}
-
-const SEXUALISED_WORDS: ReadonlySet<string> = new Set([
-  'nude', 'naked', 'nudity', 'topless', 'bottomless', 'shirtless', 'lingerie', 'bikini', 'underwear', 'thong',
-  'undressed', 'sexy', 'sexual', 'erotic', 'nsfw', 'revealing', 'transparent', 'sheer',
-]);
-
-function wordsOf(value: string): string[] {
-  return value.toLowerCase().split(/[^a-z]+/).filter((word) => word.length > 0);
-}
-
-function mentionsAny(value: string, words: ReadonlySet<string>, scene = false): boolean {
-  return wordsOf(stripHarmless(value, scene)).some((word) => words.has(word));
-}
-
-function mentionsSeeThrough(value: string): boolean {
-  return /see[\s-]*through/i.test(value);
-}
+export * from './persona-identity-card-styles.js';
 
 function hasControlCharacter(value: string): boolean {
   for (let index = 0; index < value.length; index += 1) {
@@ -133,6 +75,14 @@ const HairSchema = z.strictObject({
   length: freeText.optional(),
 });
 
+const HairV2Schema = z.strictObject({
+  color: freeText.optional(),
+  style: freeText.optional(),
+  length: freeText.optional(),
+  texture: freeText.optional(),
+  parting: freeText.optional(),
+});
+
 const FaceSchema = z.strictObject({
   shape: freeText.optional(),
   eyes: freeText.optional(),
@@ -145,11 +95,45 @@ const FaceSchema = z.strictObject({
   marks: freeText.optional(),
 });
 
+const FaceV2Schema = z.strictObject({
+  shape: freeText.optional(),
+  eyes: freeText.optional(),
+  eye_color: freeText.optional(),
+  eyebrows: freeText.optional(),
+  nose: freeText.optional(),
+  lips: freeText.optional(),
+  teeth: freeText.optional(),
+  smile: freeText.optional(),
+  skin: freeText.optional(),
+  jawline: freeText.optional(),
+  cheekbones: freeText.optional(),
+  chin: freeText.optional(),
+  forehead: freeText.optional(),
+  ears: freeText.optional(),
+  hair: HairV2Schema.optional(),
+  facial_hair: freeText.optional(),
+  marks: freeText.optional(),
+  tattoos: freeText.optional(),
+});
+
 const BodySchema = z.strictObject({
   build: freeText.optional(),
   height: freeText.optional(),
   shoulders: freeText.optional(),
   hands: freeText.optional(),
+});
+
+const BodyV2Schema = z.strictObject({
+  build: freeText.optional(),
+  height: freeText.optional(),
+  shoulders: freeText.optional(),
+  arms: freeText.optional(),
+  hands: freeText.optional(),
+  waist: freeText.optional(),
+  hips: freeText.optional(),
+  legs: freeText.optional(),
+  posture: freeText.optional(),
+  proportions: freeText.optional(),
 });
 
 function countLeaves(value: unknown): number {
@@ -162,8 +146,12 @@ const IdentitySchema = z
   .strictObject({ face: FaceSchema.optional(), body: BodySchema.optional() })
   .refine((identity) => countLeaves(identity) > 0, { message: 'must hold at least one trait' });
 
+const IdentityV2Schema = z
+  .strictObject({ face: FaceV2Schema.optional(), body: BodyV2Schema.optional() })
+  .refine((identity) => countLeaves(identity) > 0, { message: 'must hold at least one trait' });
+
 export const IdentityCardV1Schema = z.strictObject({
-  version: z.literal(IDENTITY_CARD_VERSION),
+  version: z.literal(1),
   identity: IdentitySchema,
   defaults: z
     .strictObject({ outfit: OutfitSchema.optional() })
@@ -173,11 +161,24 @@ export const IdentityCardV1Schema = z.strictObject({
     }),
 });
 
-export const IdentityCardSchema = z.discriminatedUnion('version', [IdentityCardV1Schema]);
+export const IdentityCardV2Schema = z.strictObject({
+  version: z.literal(2),
+  identity: IdentityV2Schema,
+  defaults: z
+    .strictObject({ style: z.enum(CARD_STYLES).optional(), outfit: OutfitSchema.optional() })
+    .optional()
+    .refine((defaults) => defaults === undefined || defaults.style !== undefined || defaults.outfit !== undefined, {
+      message: 'must name a style or an outfit',
+    }),
+});
+
+export const IdentityCardSchema = z.discriminatedUnion('version', [IdentityCardV1Schema, IdentityCardV2Schema]);
 export type IdentityCard = z.infer<typeof IdentityCardSchema>;
+export type IdentityLeaves = z.infer<typeof IdentityV2Schema>;
 export type Outfit = z.infer<typeof OutfitSchema>;
 
 export const SceneSchema = z.strictObject({
+  style: z.enum(CARD_STYLES).optional(),
   outfit: OutfitSchema.optional(),
   pose: sceneText.optional(),
   setting: sceneText.optional(),
@@ -224,8 +225,19 @@ function parseValue<T>(schema: z.ZodType<T>, value: unknown, root: string): Pars
   return { ok: false, error: first === undefined ? `${root}: invalid` : describeIssue(root, first) };
 }
 
-function parseJson<T>(schema: z.ZodType<T>, raw: string, root: string, maxBytes: number): ParsedCardInput<T> {
-  if (raw.length > maxBytes || new TextEncoder().encode(raw).length > maxBytes) {
+function byteLength(value: string): number {
+  return new TextEncoder().encode(value).length;
+}
+
+const IDENTITY_CARD_TOO_LARGE = `too large to store (at most ${IDENTITY_CARD_MAX_BYTES} bytes; accented or non-Latin text uses more bytes)`;
+
+function parseJson<T>(
+  parse: (value: unknown, root: string) => ParsedCardInput<T>,
+  raw: string,
+  root: string,
+  maxBytes: number,
+): ParsedCardInput<T> {
+  if (raw.length > maxBytes || byteLength(raw) > maxBytes) {
     return { ok: false, error: `${root}: at most ${maxBytes} bytes` };
   }
   let parsed: unknown;
@@ -234,15 +246,20 @@ function parseJson<T>(schema: z.ZodType<T>, raw: string, root: string, maxBytes:
   } catch {
     return { ok: false, error: `${root}: not valid JSON` };
   }
-  return parseValue(schema, parsed, root);
+  return parse(parsed, root);
 }
 
 export function parseIdentityCardValue(value: unknown, root = 'identityCard'): ParsedCardInput<IdentityCard> {
-  return parseValue(IdentityCardSchema, value, root);
+  const parsed = parseValue(IdentityCardSchema, value, root);
+  if (!parsed.ok) return parsed;
+  if (byteLength(JSON.stringify(parsed.value)) > IDENTITY_CARD_MAX_BYTES) {
+    return { ok: false, error: `${root}: ${IDENTITY_CARD_TOO_LARGE}` };
+  }
+  return parsed;
 }
 
 export function parseIdentityCardJson(raw: string, root = 'identityCard'): ParsedCardInput<IdentityCard> {
-  return parseJson(IdentityCardSchema, raw, root, IDENTITY_CARD_MAX_BYTES);
+  return parseJson(parseIdentityCardValue, raw, root, IDENTITY_CARD_MAX_BYTES);
 }
 
 export function parseSceneValue(value: unknown, root = 'scene'): ParsedCardInput<Scene> {
@@ -250,7 +267,7 @@ export function parseSceneValue(value: unknown, root = 'scene'): ParsedCardInput
 }
 
 export function parseSceneJson(raw: string, root = 'scene'): ParsedCardInput<Scene> {
-  return parseJson(SceneSchema, raw, root, SCENE_MAX_BYTES);
+  return parseJson(parseSceneValue, raw, root, SCENE_MAX_BYTES);
 }
 
 export const GetIdentityCardQuerySchema = z.object({ personaId: z.string().min(1) });
@@ -269,7 +286,7 @@ export const RenderIdentityPromptResponseSchema = z.object({
   success: z.literal(true),
   prompt: z.string(),
   suggestedDescription: z.string(),
-  cardVersion: z.literal(IDENTITY_CARD_VERSION),
+  cardVersion: z.literal(IDENTITY_CARD_ACCEPTED_VERSIONS),
 });
 
 export const getPersonaIdentityCard = defineEndpoint({

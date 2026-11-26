@@ -1,4 +1,5 @@
 import {
+  IDENTITY_CARD_ACCEPTED_VERSIONS,
   IDENTITY_CARD_MAX_BYTES,
   IDENTITY_TEXT_MAX_LENGTH,
   OUTFIT_SLOTS,
@@ -7,6 +8,7 @@ import {
   SCENE_LIGHTING,
   SCENE_MAX_BYTES,
 } from '../../../shared/contracts/persona-identity-card-limits.ts';
+import { CARD_STYLES } from '../../../shared/contracts/persona-identity-card-styles.ts';
 
 const text = { type: 'string', minLength: 1, maxLength: IDENTITY_TEXT_MAX_LENGTH };
 const strict = (properties, required = []) => ({
@@ -20,31 +22,28 @@ const outfit = strict(Object.fromEntries(OUTFIT_SLOTS.map((slot) => [slot, text]
 outfit.description =
   'Clothing only, one line per slot. one_piece cannot be combined with top or bottom. Nudity, sexualised clothing and words about the person (hair, skin, body) are rejected.';
 
+const leaves = (names) => Object.fromEntries(names.map((name) => [name, text]));
+
 const identityCard = strict(
   {
-    version: { type: 'integer', enum: [1] },
+    version: { type: 'integer', enum: [...IDENTITY_CARD_ACCEPTED_VERSIONS] },
     identity: strict({
       face: strict({
-        shape: text,
-        eyes: text,
-        eyebrows: text,
-        nose: text,
-        lips: text,
-        skin: text,
-        hair: strict({ color: text, style: text, length: text }),
-        facial_hair: text,
-        marks: text,
+        ...leaves(['shape', 'eyes', 'eye_color', 'eyebrows', 'nose', 'lips', 'teeth', 'smile', 'skin', 'jawline', 'cheekbones', 'chin', 'forehead', 'ears']),
+        hair: strict(leaves(['color', 'style', 'length', 'texture', 'parting'])),
+        ...leaves(['facial_hair', 'marks', 'tattoos']),
       }),
-      body: strict({ build: text, height: text, shoulders: text, hands: text }),
+      body: strict(leaves(['build', 'height', 'shoulders', 'arms', 'hands', 'waist', 'hips', 'legs', 'posture', 'proportions'])),
     }),
-    defaults: strict({ outfit }),
+    defaults: strict({ style: { type: 'string', enum: [...CARD_STYLES] }, outfit }),
   },
   ['version', 'identity'],
 );
-identityCard.description = `Versioned identity card (at most ${IDENTITY_CARD_MAX_BYTES} bytes, every level strict, at least one identity trait). It describes a real person's physical traits: fill it only with their consent. Advice for the agent's image tool, not enforcement.`;
+identityCard.description = `Versioned identity card (version 1 or 2; new cards are version 2; at most ${IDENTITY_CARD_MAX_BYTES} bytes once stored, every level strict, at least one identity trait). A version 1 card carries only the original leaves and no style; defaults must name a style or an outfit. It describes a real person's physical traits: fill it only with their consent. Advice for the agent's image tool, not enforcement.`;
 
 const scene = strict(
   {
+    style: { type: 'string', enum: [...CARD_STYLES], description: 'Clothing style for this photo only. It overrides defaults.style and, without outfit slots, replaces the default outfit.' },
     outfit,
     pose: { ...text, description: 'Free text about the pose. Words about the person (hair, skin, body) are rejected.' },
     setting: { ...text, description: 'Free text about the place. Words about the person (hair, skin, body) are rejected.' },
@@ -54,7 +53,7 @@ const scene = strict(
   },
   ['lighting', 'framing'],
 );
-scene.description = `Scene only (at most ${SCENE_MAX_BYTES} bytes). Identity, face, body and version keys are rejected.`;
+scene.description = `Only what changes per photo: style, outfit slots, pose, setting, lighting, framing, aspect (at most ${SCENE_MAX_BYTES} bytes). Identity, face, body and version keys are rejected.`;
 
 export const personaCardFormFields = {
   identityCard: {
@@ -78,7 +77,7 @@ export function personaCardOperationSchemas({ success, object, str }) {
       response: success({
         prompt: { ...str, description: 'The deterministic edit prompt; identity text comes only from the card.' },
         suggestedDescription: { ...str, maxLength: 500, description: 'A library description made from the outfit, setting, lighting and framing, never from the identity.' },
-        cardVersion: { type: 'integer', enum: [1] },
+        cardVersion: { type: 'integer', enum: [...IDENTITY_CARD_ACCEPTED_VERSIONS] },
       }),
       extraResponses: {
         403: 'A persona-scoped API key that does not include this persona.',
