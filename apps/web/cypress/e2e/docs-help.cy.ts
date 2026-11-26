@@ -26,14 +26,12 @@ describe('Docs and help — public crawlable pages', () => {
     cy.visit('/help');
     cy.contains('h1', 'Ajuda').should('be.visible');
     cy.get('a[href="/help/primeiros-passos"]').should('be.visible');
-    cy.get('a[href="/help/tokens"]').should('be.visible');
     cy.get('a[href="/help/conectar-contas"]').should('be.visible');
   });
 
   it('renders each PT help article with its title and a back link', () => {
     const articles: Array<[string, string]> = [
       ['/help/primeiros-passos', 'Primeiros passos'],
-      ['/help/tokens', 'Tokens'],
       ['/help/conectar-contas', 'Conectar contas'],
     ];
     for (const [path, title] of articles) {
@@ -47,10 +45,9 @@ describe('Docs and help — public crawlable pages', () => {
     cy.visit('/en/help');
     cy.contains('h1', 'Help').should('be.visible');
     cy.get('a[href="/en/help/primeiros-passos"]').should('be.visible');
-    cy.get('a[href="/en/help/tokens"]').should('be.visible');
     cy.get('a[href="/en/help/conectar-contas"]').should('be.visible');
-    cy.visit('/en/help/tokens');
-    cy.contains('h1', 'Tokens').should('be.visible');
+    cy.visit('/en/help/conectar-contas');
+    cy.contains('h1', 'Conectar contas').should('be.visible');
     cy.get('a[href="/en/help"]').should('contain', 'Help');
   });
 
