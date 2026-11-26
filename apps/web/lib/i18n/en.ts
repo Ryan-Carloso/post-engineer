@@ -478,6 +478,8 @@ export const enDictionary: Dictionary = {
   },
 
   footer: {
+    docs: 'Docs',
+    help: 'Help',
     privacy: 'Privacy Policy',
     terms: 'Terms of Service',
     support: 'Support',

@@ -9,6 +9,12 @@ export default function SiteFooter() {
   return (
     <footer className="w-full border-t border-hairline bg-card px-5 py-6">
       <div className="mx-auto flex max-w-3xl flex-col items-center gap-2 text-sm text-muted-text sm:flex-row sm:justify-center sm:gap-6">
+        <Link href="/docs" className="hover:text-ink">
+          {t('footer.docs')}
+        </Link>
+        <Link href="/help" className="hover:text-ink">
+          {t('footer.help')}
+        </Link>
         <Link href="/privacy" className="hover:text-ink">
           {t('footer.privacy')}
         </Link>
