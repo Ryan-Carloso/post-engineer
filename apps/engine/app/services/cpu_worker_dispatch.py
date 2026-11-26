@@ -138,13 +138,15 @@ def _cancel_modal_call(call_id: str) -> None:
     try:
         import modal
     except Exception as exc:
-        logger.warning(f"modal cpu cancel unavailable: {type(exc).__name__}")
+        logger.warning(
+            f"modal cpu cancel unavailable: {type(exc).__name__}: {exc}"
+        )
         return
     try:
         modal.FunctionCall.from_id(call_id).cancel()
     except Exception as exc:
         logger.warning(
-            f"modal cpu cancel failed for {call_id}: {type(exc).__name__}"
+            f"modal cpu cancel failed for {call_id}: {type(exc).__name__}: {exc}"
         )
 
 
@@ -163,7 +165,9 @@ def _untrack_spawned_call(state: Any, task_id: str, call_id: str) -> None:
     try:
         _cancel_modal_call(call_id)
     except Exception as exc:
-        logger.error(f"modal cpu cancel failed for {call_id}: {type(exc).__name__}")
+        logger.error(
+            f"modal cpu cancel failed for {call_id}: {type(exc).__name__}: {exc}"
+        )
     persist_state_update(
         state, task_id, remote_worker="", remote_call_id="", job_params=None
     )
@@ -228,7 +232,8 @@ def try_remote_dispatch(
         call_id = _spawn(task_id, params, stop_at, spawn)
     except Exception as exc:
         logger.error(
-            f"modal cpu spawn failed for {task_id}: {type(exc).__name__}"
+            f"modal cpu spawn failed for {task_id} on "
+            f"{worker_app_name()}/{FUNCTION_NAME}: {type(exc).__name__}: {exc}"
         )
         _clear_remote(state, task_id)
         return False, False
@@ -339,7 +344,8 @@ def try_remote_batch(
         call_id = _spawn(task_id, params, "video", spawn)
     except Exception as exc:
         logger.error(
-            f"modal cpu spawn failed for {task_id}: {type(exc).__name__}"
+            f"modal cpu spawn failed for {task_id} on "
+            f"{worker_app_name()}/{FUNCTION_NAME}: {type(exc).__name__}: {exc}"
         )
         _clear_remote(state, task_id)
         return False, False
@@ -478,7 +484,8 @@ def resume_unspawned_cpu_jobs(
             new_id = _spawn(task_id, params, stop_at, spawn)
         except Exception as exc:
             logger.error(
-                f"modal cpu resume failed for {task_id}: {type(exc).__name__}"
+                f"modal cpu resume failed for {task_id} on "
+                f"{worker_app_name()}/{FUNCTION_NAME}: {type(exc).__name__}: {exc}"
             )
             _clear_remote(state, task_id)
             continue
