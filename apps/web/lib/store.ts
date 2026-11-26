@@ -182,6 +182,7 @@ interface PersonaFormState {
   videoAspect: string;
   videoLayout: string;
   hookPanel: boolean;
+  aiLabel: boolean;
   scriptPrompt: string;
   ctaType: PersonaCtaType;
   ctaUrl: string;
@@ -214,6 +215,7 @@ interface PersonaFormState {
   setVideoAspect: (value: string) => void;
   setVideoLayout: (value: string) => void;
   setHookPanel: (value: boolean) => void;
+  setAiLabel: (value: boolean) => void;
   setScriptPrompt: (value: string) => void;
   setCta: (cta: { type: PersonaCtaType; url: string; instruction: string }) => void;
   setNiche: (value: string) => void;
@@ -236,6 +238,7 @@ const initialPersonaState = {
   videoAspect: '9:16',
   videoLayout: 'standard',
   hookPanel: true,
+  aiLabel: false,
   scriptPrompt: '',
   ctaType: 'follow' as PersonaCtaType,
   ctaUrl: '',
@@ -279,6 +282,7 @@ export const usePersonaStore = create<PersonaFormState>()(
     setVideoAspect: (videoAspect) => set({ videoAspect }),
     setVideoLayout: (videoLayout) => set({ videoLayout }),
     setHookPanel: (hookPanel) => set({ hookPanel }),
+    setAiLabel: (aiLabel) => set({ aiLabel }),
     setScriptPrompt: (scriptPrompt) => set({ scriptPrompt }),
     setCta: (cta) => set({ ctaType: cta.type, ctaUrl: cta.url, ctaInstruction: cta.instruction }),
     setNiche: (niche) => set({ niche }),
@@ -315,6 +319,7 @@ export const usePersonaStore = create<PersonaFormState>()(
       if (s.videoAspect) formData.append('videoAspect', s.videoAspect);
       if (s.videoLayout) formData.append('videoLayout', s.videoLayout);
       formData.append('hookPanel', String(s.hookPanel));
+      formData.append('aiLabel', String(s.aiLabel));
       if (s.scriptPrompt.trim()) formData.append('scriptPrompt', s.scriptPrompt.trim());
       formData.append('ctaType', s.ctaType);
       if (s.ctaUrl.trim()) formData.append('ctaUrl', s.ctaUrl.trim());
@@ -335,6 +340,7 @@ export const usePersonaStore = create<PersonaFormState>()(
       if (s.videoAspect) formData.append('videoAspect', s.videoAspect);
       if (s.videoLayout) formData.append('videoLayout', s.videoLayout);
       formData.append('hookPanel', String(s.hookPanel));
+      formData.append('aiLabel', String(s.aiLabel));
       if (s.scriptPrompt.trim()) formData.append('scriptPrompt', s.scriptPrompt.trim());
       formData.append('ctaType', s.ctaType);
       formData.append('ctaUrl', s.ctaUrl.trim());

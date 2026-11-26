@@ -14,7 +14,6 @@ import {
   type ProgressHistoryEntry,
 } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
-import AccountCard from '@/components/account-card';
 import { DetailProgressBar } from './detail-progress-bar';
 import { formatDateTime, ScheduleSection } from './schedule-section';
 import { GenerationFactsSection } from './generation-facts-section';
@@ -22,6 +21,7 @@ import { HookPhotoSection } from './hook-photo-section';
 import { RescheduleSection } from './reschedule-section';
 import { ScriptAngleSection } from './script-angle-section';
 import { usePostAccountCards, type AccountCardData } from './account-cards';
+import { PostAccountsSection } from './post-accounts-section';
 import { ExternalLinkIcon } from '@/lib/ui';
 import type { PublishLink } from '@/lib/publish-links';
 import { PROVIDER_LABELS, scheduleAccountIds } from '@/lib/account-options';
@@ -31,13 +31,13 @@ import { GENERATION_ERROR_KEY } from '@/lib/generation/generation-errors';
 import { Button } from '@/components/ui/button';
 import { STATUS_KEY, STATUS_STYLE } from '../status';
 import { PostFailureNotice } from './post-failure-notice';
+import { SlotImagePreview } from './slot-image-preview';
 
 function videoUrlFor(taskId: string | null | undefined): string | null {
   return taskId ? `/api/persona/video-download/${encodeURIComponent(taskId)}/final-1.mp4` : null;
 }
 
 const SLOT_VIDEO_STATUSES = new Set<ScheduledSlot['status']>(['ready', 'publishing', 'published']);
-
 
 export default function PostDetailPage() {
   const { t, locale } = useI18n();
@@ -93,10 +93,7 @@ export default function PostDetailPage() {
           {(generation.status === 'pending' || generation.status === 'running') && generation.engineTaskId ? (
             <DetailProgressBar progress={generation.progress} stage={generation.stage} />
           ) : (
-            <DetailPlayer
-              src={videoUrl}
-              placeholder={t('posts.coverNoVideo')}
-            />
+            <DetailPlayer src={videoUrl} placeholder={t('posts.coverNoVideo')} />
           )}
           {generation.status === 'failed' && (
             <p className="mt-4 text-sm text-destructive">
@@ -189,7 +186,6 @@ export const PostIdSection = ({ postId }: { postId: string }) => {
   );
 };
 
-
 const DetailPlayer = ({ src, placeholder }: { src: string | null; placeholder: string }) => {
   const { t } = useI18n();
   const [debug, setDebug] = useState<{
@@ -199,6 +195,7 @@ const DetailPlayer = ({ src, placeholder }: { src: string | null; placeholder: s
     duration: number;
     errorCode: number | null;
   }>({ status: 'loading', width: 0, height: 0, duration: 0, errorCode: null });
+  const sourceSuffix = src !== null && src.startsWith('/') ? ` · ${src}` : '';
 
   const handleMetadata = (event: React.SyntheticEvent<HTMLVideoElement>): void => {
     const el = event.currentTarget;
@@ -240,9 +237,9 @@ const DetailPlayer = ({ src, placeholder }: { src: string | null; placeholder: s
       {src && (
         <p data-testid="video-debug" className="mt-2 font-mono text-xs text-[#8aa2b5]">
           {debug.status === 'ready' &&
-            `${debug.width}×${debug.height} · ${Math.round(debug.duration)}s · ${src}`}
-          {debug.status === 'error' && `${t('posts.videoLoadError')} (code ${debug.errorCode ?? '?'}) · ${src}`}
-          {debug.status === 'loading' && `loading… · ${src}`}
+            `${debug.width}×${debug.height} · ${Math.round(debug.duration)}s${sourceSuffix}`}
+          {debug.status === 'error' && `${t('posts.videoLoadError')} (code ${debug.errorCode ?? '?'})${sourceSuffix}`}
+          {debug.status === 'loading' && `loading…${sourceSuffix}`}
         </p>
       )}
     </div>
@@ -302,8 +299,8 @@ export const SlotDetail = ({
   const [titleDraft, setTitleDraft] = useState(slot.title ?? '');
   const [armed, setArmed] = useState(false);
 
-  const videoUrl = videoUrlFor(slot.taskId);
-  const canWatch = SLOT_VIDEO_STATUSES.has(slot.status) && videoUrl !== null;
+  const videoUrl = videoUrlFor(slot.taskId) ?? slot.media?.url ?? null;
+  const canWatch = SLOT_VIDEO_STATUSES.has(slot.status) && videoUrl !== null && slot.media?.kind !== 'image';
   const canEdit = slot.status === 'awaiting' || slot.status === 'ready';
   const canDelete =
     slot.status === 'awaiting' || slot.status === 'ready' || slot.status === 'failed';
@@ -328,7 +325,9 @@ export const SlotDetail = ({
 
   return (
     <section aria-label={t('posts.detailsTitle')} className="mt-6">
-      {canWatch && videoUrl ? (
+      {slot.media?.kind === 'image' && slot.media.url ? (
+        <SlotImagePreview src={slot.media.url} />
+      ) : canWatch && videoUrl ? (
         <DetailPlayer src={videoUrl} placeholder="" />
       ) : slot.status === 'generating' ? (
         <DetailProgressBar progress={slot.progress} stage={slot.stage} />
@@ -340,7 +339,7 @@ export const SlotDetail = ({
       )}
 
       <PostFailureNotice status={slot.status} error={slot.error} userNotices={slot.userNotices} />
-      {canWatch && videoUrl && (
+      {canWatch && videoUrl && slot.taskId && (
         <div className="mt-3">
           <a
             href={`${videoUrl}?source=download`}
@@ -403,25 +402,7 @@ export const SlotDetail = ({
 
       <GenerationFactsSection generation={generation} personaName={personaName} />
 
-      {accounts.length > 0 && (
-        <section aria-label={t('posts.accountsLabel')} className="mt-6">
-          <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-            {t('posts.accountsLabel')}
-          </p>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            {accounts.map((account) => (
-              <AccountCard
-                key={`${account.type}:${account.id}`}
-                type={account.type}
-                name={account.name}
-                email={account.email}
-                thumbnail={account.thumbnail}
-                handle={account.handle}
-              />
-            ))}
-          </div>
-        </section>
-      )}
+      <PostAccountsSection accounts={accounts} />
 
       <PublishLinks links={publishLinks} />
 

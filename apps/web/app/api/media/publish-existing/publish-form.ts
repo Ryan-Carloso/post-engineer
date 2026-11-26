@@ -1,4 +1,4 @@
-import { PUBLISH_ACCOUNT_FIELDS, isTitleProvider } from '@/lib/contracts/providers';
+import { PUBLISH_ACCOUNT_FIELDS, isAiLabelProvider, isTitleProvider } from '@/lib/contracts/providers';
 import type { SocialProvider } from '@/lib/providers/registry';
 
 export interface ExistingMediaFormFields {
@@ -9,6 +9,7 @@ export interface ExistingMediaFormFields {
   privacyStatus: string;
   boardId: string;
   accountIds: string[];
+  aiLabel: boolean;
 }
 
 function fileName(contentType: string): string {
@@ -33,16 +34,21 @@ export function buildExistingMediaForm(
     formData.append('description', fields.description.trim());
     formData.append('tags', fields.tags.join(','));
     formData.append('privacyStatus', fields.privacyStatus);
+    formData.append('aiLabel', String(fields.aiLabel));
     for (const accountId of fields.accountIds) formData.append(PUBLISH_ACCOUNT_FIELDS.youtube, accountId);
     return formData;
   }
   if (provider === 'instagram') {
     formData.append('file', file);
     formData.append('caption', fields.caption.trim());
+    formData.append('aiLabel', String(fields.aiLabel));
     for (const accountId of fields.accountIds) formData.append(PUBLISH_ACCOUNT_FIELDS.instagram, accountId);
     return formData;
   }
   formData.append('video', file);
+  if (isAiLabelProvider(provider)) {
+    formData.append('aiLabel', String(fields.aiLabel));
+  }
   if (isTitleProvider(provider)) {
     formData.append('title', fields.title.trim());
     formData.append('description', fields.description.trim());

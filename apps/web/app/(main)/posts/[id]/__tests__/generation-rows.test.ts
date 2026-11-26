@@ -22,6 +22,30 @@ describe('buildGenerationRows', () => {
     expect(rows.map((r) => r.value)).toEqual(['Ana', 'posts.generationVoiceover', 'en-US', '3']);
   });
 
+  it('labels a directly uploaded video as uploaded media, never voiceover', () => {
+    const rows = buildGenerationRows(
+      { ...narrowGeneration(null), voiceover: true, mediaKind: 'upload' },
+      'Ana',
+      t,
+    );
+    expect(rows).toEqual([
+      { label: 'posts.generationPersonaLabel', value: 'Ana' },
+      { label: 'posts.generationMediaLabel', value: 'posts.generationUploadedVideo' },
+    ]);
+  });
+
+  it('labels an uploaded image as uploaded media, never a video', () => {
+    const rows = buildGenerationRows(
+      { ...narrowGeneration(null), voiceover: true, mediaKind: 'image' },
+      'Ana',
+      t,
+    );
+    expect(rows).toEqual([
+      { label: 'posts.generationPersonaLabel', value: 'Ana' },
+      { label: 'posts.generationMediaLabel', value: 'posts.generationUploadedImage' },
+    ]);
+  });
+
   it('names the prompt version first when the video recorded one', () => {
     const rows = buildGenerationRows(
       { ...narrowGeneration(null), prompt: { slug: 'story-first', title: 'Story first', version: 3, source: 'official' } },

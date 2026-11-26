@@ -251,6 +251,13 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
     expect(screen.getByText('accounts.instagramLabel')).toBeTruthy();
   });
 
+  it('marks each network section with the shared provider brand tile', () => {
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    for (const provider of ['youtube', 'instagram', 'linkedin', 'threads', 'facebook', 'pinterest', 'fanvue'] as const) {
+      expect(screen.getByTestId(`provider-brand-${provider}`)).toBeInTheDocument();
+    }
+  });
+
   it('renders Fanvue section label', () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
     expect(screen.getByText('accounts.fanvueLabel')).toBeTruthy();

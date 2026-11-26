@@ -128,11 +128,16 @@ export async function handleYoutubeUpload(
     throw new ValidationError('Invalid privacy status. Use "public", "private" or "unlisted"', 'privacyStatus');
   }
 
+  const aiLabelRaw = formData.get('aiLabel');
+  if (aiLabelRaw !== null && aiLabelRaw !== 'true' && aiLabelRaw !== 'false') {
+    throw new ValidationError('Invalid aiLabel. Use "true" or "false"', 'aiLabel');
+  }
   const metadata = {
     title: title.trim(),
     description: description.trim(),
     tags: parsedTags,
     privacyStatus: privacyStatus as 'public' | 'private' | 'unlisted',
+    aiLabel: aiLabelRaw === 'true',
   };
 
   const media = isImageForShort(video) ? await renderImageShort(video, ownerUserId) : video;
@@ -207,6 +212,10 @@ export async function handleInstagramUpload(
   startTime: number,
 ): Promise<ContentUploadResponse> {
   const accountIds = parseAccountIds(formData, 'igAccountIds');
+  const aiLabelRaw = formData.get('aiLabel');
+  if (aiLabelRaw !== null && aiLabelRaw !== 'true' && aiLabelRaw !== 'false') {
+    throw new ValidationError('Invalid aiLabel. Use "true" or "false"', 'aiLabel');
+  }
   const captionRaw = formData.get('caption');
   const rawFile = formData.get('file');
 
@@ -300,6 +309,7 @@ export async function handleInstagramUpload(
         captionRaw.trim(),
         publicUrl,
         isVideo,
+        aiLabelRaw === 'true',
       );
 
       await touchSocialAccount(supabase, ownerUserId, 'instagram', igUserId);

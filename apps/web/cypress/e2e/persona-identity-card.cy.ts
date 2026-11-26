@@ -36,6 +36,7 @@ function mockEditPage(state: { stored: StoredCard | null; patches: number }): vo
           niche: '',
           language: 'en-US',
           hookPanel: true,
+          aiLabel: false,
         },
       ],
     },

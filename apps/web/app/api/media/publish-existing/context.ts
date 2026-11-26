@@ -15,6 +15,7 @@ export interface PublishExistingContext {
   input: PublishExistingRequest;
   accountIds: Record<Provider, string[]>;
   reconnectWarning: AccountNeedsReconnectWarning | null;
+  aiLabel: boolean;
   taskRecord: EngineTaskRecord | null;
   uploadRow: VideoUploadRow | null;
   image: { buffer: Buffer; contentType: ImageContentType } | null;
@@ -26,6 +27,7 @@ export function fieldsFor(
   input: PublishExistingRequest,
   provider: Provider,
   accountIds: string[],
+  aiLabel = false,
 ): ExistingMediaFormFields {
   const caption = input.caption?.trim() ? input.caption.trim() : input.description;
   return {
@@ -36,5 +38,6 @@ export function fieldsFor(
     privacyStatus: input.privacyStatus ?? 'public',
     boardId: input.publishing.pinterestBoardId ?? '',
     accountIds,
+    aiLabel,
   };
 }

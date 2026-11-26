@@ -10,8 +10,8 @@ import { useAccountListErrorTelemetry } from '@/lib/account-card-telemetry';
 import { ERROR_CODES } from '@/lib/error-codes';
 import { useI18n } from '@/lib/i18n/provider';
 import { notifyIfSessionExpired } from '@/lib/session-expiry';
-import { ProviderIcon } from '@/components/provider-icon';
-import { BrandIcon, connectedLabel, errorLabel, useDisconnectFlow } from './accounts-section-helpers';
+import { ProviderBrandIcon } from '@/components/provider-brand-icon';
+import { connectedLabel, errorLabel, useDisconnectFlow } from './accounts-section-helpers';
 
 export function ThreespeakAccountsSection(): ReactNode {
   const { t } = useI18n();
@@ -61,7 +61,7 @@ export function ThreespeakAccountsSection(): ReactNode {
 
   return (
     <SocialAccountsSection
-      icon={<BrandIcon className="bg-muted"><ProviderIcon provider="3speak" /></BrandIcon>}
+      icon={<ProviderBrandIcon provider="3speak" />}
       label={t('accounts.threespeakLabel')}
       description={t('accounts.threespeakDescription')}
       connectedLabel={connectedLabel(t, accounts.length)}

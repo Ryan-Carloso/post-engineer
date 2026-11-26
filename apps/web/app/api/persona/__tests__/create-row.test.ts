@@ -13,6 +13,7 @@ function values(overrides: Partial<ParsedPersonaForm['values']> = {}): ParsedPer
     videoAspect: '9:16',
     videoLayout: 'standard',
     hookPanel: null,
+    aiLabel: null,
     scriptPrompt: null,
     ctaType: 'follow',
     ctaUrl: null,

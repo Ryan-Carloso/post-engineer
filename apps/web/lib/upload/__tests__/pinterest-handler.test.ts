@@ -76,6 +76,34 @@ describe('handlePinterestUpload', () => {
     });
   });
 
+  it('rejects an aiLabel that is not true or false before publishing anything', async () => {
+    const fd = formData();
+    fd.set('aiLabel', 'yes');
+    const result = await handlePinterestUpload(fd, 'user-1');
+    expect(result.success).toBe(false);
+    expect(result.results[0].error).toContain('Invalid aiLabel');
+    expect(publishPinterestVideo).not.toHaveBeenCalled();
+    expect(publishPinterestImage).not.toHaveBeenCalled();
+  });
+
+  it('passes aiLabel through to the video Pin', async () => {
+    const fd = formData();
+    fd.set('aiLabel', 'true');
+    const result = await handlePinterestUpload(fd, 'user-1');
+    expect(result.success).toBe(true);
+    expect(vi.mocked(publishPinterestVideo).mock.calls[0][0]).toMatchObject({ aiLabel: true });
+  });
+
+  it('passes aiLabel through to the image Pin', async () => {
+    vi.mocked(publishPinterestImage).mockResolvedValue({ pinId: '42', permalink: 'https://www.pinterest.com/pin/42/' });
+    const jpeg = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 7])], 'p.bin', { type: 'application/octet-stream' });
+    const fd = formData({ video: jpeg });
+    fd.set('aiLabel', 'true');
+    const result = await handlePinterestUpload(fd, 'user-1');
+    expect(result.success).toBe(true);
+    expect(vi.mocked(publishPinterestImage).mock.calls[0][0]).toMatchObject({ aiLabel: true });
+  });
+
   it('rejects an image over 8 MB before publishing anything', async () => {
     const big = new Uint8Array(8 * 1024 * 1024 + 1);
     big.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
