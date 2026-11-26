@@ -191,7 +191,7 @@ export const SlotDetail = ({
 
   const canEdit = slot.status === 'ready';
   const canDelete =
-    slot.status === 'ready' || slot.status === 'failed';
+    slot.status === 'ready' || slot.status === 'failed' || slot.status === 'awaiting_approval';
   const mutationError =
     (updateTitle.isError ? updateTitle.error?.message : null) ??
     (deleteSlot.isError ? deleteSlot.error?.message : null);
