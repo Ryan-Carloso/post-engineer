@@ -39,7 +39,7 @@ export const enDictionary: Dictionary = {
     statusPublished: 'Published',
     statusFailed: 'Failed',
     unknownTitle: 'No title',
-    generationUploadedImage: 'Uploaded image',
+    uploadedImage: 'Uploaded image',
     unknownCaption: 'No caption',
     personaFallback: 'Removed persona',
     noPersona: 'No persona',

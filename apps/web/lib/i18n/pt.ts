@@ -38,7 +38,7 @@ export const ptDictionary = {
     statusPublished: 'Publicado',
     statusFailed: 'Falhou',
     unknownTitle: 'Sem título',
-    generationUploadedImage: 'Imagem enviada',
+    uploadedImage: 'Imagem enviada',
     unknownCaption: 'Sem legenda',
     personaFallback: 'Persona removida',
     noPersona: 'Sem persona',
