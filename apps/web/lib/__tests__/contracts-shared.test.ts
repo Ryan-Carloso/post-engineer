@@ -13,7 +13,8 @@ import { CancelRefundSchema, RANGE_STATUSES, ScheduleRowSchema } from '@/lib/con
 import { VideoGenerationRowSchema } from '@/lib/contracts/video-tasks';
 import { VOICE_ACCENTS, VOICE_GENDERS, VOICE_KINDS } from '@/lib/contracts/voices';
 import { FACE_QUALITIES, MAX_DESCRIPTION_LENGTH, MAX_TAG_LENGTH, PERSONA_CTA_INSTRUCTION_MAX_LENGTH, PERSONA_CTA_TYPES, PERSONA_CTA_URL_MAX_LENGTH, PERSONA_IMAGE_WARNING_CODES, PersonaCtaSchema, VIDEO_LAYOUTS } from '@/lib/contracts/personas';
-import { BATCH_KEY_MAX_LENGTH, BATCH_KEY_PATTERN, DRAFT_KINDS, DRAFT_MAX_INPUT_CHARS, HOOK_MAX_SECONDS, HOOK_MIN_SECONDS, MAX_BATCH_VIDEOS, MAX_IMAGES_MODE_MEDIAS, MAX_REPORTED_ISSUES, MAX_REQUESTED_PHOTO_SECONDS, MAX_SEGMENTS, MAX_VIDEO_UPLOAD_BYTES, MIN_REQUESTED_PHOTO_SECONDS, VIDEO_TYPES, VIDEO_TYPE_ERROR_SUFFIX, VIDEO_UPLOAD_CONTENT_TYPES } from '@/lib/contracts/videos';
+import { BATCH_KEY_MAX_LENGTH, BATCH_KEY_PATTERN, DRAFT_KINDS, DRAFT_MAX_INPUT_CHARS, GenerateSlotResultSchema, HOOK_MAX_SECONDS, HOOK_MIN_SECONDS, MAX_BATCH_VIDEOS, MAX_IMAGES_MODE_MEDIAS, MAX_REPORTED_ISSUES, MAX_REQUESTED_PHOTO_SECONDS, MAX_SEGMENTS, MAX_VIDEO_UPLOAD_BYTES, MIN_REQUESTED_PHOTO_SECONDS, VIDEO_TYPES, VIDEO_TYPE_ERROR_SUFFIX, VIDEO_UPLOAD_CONTENT_TYPES } from '@/lib/contracts/videos';
+import { ExperimentCreatedResponseSchema } from '@/lib/contracts/experiments';
 
 const HEADER = '// GENERATED from shared/contracts — do not edit.\n// Run `node scripts/sync-contracts.mjs` from the repo root to regenerate.\n';
 
@@ -111,6 +112,30 @@ describe('contracts shared source', () => {
     for (const reason of CancelRefundSchema.shape.reason.options) {
       expect(route).toContain(`'${reason}'`);
     }
+  });
+
+  it('keeps the slot reason through the shared slot schemas', () => {
+    const slot = {
+      slotId: 'slot-1',
+      slotAt: '2026-12-01T12:00:00.000Z',
+      title: 'Hook one',
+      taskId: null,
+      status: 'failed',
+      errorCode: 'engine_rejected',
+      tokensRefunded: true,
+      reason: "video_type: unknown video_type 'voiceover'",
+    };
+    expect(GenerateSlotResultSchema.parse(slot).reason).toBe(slot.reason);
+    const created = ExperimentCreatedResponseSchema.parse({
+      success: true,
+      stage: 'confirmed',
+      scheduleId: 'schedule-1',
+      replayed: false,
+      chargedTokens: 0,
+      slots: [{ ...slot, versionId: 'v-1' }],
+      warnings: [],
+    });
+    expect(created.slots[0].reason).toBe(slot.reason);
   });
 
   it('pins the shared RANGE_STATUSES to the slot presentation', () => {

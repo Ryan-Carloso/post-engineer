@@ -49,11 +49,13 @@ export function validationFailed(
 
 export class SlotDispatchError extends Error {
   readonly errorCode: string;
+  readonly reason?: string;
 
-  constructor(errorCode: string, message: string) {
+  constructor(errorCode: string, message: string, reason?: string) {
     super(message);
     this.name = 'SlotDispatchError';
     this.errorCode = errorCode;
+    this.reason = reason;
   }
 }
 

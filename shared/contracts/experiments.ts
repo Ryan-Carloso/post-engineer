@@ -144,6 +144,7 @@ export const ExperimentCreatedResponseSchema = z.object({
       taskId: z.string().nullable(),
       status: z.string(),
       errorCode: z.string().optional(),
+      reason: z.string().optional(),
       tokensRefunded: z.boolean().optional(),
     }),
   ),

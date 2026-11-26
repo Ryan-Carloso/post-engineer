@@ -1,5 +1,8 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { findRepoRoot } from '@/test/repo-root';
 
 vi.mock('@/lib/logger', () => ({
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
@@ -102,6 +105,19 @@ beforeEach(() => {
   vi.mocked(refundSlotTokens).mockResolvedValue({ refunded: true, alreadyRefunded: false });
 });
 
+const ENGINE_400_FIXTURE = JSON.parse(
+  readFileSync(
+    path.join(
+      findRepoRoot(import.meta.url),
+      'apps/web/lib/generation/__tests__/fixtures/engine-400-unknown-video-type.json',
+    ),
+    'utf8',
+  ),
+) as unknown;
+
+const ENGINE_REASON =
+  "video_type: unknown video_type 'voiceover'; use full_lipsync (8/15), hook_lipsync (2/3) or faceless (1)";
+
 describe('dispatchSlot', () => {
   it('binds the engine task to the slot and reports it as generating', async () => {
     vi.mocked(startEngineVideoTask).mockResolvedValue({ ok: true, taskId: 'task-9', body: {} });
@@ -179,6 +195,86 @@ describe('dispatchSlot', () => {
 
     expect(result.errorCode).toBe('engine_unavailable');
     expect(result.status).toBe('failed');
+  });
+
+  it('carries the sanitised engine reason on a rejected slot and in history', async () => {
+    vi.mocked(startEngineVideoTask).mockResolvedValue({
+      ok: false,
+      response: new Response(null) as never,
+      upstreamStatus: 400,
+      upstreamBody: ENGINE_400_FIXTURE,
+    });
+    const { client } = fakeClient();
+
+    const result = await dispatchSlot(context(client, { perVideoCost: 2 }), SLOT);
+
+    expect(result).toMatchObject({
+      slotId: 'slot-1',
+      taskId: null,
+      status: 'failed',
+      errorCode: 'engine_rejected',
+      tokensRefunded: true,
+      reason: ENGINE_REASON,
+    });
+    expect(refundSlotTokens).toHaveBeenCalledWith(
+      expect.objectContaining({ scheduleId: 'schedule-1', slotId: 'slot-1', amount: 2, kind: 'dispatch_failed' }),
+    );
+    expect(recordGenerationUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'failed', errorCode: 'engine_rejected', errorMessage: ENGINE_REASON, tokensRefunded: true }),
+    );
+  });
+
+  it('carries no reason on transient engine statuses and keeps the generic history message', async () => {
+    for (const upstreamStatus of [401, 429, 503]) {
+      vi.clearAllMocks();
+      vi.mocked(refundSlotTokens).mockResolvedValue({ refunded: true, alreadyRefunded: false });
+      vi.mocked(startEngineVideoTask).mockResolvedValue({
+        ok: false,
+        response: new Response(null) as never,
+        upstreamStatus,
+        upstreamBody: ENGINE_400_FIXTURE,
+      });
+      const { client } = fakeClient();
+
+      const result = await dispatchSlot(context(client), SLOT);
+
+      expect(result.errorCode).toBe('engine_unavailable');
+      expect(result).not.toHaveProperty('reason');
+      expect(recordGenerationUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'failed', errorMessage: 'Video service is unavailable. Please try again later.' }),
+      );
+    }
+  });
+
+  it('carries no reason when the engine call throws', async () => {
+    vi.mocked(startEngineVideoTask).mockRejectedValue(new Error('boom'));
+    const { client } = fakeClient();
+
+    const result = await dispatchSlot(context(client), SLOT);
+
+    expect(result).toMatchObject({ status: 'failed', errorCode: 'slot_failed' });
+    expect(result).not.toHaveProperty('reason');
+    expect(recordGenerationUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'failed', errorMessage: 'Video generation failed for this slot.' }),
+    );
+  });
+
+  it('carries no reason on a 400 with a null body and keeps the generic history message', async () => {
+    vi.mocked(startEngineVideoTask).mockResolvedValue({
+      ok: false,
+      response: new Response(null) as never,
+      upstreamStatus: 400,
+      upstreamBody: null,
+    });
+    const { client } = fakeClient();
+
+    const result = await dispatchSlot(context(client), SLOT);
+
+    expect(result).toMatchObject({ status: 'failed', errorCode: 'engine_rejected' });
+    expect(result).not.toHaveProperty('reason');
+    expect(recordGenerationUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'failed', errorMessage: 'Video service is unavailable. Please try again later.' }),
+    );
   });
 
   it('reports no_task_id when the engine accepts without a task id', async () => {

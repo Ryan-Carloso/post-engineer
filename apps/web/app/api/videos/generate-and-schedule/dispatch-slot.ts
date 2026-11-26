@@ -8,6 +8,7 @@ import {
   hasNonEmptyString,
   type JobPersona,
 } from '@/lib/generation/video-job-payload';
+import { extractEngineRejectionReason } from '@/lib/generation/engine-rejection-reason';
 import {
   recordGenerationStart,
   recordGenerationUpdate,
@@ -31,6 +32,7 @@ export interface SlotResult {
   taskId: string | null;
   status: string;
   errorCode?: string;
+  reason?: string;
   tokensRefunded?: boolean;
 }
 
@@ -145,7 +147,15 @@ export async function dispatchSlot(
           ? 'engine_rejected'
           : 'engine_unavailable'
         : 'no_task_id';
-      throw new SlotDispatchError(errorCode, 'Video service is unavailable. Please try again later.');
+      const rejectionReason =
+        errorCode === 'engine_rejected' && !engineTask.ok
+          ? extractEngineRejectionReason(engineTask.upstreamBody)
+          : null;
+      throw new SlotDispatchError(
+        errorCode,
+        'Video service is unavailable. Please try again later.',
+        rejectionReason ?? undefined,
+      );
     }
 
     const { error: bindError } = await supabase
@@ -198,7 +208,7 @@ export async function dispatchSlot(
       generationId: slotGenerationId,
       status: 'failed',
       errorCode: dispatchError.errorCode,
-      errorMessage: dispatchError.message,
+      errorMessage: dispatchError.reason ?? dispatchError.message,
       tokensRefunded: refunded,
     });
     logger.error('[generate-and-schedule] slot dispatch failed', error, {
@@ -214,6 +224,7 @@ export async function dispatchSlot(
       taskId: null,
       status: 'failed',
       errorCode: dispatchError.errorCode,
+      ...(dispatchError.reason !== undefined ? { reason: dispatchError.reason } : {}),
       tokensRefunded: refunded,
     };
   }
