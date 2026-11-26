@@ -567,6 +567,25 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
     const response = await patchSlot(SLOT_ID, { title: 'Novo tema' });
 
     expect(response.status).toBe(409);
+    const body = (await response.json()) as { error: string };
+    expect(body.error).toBe('The slot changed before this update. Reload and try again.');
+  });
+
+  it('returns a retry message, not the move-only message, when a slotAt-only move of an awaiting slot loses the race', async () => {
+    const slotAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const client = mockSlotsClient({
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'awaiting_approval', title: 'Old' },
+      schedule: { id: 's1', user_id: USER_ID },
+      updateConflict: true,
+    });
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await patchSlot(SLOT_ID, { slotAt });
+
+    expect(response.status).toBe(409);
+    const body = (await response.json()) as { error: string };
+    expect(body.error).toBe('The slot changed before this update. Reload and try again.');
   });
 
   it('uses the service client for OAuth callers (no cookie session)', async () => {

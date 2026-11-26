@@ -289,16 +289,10 @@ async function patchHandler(
     .single();
   if (updateError) {
     if ((updateError as { code?: string }).code === 'PGRST116') {
-      return apiErrorResponse(
-        409,
-        slot.status === 'awaiting_approval'
-          ? 'An awaiting-approval slot can only move its scheduled time.'
-          : 'Only a ready slot can be edited.',
-        {
-          route: 'PATCH /api/schedule/slots',
-          metadata: { status: slot.status },
-        },
-      );
+      return apiErrorResponse(409, 'The slot changed before this update. Reload and try again.', {
+        route: 'PATCH /api/schedule/slots',
+        metadata: { status: slot.status },
+      });
     }
     return apiErrorResponse(500, 'Failed to update slot.', {
       route: 'PATCH /api/schedule/slots',
