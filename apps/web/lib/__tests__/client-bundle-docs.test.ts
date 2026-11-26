@@ -53,6 +53,21 @@ function resolveLocal(fromFile: string, specifier: string): string | null {
   return null;
 }
 
+const resolvedImportsCache = new Map<string, string[]>();
+
+function resolvedImports(file: string): string[] {
+  const cached = resolvedImportsCache.get(file);
+  if (cached !== undefined) return cached;
+  const source = readFileSync(file, 'utf8');
+  const resolved: string[] = [];
+  for (const specifier of importedSpecifiers(source)) {
+    const target = resolveLocal(file, specifier);
+    if (target !== null) resolved.push(target);
+  }
+  resolvedImportsCache.set(file, resolved);
+  return resolved;
+}
+
 function importClosure(entry: string): Map<string, string[]> {
   const seen = new Map<string, string[]>();
   const queue: Array<{ file: string; chain: string[] }> = [{ file: entry, chain: [entry] }];
@@ -60,11 +75,9 @@ function importClosure(entry: string): Map<string, string[]> {
     const current = queue.shift();
     if (current === undefined || seen.has(current.file)) continue;
     seen.set(current.file, current.chain);
-    const source = readFileSync(current.file, 'utf8');
-    for (const specifier of importedSpecifiers(source)) {
-      const resolved = resolveLocal(current.file, specifier);
-      if (resolved !== null && !seen.has(resolved)) {
-        queue.push({ file: resolved, chain: [...current.chain, resolved] });
+    for (const target of resolvedImports(current.file)) {
+      if (!seen.has(target)) {
+        queue.push({ file: target, chain: [...current.chain, target] });
       }
     }
   }
@@ -75,7 +88,7 @@ function clientEntries(): string[] {
   const roots = [join(WEB_ROOT, 'app'), join(WEB_ROOT, 'components'), join(WEB_ROOT, 'lib')];
   return roots
     .flatMap((root) => listSourceFiles(root))
-    .filter((file) => readFileSync(file, 'utf8').trimStart().startsWith("'use client'"));
+    .filter((file) => /^['"]use client['"]/.test(readFileSync(file, 'utf8').trimStart()));
 }
 
 describe('client bundle — docs content model stays server-only', () => {
