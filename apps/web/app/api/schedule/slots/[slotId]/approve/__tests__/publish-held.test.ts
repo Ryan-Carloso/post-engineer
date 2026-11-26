@@ -58,7 +58,7 @@ vi.mock('@/lib/videos/signed-upload', async (importOriginal) => {
 
 import { publishHeldSlot, type HeldSlot } from '../publish-held';
 import { VideoUploadError } from '@/lib/videos/signed-upload';
-import type { ProviderPublish } from '@/app/api/media/publish-existing/asap';
+import { PartialPublishError, type ProviderPublish } from '@/app/api/media/publish-existing/asap';
 
 const USER_ID = 'user-1';
 const ROUTE = 'POST /api/schedule/slots/[slotId]/approve';
@@ -323,6 +323,57 @@ describe('publishHeldSlot', () => {
       claimedLedger,
       expect.objectContaining({ code: 'VIDEO_UPLOAD_EXPIRED' }),
     );
+  });
+
+  it('keeps a partial publish instead of reverting when a later provider throws', async () => {
+    mockPublishHeldMedia.mockRejectedValueOnce(
+      new PartialPublishError(
+        [
+          {
+            provider: 'youtube',
+            success: true,
+            results: [{ accountId: 'UC1', success: true, videoId: 'vid-1', videoUrl: 'https://youtube.com/watch?v=vid-1' }],
+          },
+        ],
+        new Error('settle failed'),
+      ),
+    );
+    const { client, updates } = mockServiceClient();
+
+    const response = await publishHeldSlot({ request: request(), serviceClient: client as never, userId: USER_ID, slot: awaitingSlot, route: ROUTE });
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { success: boolean; status: string; publishes: unknown[] };
+    expect(body.success).toBe(true);
+    expect(body.status).toBe('published');
+    expect(body.publishes).toHaveLength(1);
+    expect(updates).toHaveLength(2);
+    const final = updates[1]?.patch as Record<string, unknown>;
+    expect(final.status).toBe('published');
+    expect(final.published_at).toEqual(expect.any(String));
+    const outcomes = final.publish_outcomes as Array<Record<string, unknown>>;
+    expect(outcomes).toHaveLength(1);
+    expect(outcomes[0]).toMatchObject({
+      provider: 'youtube',
+      accountId: 'UC1',
+      status: 'published',
+      code: null,
+      requiresUser: false,
+      videoUrl: 'https://youtube.com/watch?v=vid-1',
+    });
+    expect(mockReleaseAsapLedger).toHaveBeenCalledTimes(1);
+  });
+
+  it('reverts the slot when the partial publish published nothing', async () => {
+    mockPublishHeldMedia.mockRejectedValueOnce(new PartialPublishError([], new Error('form failed')));
+    const { client, updates } = mockServiceClient();
+
+    const response = await publishHeldSlot({ request: request(), serviceClient: client as never, userId: USER_ID, slot: awaitingSlot, route: ROUTE });
+
+    expect(response.status).toBe(500);
+    expect(updates).toHaveLength(2);
+    expect((updates[1]?.patch as Record<string, unknown>).status).toBe('awaiting_approval');
+    expect(mockReleaseAsapLedger).toHaveBeenCalledTimes(1);
   });
 
   it('downloads a held image and publishes it with the stored bytes', async () => {

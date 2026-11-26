@@ -40,6 +40,18 @@ export interface ProviderPublish {
   results: ContentUploadAccountResult[];
 }
 
+export class PartialPublishError extends Error {
+  readonly publishes: ProviderPublish[];
+  readonly cause: unknown;
+
+  constructor(publishes: ProviderPublish[], cause: unknown) {
+    super(cause instanceof Error ? cause.message : 'publish-existing stopped part-way through its providers');
+    this.name = 'PartialPublishError';
+    this.publishes = publishes;
+    this.cause = cause;
+  }
+}
+
 export function asapScopeKey(idempotencyId: string): string {
   return `direct:existing:${idempotencyId}`;
 }
@@ -161,6 +173,8 @@ export async function publishHeldMedia(ctx: PublishExistingContext, ledger: Asap
       for (const provider of providers) {
         publishes.push(await publishToProvider(provider, { buffer: claimed.buffer, contentType: claimed.contentType }, ctx, ledger));
       }
+    } catch (error) {
+      throw new PartialPublishError(publishes, error);
     } finally {
       const { error: removeError } = await storage.remove([claimed.row.storage_path]);
       if (removeError) {
@@ -181,8 +195,12 @@ export async function publishHeldMedia(ctx: PublishExistingContext, ledger: Asap
     if (ledger !== null) await releaseAsapLedger(ledger, error);
     throw error;
   }
-  for (const provider of providers) {
-    publishes.push(await publishToProvider(provider, media, ctx, ledger));
+  try {
+    for (const provider of providers) {
+      publishes.push(await publishToProvider(provider, media, ctx, ledger));
+    }
+  } catch (error) {
+    throw new PartialPublishError(publishes, error);
   }
   return publishes;
 }

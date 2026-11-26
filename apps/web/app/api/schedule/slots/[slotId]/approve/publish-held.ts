@@ -15,6 +15,7 @@ import {
   asapScopeKey,
   claimAsapLedger,
   hasGrantedAccounts,
+  PartialPublishError,
   publishHeldMedia,
   releaseAsapLedger,
   type AsapLedger,
@@ -279,6 +280,33 @@ export async function publishHeldSlot(options: {
   try {
     publishes = await publishHeldMedia(ctx, ledger);
   } catch (error) {
+    const partial = error instanceof PartialPublishError ? error.publishes : [];
+    const partialOutcomes = toSlotOutcomes(partial);
+    if (partialOutcomes.some((outcome) => outcome.status === 'published')) {
+      const { error: partialError } = await serviceClient
+        .from('scheduled_posts')
+        .update({
+          status: 'published',
+          publish_outcomes: partialOutcomes,
+          published_at: new Date().toISOString(),
+        })
+        .eq('id', slot.id)
+        .eq('user_id', userId)
+        .in('status', ['publishing'])
+        .select('id')
+        .single();
+      if (partialError) {
+        logger.error('[api/schedule/slots] held slot partial outcome save failed', partialError, { slotId: slot.id, userId });
+        await releaseAsapLedger(ledger, error);
+        return apiErrorResponse(500, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR), {
+          route,
+          code: ERROR_CODES.INTERNAL_ERROR,
+        });
+      }
+      logger.error('[api/schedule/slots] held publish stopped part-way after publishing', error, { slotId: slot.id, userId });
+      await releaseAsapLedger(ledger, error);
+      return NextResponse.json({ success: true, status: 'published', publishes: partial });
+    }
     await serviceClient
       .from('scheduled_posts')
       .update({ status: 'awaiting_approval' })
