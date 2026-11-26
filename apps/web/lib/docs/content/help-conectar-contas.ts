@@ -10,7 +10,7 @@ export const helpConnectAccounts: DocPage = {
     en: 'Connect your social accounts to publish videos to them automatically.',
   },
   updatedAt: '2026-11-26',
-  contentHash: 'a6902f986278617541d68d61ab5fd9b9248aaddc9e5f107e01b321cce36cafda',
+  contentHash: '4698c0d04e38085784e934cb931a0b4964f1c749a1dac31bb58df45528e1fa00',
   blocks: [
     {
       kind: 'paragraph',
@@ -24,8 +24,8 @@ export const helpConnectAccounts: DocPage = {
     {
       kind: 'paragraph',
       text: {
-        pt: 'Ligue cada conta em Perfil, na aba Contas. Se um token expirar, desligue a conta e ligue de novo.',
-        en: 'Connect each account in Profile, on the Accounts tab. If a token expires, disconnect the account and connect it again.',
+        pt: 'Ligue cada conta na aba Contas. Se um token expirar, desligue a conta e ligue de novo.',
+        en: 'Connect each account on the Accounts tab. If a token expires, disconnect the account and connect it again.',
       },
     },
   ],
