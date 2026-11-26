@@ -150,7 +150,7 @@ describe('POST /api/persona with an identity card', () => {
 
   it.each([
     ['invalid JSON', '{nope', 'identityCard: not valid JSON'],
-    ['a bad version', JSON.stringify({ ...FIXTURE_CARD, version: 2 }), 'identityCard.version: unsupported version'],
+    ['a bad version', JSON.stringify({ ...FIXTURE_CARD, version: 3 }), 'identityCard.version: unsupported version'],
     ['an unknown key', JSON.stringify({ ...FIXTURE_CARD, extra: true }), 'identityCard: unknown field'],
     ['an over-size card', 'x'.repeat(5000), 'identityCard: at most 4096 bytes'],
   ])('rejects %s with a 400 and inserts nothing', async (_name, raw, message) => {

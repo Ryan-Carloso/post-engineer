@@ -857,7 +857,8 @@
                         "version": {
                           "type": "integer",
                           "enum": [
-                            1
+                            1,
+                            2
                           ]
                         },
                         "identity": {
@@ -872,6 +873,11 @@
                                   "maxLength": 80
                                 },
                                 "eyes": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                },
+                                "eye_color": {
                                   "type": "string",
                                   "minLength": 1,
                                   "maxLength": 80
@@ -891,7 +897,42 @@
                                   "minLength": 1,
                                   "maxLength": 80
                                 },
+                                "teeth": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                },
+                                "smile": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                },
                                 "skin": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                },
+                                "jawline": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                },
+                                "cheekbones": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                },
+                                "chin": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                },
+                                "forehead": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                },
+                                "ears": {
                                   "type": "string",
                                   "minLength": 1,
                                   "maxLength": 80
@@ -913,6 +954,16 @@
                                       "type": "string",
                                       "minLength": 1,
                                       "maxLength": 80
+                                    },
+                                    "texture": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 80
+                                    },
+                                    "parting": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 80
                                     }
                                   },
                                   "additionalProperties": false
@@ -923,6 +974,11 @@
                                   "maxLength": 80
                                 },
                                 "marks": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                },
+                                "tattoos": {
                                   "type": "string",
                                   "minLength": 1,
                                   "maxLength": 80
@@ -948,7 +1004,37 @@
                                   "minLength": 1,
                                   "maxLength": 80
                                 },
+                                "arms": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                },
                                 "hands": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                },
+                                "waist": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                },
+                                "hips": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                },
+                                "legs": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                },
+                                "posture": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                },
+                                "proportions": {
                                   "type": "string",
                                   "minLength": 1,
                                   "maxLength": 80
@@ -962,6 +1048,30 @@
                         "defaults": {
                           "type": "object",
                           "properties": {
+                            "style": {
+                              "type": "string",
+                              "enum": [
+                                "casual",
+                                "business",
+                                "business_casual",
+                                "formal",
+                                "elegant",
+                                "romantic",
+                                "sensual",
+                                "sporty",
+                                "athleisure",
+                                "streetwear",
+                                "boho",
+                                "minimalist",
+                                "vintage",
+                                "glamorous",
+                                "edgy",
+                                "cozy",
+                                "beach",
+                                "party",
+                                "outdoor"
+                              ]
+                            },
                             "outfit": {
                               "type": "object",
                               "properties": {
@@ -1008,7 +1118,7 @@
                         "version",
                         "identity"
                       ],
-                      "description": "Versioned identity card (at most 4096 bytes, every level strict, at least one identity trait). It describes a real person's physical traits: fill it only with their consent. Advice for the agent's image tool, not enforcement.",
+                      "description": "Versioned identity card (version 1 or 2; new cards are version 2; at most 4096 bytes once stored, every level strict, at least one identity trait). A version 1 card carries only the original leaves and no style; defaults must name a style or an outfit. It describes a real person's physical traits: fill it only with their consent. Advice for the agent's image tool, not enforcement.",
                       "nullable": true
                     }
                   },
@@ -1119,7 +1229,8 @@
                     "cardVersion": {
                       "type": "integer",
                       "enum": [
-                        1
+                        1,
+                        2
                       ]
                     }
                   },
@@ -1204,6 +1315,31 @@
                   "scene": {
                     "type": "object",
                     "properties": {
+                      "style": {
+                        "type": "string",
+                        "enum": [
+                          "casual",
+                          "business",
+                          "business_casual",
+                          "formal",
+                          "elegant",
+                          "romantic",
+                          "sensual",
+                          "sporty",
+                          "athleisure",
+                          "streetwear",
+                          "boho",
+                          "minimalist",
+                          "vintage",
+                          "glamorous",
+                          "edgy",
+                          "cozy",
+                          "beach",
+                          "party",
+                          "outdoor"
+                        ],
+                        "description": "Clothing style for this photo only. It overrides defaults.style and, without outfit slots, replaces the default outfit."
+                      },
                       "outfit": {
                         "type": "object",
                         "properties": {
@@ -1288,7 +1424,7 @@
                       "lighting",
                       "framing"
                     ],
-                    "description": "Scene only (at most 2048 bytes). Identity, face, body and version keys are rejected."
+                    "description": "Only what changes per photo: style, outfit slots, pose, setting, lighting, framing, aspect (at most 2048 bytes). Identity, face, body and version keys are rejected."
                   }
                 },
                 "required": [

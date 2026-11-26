@@ -86,7 +86,7 @@ export function registerPersonaMediaTools(server: McpServer, client: PostEnginee
   server.tool(
     'persona_media',
     actionDescription(
-      `A persona's identity card. get_card: the persona's identity card (set with personas update identityCard), or null. render_prompt: renders a deterministic image-edit prompt from the card plus a scene (outfit, pose, setting, lighting, framing) and returns { prompt, suggestedDescription }; it is advice for YOUR image tool, nothing is generated or stored. The card describes a real person's physical traits: nude or sexualised clothing is rejected, and the server cannot police what your image tool makes. ${POINTER_IMAGES}`,
+      `A persona's identity card. get_card: the persona's identity card (set with personas update identityCard), or null. render_prompt: renders a deterministic image-edit prompt from the card plus a scene (style, outfit, pose, setting, lighting, framing) and returns { prompt, suggestedDescription }; it is advice for YOUR image tool, nothing is generated or stored. The card describes a real person's physical traits: nude or sexualised clothing is rejected, and the server cannot police what your image tool makes. ${POINTER_IMAGES}`,
       MEDIA_SPECS,
     ),
     actionShape(MEDIA_SPECS),

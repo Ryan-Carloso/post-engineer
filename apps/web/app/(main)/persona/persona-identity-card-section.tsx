@@ -11,26 +11,45 @@ import {
   cardToDraft,
   type IdentityCardDraft,
   type IdentityCardFieldKey,
+  type IdentityCardTextFieldKey,
 } from '@/lib/persona-identity-card-form';
-import { IDENTITY_TEXT_MAX_LENGTH } from '@/lib/contracts/persona-identity-card';
+import { CARD_STYLES, IDENTITY_TEXT_MAX_LENGTH, type CardStyle } from '@/lib/contracts/persona-identity-card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { InlineFieldError, SectionDivider } from './persona-section-parts';
 
-const FIELD_LABELS: Record<IdentityCardFieldKey, TranslationKey> = {
+const FIELD_LABELS: Record<IdentityCardTextFieldKey, TranslationKey> = {
   'face.shape': 'identityCard.face_shape',
   'face.eyes': 'identityCard.face_eyes',
+  'face.eye_color': 'identityCard.face_eye_color',
   'face.eyebrows': 'identityCard.face_eyebrows',
   'face.nose': 'identityCard.face_nose',
   'face.lips': 'identityCard.face_lips',
+  'face.teeth': 'identityCard.face_teeth',
+  'face.smile': 'identityCard.face_smile',
   'face.skin': 'identityCard.face_skin',
+  'face.jawline': 'identityCard.face_jawline',
+  'face.cheekbones': 'identityCard.face_cheekbones',
+  'face.chin': 'identityCard.face_chin',
+  'face.forehead': 'identityCard.face_forehead',
+  'face.ears': 'identityCard.face_ears',
   'face.facial_hair': 'identityCard.face_facial_hair',
   'face.marks': 'identityCard.face_marks',
+  'face.tattoos': 'identityCard.face_tattoos',
   'face.hair.color': 'identityCard.face_hair_color',
   'face.hair.style': 'identityCard.face_hair_style',
   'face.hair.length': 'identityCard.face_hair_length',
+  'face.hair.texture': 'identityCard.face_hair_texture',
+  'face.hair.parting': 'identityCard.face_hair_parting',
   'body.build': 'identityCard.body_build',
   'body.height': 'identityCard.body_height',
   'body.shoulders': 'identityCard.body_shoulders',
+  'body.arms': 'identityCard.body_arms',
   'body.hands': 'identityCard.body_hands',
+  'body.waist': 'identityCard.body_waist',
+  'body.hips': 'identityCard.body_hips',
+  'body.legs': 'identityCard.body_legs',
+  'body.posture': 'identityCard.body_posture',
+  'body.proportions': 'identityCard.body_proportions',
   'outfit.top': 'identityCard.outfit_top',
   'outfit.bottom': 'identityCard.outfit_bottom',
   'outfit.one_piece': 'identityCard.outfit_one_piece',
@@ -39,10 +58,35 @@ const FIELD_LABELS: Record<IdentityCardFieldKey, TranslationKey> = {
   'outfit.accessories': 'identityCard.outfit_accessories',
 };
 
-const GROUP_LABELS: Record<'face' | 'hair' | 'body' | 'outfit', TranslationKey> = {
+const STYLE_LABELS: Record<CardStyle, TranslationKey> = {
+  casual: 'identityCard.style_casual',
+  business: 'identityCard.style_business',
+  business_casual: 'identityCard.style_business_casual',
+  formal: 'identityCard.style_formal',
+  elegant: 'identityCard.style_elegant',
+  romantic: 'identityCard.style_romantic',
+  sensual: 'identityCard.style_sensual',
+  sporty: 'identityCard.style_sporty',
+  athleisure: 'identityCard.style_athleisure',
+  streetwear: 'identityCard.style_streetwear',
+  boho: 'identityCard.style_boho',
+  minimalist: 'identityCard.style_minimalist',
+  vintage: 'identityCard.style_vintage',
+  glamorous: 'identityCard.style_glamorous',
+  edgy: 'identityCard.style_edgy',
+  cozy: 'identityCard.style_cozy',
+  beach: 'identityCard.style_beach',
+  party: 'identityCard.style_party',
+  outdoor: 'identityCard.style_outdoor',
+};
+
+const NO_STYLE = '__none';
+
+const GROUP_LABELS: Record<'face' | 'hair' | 'body' | 'style' | 'outfit', TranslationKey> = {
   face: 'identityCard.groupFace',
   hair: 'identityCard.groupHair',
   body: 'identityCard.groupBody',
+  style: 'identityCard.groupStyle',
   outfit: 'identityCard.groupOutfit',
 };
 
@@ -52,7 +96,62 @@ interface IdentityCardFieldsProps {
   onChange: (key: IdentityCardFieldKey, value: string) => void;
 }
 
-function IdentityCardFields({ draft, disabled, onChange }: IdentityCardFieldsProps) {
+function TextField({
+  fieldKey,
+  draft,
+  disabled,
+  onChange,
+}: IdentityCardFieldsProps & { fieldKey: IdentityCardFieldKey }) {
+  const { t } = useI18n();
+  if (!isTextField(fieldKey)) return null;
+  return (
+    <label className="block text-sm font-medium text-ink-soft">
+      {t(FIELD_LABELS[fieldKey])}
+      <input
+        type="text"
+        className={INPUT_CLASS}
+        maxLength={IDENTITY_TEXT_MAX_LENGTH}
+        value={draft[fieldKey]}
+        disabled={disabled}
+        data-testid={`identity-card-${fieldKey}`}
+        onChange={(event) => onChange(fieldKey, event.target.value)}
+      />
+    </label>
+  );
+}
+
+function isTextField(key: IdentityCardFieldKey): key is IdentityCardTextFieldKey {
+  return key !== 'style';
+}
+
+function StyleSelect({ draft, disabled, onChange }: IdentityCardFieldsProps) {
+  const { t } = useI18n();
+  return (
+    <div className="mt-2 flex flex-col gap-1.5">
+      <p className="text-xs leading-5 text-muted-text">{t('identityCard.styleHint')}</p>
+      <Select
+        value={draft.style === '' ? NO_STYLE : draft.style}
+        disabled={disabled}
+        onValueChange={(value) => onChange('style', value === NO_STYLE ? '' : value)}
+      >
+        <SelectTrigger aria-label={t('identityCard.styleLabel')} className="w-full sm:max-w-xs" data-testid="identity-card-style">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={NO_STYLE}>{t('identityCard.styleNone')}</SelectItem>
+          {CARD_STYLES.map((style) => (
+            <SelectItem key={style} value={style}>
+              {t(STYLE_LABELS[style])}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+function IdentityCardFields(props: IdentityCardFieldsProps) {
+  const { draft, disabled, onChange } = props;
   const { t } = useI18n();
   return (
     <div className="space-y-5">
@@ -62,22 +161,15 @@ function IdentityCardFields({ draft, disabled, onChange }: IdentityCardFieldsPro
           {group.id === 'outfit' ? (
             <p className="mt-1 text-xs leading-5 text-muted-text">{t('identityCard.outfitHint')}</p>
           ) : null}
-          <div className="mt-2 grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
-            {group.fields.map((key) => (
-              <label key={key} className="block text-sm font-medium text-ink-soft">
-                {t(FIELD_LABELS[key])}
-                <input
-                  type="text"
-                  className={INPUT_CLASS}
-                  maxLength={IDENTITY_TEXT_MAX_LENGTH}
-                  value={draft[key]}
-                  disabled={disabled}
-                  data-testid={`identity-card-${key}`}
-                  onChange={(event) => onChange(key, event.target.value)}
-                />
-              </label>
-            ))}
-          </div>
+          {group.id === 'style' ? (
+            <StyleSelect {...props} />
+          ) : (
+            <div className="mt-2 grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
+              {group.fields.map((key) => (
+                <TextField key={key} fieldKey={key} draft={draft} disabled={disabled} onChange={onChange} />
+              ))}
+            </div>
+          )}
         </fieldset>
       ))}
     </div>

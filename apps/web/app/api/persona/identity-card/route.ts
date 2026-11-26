@@ -13,7 +13,6 @@ import { parsePersonaIdQuery } from '@/lib/contracts/personas';
 import { isUuid } from '@/lib/schedule-slot-id';
 import {
   IDENTITY_CARD_MISSING_CODE,
-  IDENTITY_CARD_VERSION,
   SCENE_MAX_BYTES,
   parseIdentityCardValue,
   parseSceneValue,
@@ -157,7 +156,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     success: true,
     prompt: rendered.prompt,
     suggestedDescription: rendered.suggestedDescription,
-    cardVersion: IDENTITY_CARD_VERSION,
+    cardVersion: loaded.card.version,
   });
 }
 
