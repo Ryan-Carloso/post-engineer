@@ -89,7 +89,7 @@ async function getHandler(request: Request): Promise<NextResponse> {
     if (scheduleIds.length === 0) {
       return range.kind === 'range'
         ? NextResponse.json({ success: true, slots: [], truncated: false })
-        : NextResponse.json({ success: true, upcoming: [], recent: [], hasAnyPost: false });
+        : NextResponse.json({ success: true, upcoming: [], recent: [], hasAnyPost: false, awaitingCount: 0 });
     }
   }
 
@@ -150,29 +150,37 @@ async function getHandler(request: Request): Promise<NextResponse> {
     .contains('publish_outcomes', USER_NOTICE_OUTCOME_FILTER)
     .order('slot_at', { ascending: true });
   let anyPostQuery = supabase.from('scheduled_posts').select('id').eq('user_id', userId);
+  let awaitingCountQuery = supabase
+    .from('scheduled_posts')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .in('status', ['awaiting_approval']);
   if (scheduleIds) {
     upcomingQuery = upcomingQuery.in('schedule_id', scheduleIds);
     awaitingQuery = awaitingQuery.in('schedule_id', scheduleIds);
     recentQuery = recentQuery.in('schedule_id', scheduleIds);
     publishingQuery = publishingQuery.in('schedule_id', scheduleIds);
     anyPostQuery = anyPostQuery.in('schedule_id', scheduleIds);
+    awaitingCountQuery = awaitingCountQuery.in('schedule_id', scheduleIds);
   }
 
-  const [upcoming, awaiting, recent, publishing, anyPost] = await Promise.all([
+  const [upcoming, awaiting, recent, publishing, anyPost, awaitingCountResult] = await Promise.all([
     upcomingQuery.limit(limit),
     awaitingQuery.limit(limit),
     recentQuery.limit(limit),
     publishingQuery.limit(limit),
     anyPostQuery.limit(1),
+    awaitingCountQuery,
   ]);
 
-  if (upcoming.error || awaiting.error || recent.error || publishing.error || anyPost.error) {
-    logger.error('[api/schedule/status] query failed', upcoming.error ?? awaiting.error ?? recent.error ?? publishing.error ?? anyPost.error, {
+  if (upcoming.error || awaiting.error || recent.error || publishing.error || anyPost.error || awaitingCountResult.error) {
+    logger.error('[api/schedule/status] query failed', upcoming.error ?? awaiting.error ?? recent.error ?? publishing.error ?? anyPost.error ?? awaitingCountResult.error, {
       upcoming: upcoming.error,
       awaiting: awaiting.error,
       recent: recent.error,
       publishing: publishing.error,
       anyPost: anyPost.error,
+      awaitingCount: awaitingCountResult.error,
     });
     return NextResponse.json(
       { success: false, error: 'Failed to load schedule status.' },
@@ -199,6 +207,7 @@ async function getHandler(request: Request): Promise<NextResponse> {
       limit + awaitingRows.length,
     ),
   );
+  const awaitingCount = awaitingCountResult.count ?? (awaiting.data ?? []).length;
   const recentEnriched = withPostUrl(presentPublishRows(recent.data));
 
   return NextResponse.json({
@@ -206,6 +215,7 @@ async function getHandler(request: Request): Promise<NextResponse> {
     upcoming: upcomingEnriched,
     recent: recentEnriched,
     hasAnyPost: (anyPost.data?.length ?? 0) > 0,
+    awaitingCount,
   });
 }
 

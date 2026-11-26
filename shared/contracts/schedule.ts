@@ -147,6 +147,7 @@ export const ListPostsResponseSchema = z.object({
   upcoming: z.array(StatusSlotSchema),
   recent: z.array(StatusSlotSchema),
   hasAnyPost: z.boolean(),
+  awaitingCount: z.number(),
 });
 
 export const ListPostsInRangeResponseSchema = z.object({

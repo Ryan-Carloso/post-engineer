@@ -29,7 +29,7 @@ export function useApprovalQueue(): ApprovalQueueState {
   const slots = useMemo(() => awaitingSlots(statusQuery.data?.upcoming ?? []), [statusQuery.data]);
   return {
     slots,
-    count: slots.length,
+    count: statusQuery.data?.awaitingCount ?? slots.length,
     isLoading: statusQuery.isLoading,
     isError: statusQuery.isError,
   };

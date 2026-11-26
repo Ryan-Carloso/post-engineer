@@ -35,6 +35,7 @@ interface ScheduleStatusPayload {
   upcoming?: SlotRow[];
   recent?: SlotRow[];
   hasAnyPost?: boolean;
+  awaitingCount?: number;
 }
 
 export function mapSlot(row: SlotRow): ScheduledSlot {
@@ -57,6 +58,7 @@ export async function fetchScheduleStatus(limit?: number): Promise<{
   upcoming: ScheduledSlot[];
   recent: ScheduledSlot[];
   hasAnyPost: boolean;
+  awaitingCount?: number;
 }> {
   const url = typeof limit === 'number' ? `/api/schedule/status?limit=${limit}` : '/api/schedule/status';
   const response = await fetch(url);
@@ -68,5 +70,6 @@ export async function fetchScheduleStatus(limit?: number): Promise<{
     upcoming,
     recent,
     hasAnyPost: data.hasAnyPost ?? (upcoming.length > 0 || recent.length > 0),
+    awaitingCount: data.awaitingCount,
   };
 }
