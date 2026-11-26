@@ -1,4 +1,5 @@
 import {
+  CARD_STYLES,
   IDENTITY_CARD_MAX_BYTES,
   IDENTITY_CARD_WRITE_VERSION,
   OUTFIT_SLOTS,
@@ -59,8 +60,10 @@ export function cardToDraft(card: IdentityCard | null): IdentityCardDraft {
   if (card === null) return draft;
   for (const key of IDENTITY_CARD_FIELDS) {
     const [head, ...rest] = key.split('.');
-    if (key === 'style') draft.style = leafOf(card.defaults, ['style']);
-    else draft[key] = head === 'outfit'
+    if (key === 'style') {
+      const style = leafOf(card.defaults, ['style']);
+      draft.style = CARD_STYLES.some((known) => known === style) ? style : '';
+    } else draft[key] = head === 'outfit'
       ? leafOf(card.defaults?.outfit, rest)
       : leafOf(card.identity, [head, ...rest]);
   }

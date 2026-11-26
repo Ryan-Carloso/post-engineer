@@ -57,8 +57,13 @@ describe('identity card draft', () => {
 
   it('counts a style alone as a filled card so clearing every trait never reads as clearing the card', () => {
     const card = draftToCard(draftWith({ style: 'casual' }));
-    expect(card).not.toBeNull();
+    expect(card).toEqual({ version: 2, identity: {}, defaults: { style: 'casual' } });
     expect(identityCardFormValue(draftWith({ style: 'casual' }), cardToDraft(FIXTURE_CARD))).not.toBe('null');
+  });
+
+  it('drops a stored style the contract does not know instead of showing an empty style', () => {
+    const card = { ...FIXTURE_CARD_V2, defaults: { style: 'bikini' } } as unknown as IdentityCard;
+    expect(cardToDraft(card).style).toBe('');
   });
 
   it('turns no card into a blank draft and a blank draft into no card', () => {
