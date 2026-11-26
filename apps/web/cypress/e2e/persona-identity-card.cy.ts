@@ -122,7 +122,7 @@ describe('Persona — identity card', () => {
     cy.get('[data-testid="identity-card-outfit.top"]').type('sage-green t-shirt');
     cy.contains('button', 'Salvar alterações').click();
 
-    cy.contains('Preencha ao menos um traço de rosto ou corpo antes de definir uma roupa.').should('be.visible');
+    cy.contains('Preencha ao menos um traço de rosto ou corpo antes de definir um estilo ou uma roupa.').should('be.visible');
     cy.then(() => expect(state.patches).to.equal(0));
   });
 });
