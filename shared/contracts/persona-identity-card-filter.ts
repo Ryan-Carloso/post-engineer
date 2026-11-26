@@ -24,7 +24,7 @@ const ALLOWED_POSE_OUTFIT_PHRASES: readonly RegExp[] = [
   /\bsmile at the camera\b/g,
   /\bhigh[\s-]+waist(?:ed)?\b/g,
   /\bhip[\s-]+bag\b/g,
-  /\b(?:wide|straight)[\s-]+leg\b/g,
+  /\b(?:wide|straight|flared|tapered|bootcut|cropped|slim|skinny)[\s-]+leg\b/g,
   /\bhip[\s-]+length\b/g,
   /\bhip[\s-]+hop\b/g,
   /\b(?:arm|leg)[\s-]+warmers\b/g,
@@ -46,7 +46,7 @@ function normalizeText(value: string): string {
 
 function stripHarmless(value: string, scene: boolean): string {
   const lowered = normalizeText(value).toLowerCase();
-  const stripped = [...HARMLESS_CLOTHING_WORDS, ...ALLOWED_POSE_OUTFIT_PHRASES].reduce(
+  const stripped = [...ALLOWED_POSE_OUTFIT_PHRASES, ...HARMLESS_CLOTHING_WORDS].reduce(
     (text, phrase) => text.replace(phrase, ' '),
     lowered,
   );

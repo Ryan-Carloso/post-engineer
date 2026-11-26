@@ -106,6 +106,35 @@ describe('scene filter for the v2 identity words', () => {
     },
   );
 
+  it.each([
+    'flared-leg jeans',
+    'flared leg trousers',
+    'tapered-leg pants',
+    'bootcut-leg jeans',
+    'cropped-leg trousers',
+    'slim-leg jeans',
+    'skinny-leg jeans',
+  ])('accepts the allowlisted phrase "%s" in an outfit slot', (text) => {
+    expect(parseSceneValue({ ...FIXTURE_SCENE, outfit: { bottom: text } }).ok).toBe(true);
+  });
+
+  it.each([
+    'flared-leg jeans',
+    'flared leg trousers',
+    'tapered-leg pants',
+    'bootcut-leg jeans',
+    'cropped-leg trousers',
+    'slim-leg jeans',
+    'skinny-leg jeans',
+  ])('accepts the allowlisted phrase "%s" in a default outfit slot', (text) => {
+    const result = parseIdentityCardValue({
+      version: 2,
+      identity: { face: { eyes: 'green' } },
+      defaults: { outfit: { bottom: text } },
+    });
+    expect(result.ok).toBe(true);
+  });
+
   it.each(['hip-hop concert', 'hip-hop street'])('accepts the allowlisted phrase "%s" in a scene setting', (text) => {
     expect(parseSceneValue({ ...FIXTURE_SCENE, setting: text }).ok).toBe(true);
   });
