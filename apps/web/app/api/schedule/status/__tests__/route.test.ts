@@ -609,6 +609,52 @@ describe('GET query contracts', () => {
     expect(body.upcoming[0].status).toBe('awaiting_approval');
   });
 
+  it('serves awaiting_approval descriptions and signed media previews in upcoming', async () => {
+    const awaiting = [
+      {
+        id: 'aw-1',
+        slot_at: '2026-09-25T10:00:00Z',
+        status: 'awaiting_approval',
+        title: 'Held',
+        description: 'Edited outside.',
+        schedule_id: 's1',
+        error: null,
+        published_at: null,
+        media_kind: 'image',
+        media_ref: 'scheduled-media/user-1/pic.jpg',
+        media_content_type: 'image/jpeg',
+      },
+    ];
+    const client = mockPostsClient([], [], [], undefined, awaiting);
+    const mediaClient = {
+      ...client,
+      storage: {
+        from: () => ({
+          createSignedUrl: async () => ({
+            data: { signedUrl: 'https://example.com/signed.jpg' },
+            error: null,
+          }),
+        }),
+      },
+    };
+    mockAuthSession({ userId: USER_ID, accessToken: 'pe_test_key', isApiKey: true }, null);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(mediaClient as never);
+
+    const response = await GET(new Request('https://example.com/api/schedule/status'));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(ListPostsResponseSchema.safeParse(body).success).toBe(true);
+    expect(body.upcoming[0].description).toBe('Edited outside.');
+    expect(body.upcoming[0].media).toEqual({
+      kind: 'image',
+      url: 'https://example.com/signed.jpg',
+      contentType: 'image/jpeg',
+    });
+    expect(body.upcoming[0].media_kind).toBeUndefined();
+    expect(body.upcoming[0].media_ref).toBeUndefined();
+    expect(body.upcoming[0].media_content_type).toBeUndefined();
+  });
+
   it('restricts awaiting_approval slots to the scoped key schedules', async () => {
     const awaiting = [
       { id: 'aw-1', slot_at: '2026-09-25T10:00:00Z', status: 'awaiting_approval', title: 'Held', schedule_id: 's1', error: null, published_at: null },

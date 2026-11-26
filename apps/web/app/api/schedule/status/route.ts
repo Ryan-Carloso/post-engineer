@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { isScopedApiKey } from '@/lib/api-keys';
 import { logger } from '@/lib/logger';
+import { resolveSlotMedia } from '@/lib/post-detail-media';
 
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 import {
@@ -24,6 +26,29 @@ function withPostUrl<T extends { id?: unknown }>(slots: T[]): (T & { postUrl: st
     ...slot,
     postUrl: typeof slot.id === 'string' ? postUrlFor(slot.id) : null,
   }));
+}
+
+async function withAwaitingMedia(
+  rows: Record<string, unknown>[],
+  service: SupabaseClient,
+  userId: string,
+): Promise<Record<string, unknown>[]> {
+  return Promise.all(
+    rows.map(async (row) => {
+      const { media_kind, media_ref, media_content_type, ...rest } = row;
+      const media = await resolveSlotMedia(service, typeof row.id === 'string' ? row.id : '', userId, {
+        media_kind: typeof media_kind === 'string' ? media_kind : null,
+        media_ref: typeof media_ref === 'string' ? media_ref : null,
+        media_content_type: typeof media_content_type === 'string' ? media_content_type : null,
+        status: typeof row.status === 'string' ? row.status : '',
+      });
+      return {
+        ...rest,
+        description: typeof row.description === 'string' ? row.description : null,
+        media,
+      };
+    }),
+  );
 }
 
 async function getHandler(request: Request): Promise<NextResponse> {
@@ -107,7 +132,7 @@ async function getHandler(request: Request): Promise<NextResponse> {
     .order('slot_at', { ascending: true });
   let awaitingQuery = supabase
     .from('scheduled_posts')
-    .select('id, slot_at, status, title, error, published_at, schedule_id')
+    .select('id, slot_at, status, title, description, error, published_at, schedule_id, media_kind, media_ref, media_content_type')
     .eq('user_id', userId)
     .in('status', ['awaiting_approval'])
     .order('slot_at', { ascending: true });
@@ -154,7 +179,15 @@ async function getHandler(request: Request): Promise<NextResponse> {
       { status: 500 },
     );
   }
-  const awaitingRows = presentPublishRows(awaiting.data ?? []);
+  const presentedAwaiting = presentPublishRows(awaiting.data ?? []);
+  const awaitingRows =
+    presentedAwaiting.length === 0
+      ? presentedAwaiting
+      : await withAwaitingMedia(
+          presentedAwaiting,
+          auth.isApiKey === true || auth.isOAuth === true ? supabase : createSupabaseServiceClient(),
+          userId,
+        );
   const upcomingEnriched = withPostUrl(
     mergeBySlotAt(
       mergeBySlotAt(

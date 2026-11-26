@@ -1,5 +1,6 @@
 import { HttpStatusError } from '@/lib/errors';
 import type { PublishProviderFailure, PublishUserNotice } from '@/lib/publish-user-notice';
+import { narrowSlotMedia, type SlotMedia } from '@/lib/slot-detail';
 
 export interface ScheduledSlot {
   id: string;
@@ -7,6 +8,8 @@ export interface ScheduledSlot {
   slotAt: string;
   status: 'ready' | 'awaiting_approval' | 'publishing' | 'published' | 'failed' | 'cancelled';
   title: string | null;
+  description?: string | null;
+  media?: SlotMedia | null;
   error?: string | null;
   publishedAt?: string | null;
   userNotices?: PublishUserNotice[];
@@ -19,6 +22,8 @@ export interface SlotRow {
   slot_at: string;
   status: ScheduledSlot['status'];
   title: string | null;
+  description?: string | null;
+  media?: SlotMedia | null;
   error?: string | null;
   published_at?: string | null;
   userNotices?: PublishUserNotice[];
@@ -39,6 +44,8 @@ export function mapSlot(row: SlotRow): ScheduledSlot {
     slotAt: row.slot_at,
     status: row.status,
     title: row.title,
+    description: row.description ?? null,
+    media: narrowSlotMedia(row.media),
     error: row.error,
     publishedAt: row.published_at,
     userNotices: row.userNotices,

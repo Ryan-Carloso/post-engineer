@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { Check, Clock, Film, Image as ImageIcon, TriangleAlert, X } from 'lucide-react';
 import { useApprovalQueue, isSlotExpired } from '@/lib/approval-queue';
 import { useApproveSlotMutation, useRejectSlotMutation } from '@/lib/api-approval';
-import { usePostDetailQuery, type ScheduledSlot } from '@/lib/api';
+import { type ScheduledSlot } from '@/lib/api';
 import { useI18n } from '@/lib/i18n/provider';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -20,8 +20,7 @@ const MAX_STATUS_ICONS = 3;
 
 function ApprovalMedia({ slot }: { slot: ScheduledSlot }) {
   const { t } = useI18n();
-  const detail = usePostDetailQuery(slot.id);
-  const media = detail.data?.slot.media ?? null;
+  const media = slot.media ?? null;
   const displayTitle = slot.title ?? t('posts.unknownTitle');
   if (media?.kind === 'image' && media.url !== null) {
     return (
@@ -61,7 +60,6 @@ function ApprovalMedia({ slot }: { slot: ScheduledSlot }) {
 
 function ApprovalQueueRow({ slot, joins }: { slot: ScheduledSlot; joins: PostJoins }) {
   const { t, locale } = useI18n();
-  const detail = usePostDetailQuery(slot.id);
   const approve = useApproveSlotMutation();
   const reject = useRejectSlotMutation();
   const [rescheduling, setRescheduling] = useState(false);
@@ -74,7 +72,7 @@ function ApprovalQueueRow({ slot, joins }: { slot: ScheduledSlot; joins: PostJoi
   const canReschedule = expired && schedule?.publishMode === 'scheduled';
   const busy = approve.isPending || reject.isPending;
   const displayTitle = slot.title ?? t('posts.unknownTitle');
-  const description = detail.data?.slot.description;
+  const description = slot.description;
   const when = `${formatDate(slot.slotAt, locale)} · ${formatTime(slot.slotAt, locale)}`;
 
   return (

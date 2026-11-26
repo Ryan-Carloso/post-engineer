@@ -100,6 +100,8 @@ function freshSlot() {
     slot_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     status: 'awaiting_approval',
     title: 'Held video',
+    description: 'Edited outside.',
+    media: { kind: 'image', url: null, contentType: 'image/jpeg' },
   };
 }
 
@@ -110,6 +112,8 @@ function expiredSlot() {
     slot_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
     status: 'awaiting_approval',
     title: 'Late video',
+    description: 'Edited outside.',
+    media: { kind: 'image', url: null, contentType: 'image/jpeg' },
   };
 }
 
@@ -120,45 +124,8 @@ function asapSlot() {
     slot_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
     status: 'awaiting_approval',
     title: 'ASAP hold',
-  };
-}
-
-function detailPayload(slotId: string, title: string, slotAt: string, scheduleId = SCHEDULE_ID, publishMode = 'scheduled') {
-  return {
-    success: true,
-    slot: {
-      id: slotId,
-      scheduleId,
-      slotAt,
-      status: 'awaiting_approval',
-      title,
-      description: 'Edited outside.',
-      error: null,
-      publishedAt: null,
-      publishLinks: [],
-      media: { kind: 'image', url: null, contentType: 'image/jpeg' },
-    },
-    schedule: {
-      id: scheduleId,
-      personaId: 'persona-e2e-1',
-      providers: ['youtube'],
-      youtubeAccountIds: ['ch-e2e-1'],
-      instagramAccountIds: [],
-      linkedinAccountIds: [],
-      blueskyAccountIds: [],
-      threadsAccountIds: [],
-      facebookAccountIds: [],
-      pinterestAccountIds: [],
-      pinterestBoardId: null,
-      threespeakAccountIds: [],
-      rumbleAccountIds: [],
-      fanvueAccountIds: [],
-      telegramAccountIds: [],
-      timezone: 'Europe/Lisbon',
-      publishMode,
-    },
-    persona: { id: 'persona-e2e-1', name: 'E2E Persona' },
-    prompt: null,
+    description: 'Edited outside.',
+    media: { kind: 'image', url: null, contentType: 'image/jpeg' },
   };
 }
 
@@ -180,17 +147,6 @@ describe('Posts approval queue', () => {
         req.reply({ success: true, slots: [freshSlot(), expiredSlot(), asapSlot()], truncated: false });
       }
     }).as('status');
-    cy.intercept('GET', `/api/posts/${FRESH_SLOT_ID}`, detailPayload(FRESH_SLOT_ID, 'Held video', freshSlot().slot_at)).as(
-      'freshDetail',
-    );
-    cy.intercept('GET', `/api/posts/${EXPIRED_SLOT_ID}`, detailPayload(EXPIRED_SLOT_ID, 'Late video', expiredSlot().slot_at)).as(
-      'expiredDetail',
-    );
-    cy.intercept(
-      'GET',
-      `/api/posts/${ASAP_SLOT_ID}`,
-      detailPayload(ASAP_SLOT_ID, 'ASAP hold', asapSlot().slot_at, ASAP_SCHEDULE_ID, 'asap'),
-    ).as('asapDetail');
     cy.intercept('POST', `/api/schedule/slots/${FRESH_SLOT_ID}/approve`, (req) => {
       decided.add(FRESH_SLOT_ID);
       req.reply({ success: true, status: 'ready' });

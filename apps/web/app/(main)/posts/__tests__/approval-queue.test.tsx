@@ -26,11 +26,6 @@ vi.mock('@/lib/approval-queue', async (importOriginal) => {
   };
 });
 
-const detailById = vi.hoisted(() => new Map<string, unknown>());
-vi.mock('@/lib/api', () => ({
-  usePostDetailQuery: vi.fn((id: string) => ({ data: detailById.get(id) ?? null, isLoading: false })),
-}));
-
 const approveMutate = vi.hoisted(() => vi.fn());
 const rejectMutate = vi.hoisted(() => vi.fn());
 const approvalErrors = vi.hoisted(() => ({ approve: false, reject: false }));
@@ -58,44 +53,6 @@ function slot(partial: Partial<ScheduledSlot> = {}): ScheduledSlot {
     status: 'awaiting_approval',
     title: 'Held video',
     ...partial,
-  };
-}
-
-function detailFor(slotId: string, media: unknown, description: string | null) {
-  return {
-    slot: {
-      id: slotId,
-      scheduleId: 's1',
-      slotAt: FRESH_AT,
-      status: 'awaiting_approval',
-      title: 'Held video',
-      description,
-      error: null,
-      publishedAt: null,
-      publishLinks: [],
-      media,
-    },
-    schedule: {
-      id: 's1',
-      personaId: 'p1',
-      providers: ['youtube'],
-      youtubeAccountIds: ['ch1'],
-      instagramAccountIds: [],
-      linkedinAccountIds: [],
-      blueskyAccountIds: [],
-      threadsAccountIds: [],
-      facebookAccountIds: [],
-      pinterestAccountIds: [],
-      pinterestBoardId: null,
-      threespeakAccountIds: [],
-      rumbleAccountIds: [],
-      fanvueAccountIds: [],
-      telegramAccountIds: [],
-      timezone: 'UTC',
-      publishMode: 'scheduled',
-    },
-    persona: { id: 'p1', name: 'Viva Leve' },
-    prompt: null,
   };
 }
 
@@ -177,7 +134,6 @@ describe('ApprovalQueue', () => {
     queueState.isError = false;
     approvalErrors.approve = false;
     approvalErrors.reject = false;
-    detailById.clear();
   });
 
   it('renders nothing when no slot awaits approval', () => {
@@ -187,8 +143,12 @@ describe('ApprovalQueue', () => {
   });
 
   it('shows the title, description, accounts, slot time and the decision buttons', () => {
-    queueState.slots = [slot()];
-    detailById.set('slot-1', detailFor('slot-1', { kind: 'upload', url: null, contentType: 'video/mp4' }, 'Edited outside.'));
+    queueState.slots = [
+      slot({
+        description: 'Edited outside.',
+        media: { kind: 'upload', url: null, contentType: 'video/mp4' },
+      }),
+    ];
     renderQueue();
 
     expect(screen.getByTestId('approval-queue')).toBeInTheDocument();
@@ -201,8 +161,7 @@ describe('ApprovalQueue', () => {
   });
 
   it('shows the media kind when no signed preview URL exists yet', () => {
-    queueState.slots = [slot()];
-    detailById.set('slot-1', detailFor('slot-1', { kind: 'image', url: null, contentType: 'image/jpeg' }, null));
+    queueState.slots = [slot({ media: { kind: 'image', url: null, contentType: 'image/jpeg' } })];
     renderQueue();
 
     const tile = screen.getByRole('img', { name: 'posts.approvalMediaImage' });
@@ -210,12 +169,10 @@ describe('ApprovalQueue', () => {
     expect(screen.getByText('posts.unknownCaption')).toBeInTheDocument();
   });
 
-  it('shows the signed image when the detail carries a preview URL', () => {
-    queueState.slots = [slot()];
-    detailById.set(
-      'slot-1',
-      detailFor('slot-1', { kind: 'image', url: 'https://example.com/signed.jpg', contentType: 'image/jpeg' }, null),
-    );
+  it('shows the signed image when the slot carries a preview URL', () => {
+    queueState.slots = [
+      slot({ media: { kind: 'image', url: 'https://example.com/signed.jpg', contentType: 'image/jpeg' } }),
+    ];
     renderQueue();
 
     const image = screen.getByRole('img', { name: 'Held video' });
@@ -225,7 +182,6 @@ describe('ApprovalQueue', () => {
   it('calls the approve mutation with the slot id', async () => {
     const user = userEvent.setup();
     queueState.slots = [slot()];
-    detailById.set('slot-1', detailFor('slot-1', null, null));
     renderQueue();
 
     await user.click(screen.getByTestId('approval-approve'));
@@ -237,7 +193,6 @@ describe('ApprovalQueue', () => {
   it('calls the reject mutation with the slot id', async () => {
     const user = userEvent.setup();
     queueState.slots = [slot()];
-    detailById.set('slot-1', detailFor('slot-1', null, null));
     renderQueue();
 
     await user.click(screen.getByTestId('approval-reject'));
@@ -249,7 +204,6 @@ describe('ApprovalQueue', () => {
   it('shows the approve error copy when the approve mutation fails', () => {
     approvalErrors.approve = true;
     queueState.slots = [slot()];
-    detailById.set('slot-1', detailFor('slot-1', null, null));
     renderQueue();
 
     expect(screen.getByRole('alert')).toHaveTextContent('posts.approvalApproveError');
@@ -257,8 +211,14 @@ describe('ApprovalQueue', () => {
 
   it('marks an expired slot, disables approve and offers reschedule', async () => {
     const user = userEvent.setup();
-    queueState.slots = [slot({ id: 'slot-late', slotAt: EXPIRED_AT, title: 'Late video' })];
-    detailById.set('slot-late', detailFor('slot-late', { kind: 'upload', url: null, contentType: 'video/mp4' }, null));
+    queueState.slots = [
+      slot({
+        id: 'slot-late',
+        slotAt: EXPIRED_AT,
+        title: 'Late video',
+        media: { kind: 'upload', url: null, contentType: 'video/mp4' },
+      }),
+    ];
     renderQueue();
 
     expect(screen.getByTestId('approval-expired')).toHaveTextContent('posts.approvalExpired');
@@ -271,8 +231,15 @@ describe('ApprovalQueue', () => {
   });
 
   it('keeps an old ASAP holding row approvable without an expired badge or reschedule', () => {
-    queueState.slots = [slot({ id: 'slot-asap', scheduleId: 's2', slotAt: EXPIRED_AT, title: 'ASAP hold' })];
-    detailById.set('slot-asap', detailFor('slot-asap', { kind: 'upload', url: null, contentType: 'video/mp4' }, null));
+    queueState.slots = [
+      slot({
+        id: 'slot-asap',
+        scheduleId: 's2',
+        slotAt: EXPIRED_AT,
+        title: 'ASAP hold',
+        media: { kind: 'upload', url: null, contentType: 'video/mp4' },
+      }),
+    ];
     renderQueue();
 
     expect(screen.queryByTestId('approval-expired')).not.toBeInTheDocument();
