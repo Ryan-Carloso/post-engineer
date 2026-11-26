@@ -9,6 +9,7 @@ import { type ScheduledSlot } from '@/lib/api';
 import { useI18n } from '@/lib/i18n/provider';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import ConfirmDialog from '@/components/ui/confirm-dialog';
 import { ProviderIcon } from '@/components/provider-icon';
 import { cn } from '@/lib/utils';
 import { formatDate, formatTime, resolveSlotAccounts, StatusBadge } from './post-card';
@@ -63,6 +64,7 @@ function ApprovalQueueRow({ slot, joins }: { slot: ScheduledSlot; joins: PostJoi
   const approve = useApproveSlotMutation();
   const reject = useRejectSlotMutation();
   const [rescheduling, setRescheduling] = useState(false);
+  const [confirmingReject, setConfirmingReject] = useState(false);
   const schedule = joins.scheduleById.get(slot.scheduleId);
   const personaId = schedule?.personaId ?? null;
   const personaName =
@@ -138,7 +140,7 @@ function ApprovalQueueRow({ slot, joins }: { slot: ScheduledSlot; joins: PostJoi
           size="sm"
           variant="outline"
           data-testid="approval-reject"
-          onClick={() => reject.mutate(slot.id)}
+          onClick={() => setConfirmingReject(true)}
           disabled={busy}
         >
           <X className="size-4" aria-hidden />
@@ -176,6 +178,18 @@ function ApprovalQueueRow({ slot, joins }: { slot: ScheduledSlot; joins: PostJoi
           {t('posts.approvalRejectError')}
         </p>
       )}
+      <ConfirmDialog
+        tone="destructive"
+        open={confirmingReject}
+        onClose={() => setConfirmingReject(false)}
+        onConfirm={() => reject.mutate(slot.id, { onSettled: () => setConfirmingReject(false) })}
+        pending={reject.isPending}
+        detail={displayTitle}
+        title={t('posts.approvalRejectTitle')}
+        body={t('posts.approvalRejectBody')}
+        cancelLabel={t('posts.cancel')}
+        confirmLabel={t('posts.approvalReject')}
+      />
     </Card>
   );
 }

@@ -214,15 +214,36 @@ describe('ApprovalQueue', () => {
     expect(rejectMutate).not.toHaveBeenCalled();
   });
 
-  it('calls the reject mutation with the slot id', async () => {
+  it('asks before rejecting, and rejects only on confirm', async () => {
     const user = userEvent.setup();
     queueState.slots = [slot()];
     renderQueue();
 
     await user.click(screen.getByTestId('approval-reject'));
 
-    expect(rejectMutate).toHaveBeenCalledWith('slot-1');
+    expect(rejectMutate).not.toHaveBeenCalled();
+    expect(screen.getByTestId('confirm-dialog')).toBeInTheDocument();
+    expect(screen.getByText('posts.approvalRejectTitle')).toBeInTheDocument();
+    expect(screen.getByText('posts.approvalRejectBody')).toBeInTheDocument();
+
+    await user.click(screen.getByTestId('confirm-dialog-confirm'));
+
+    expect(rejectMutate).toHaveBeenCalledWith('slot-1', expect.objectContaining({ onSettled: expect.any(Function) }));
     expect(approveMutate).not.toHaveBeenCalled();
+  });
+
+  it('cancelling the reject dialog rejects nothing and closes the dialog', async () => {
+    const user = userEvent.setup();
+    queueState.slots = [slot()];
+    renderQueue();
+
+    await user.click(screen.getByTestId('approval-reject'));
+    expect(screen.getByTestId('confirm-dialog')).toBeInTheDocument();
+
+    await user.click(screen.getByTestId('confirm-dialog-cancel'));
+
+    expect(rejectMutate).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('confirm-dialog')).not.toBeInTheDocument();
   });
 
   it('shows the approve error copy when the approve mutation fails', () => {

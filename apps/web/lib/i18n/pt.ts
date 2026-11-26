@@ -81,6 +81,8 @@ export const ptDictionary = {
     approvalMediaUnknown: 'Média',
     approvalNavBadge: '{count} publicações à espera de aprovação',
     approvalTruncated: 'A mostrar {shown} de {count} publicações à espera de aprovação',
+    approvalRejectTitle: 'Rejeitar esta publicação?',
+    approvalRejectBody: 'Isto cancela a publicação agendada e limpa a média. Não dá para desfazer.',
   },
   publishing: {
     mustSelectAccount: 'Selecione pelo menos uma conta para publicar.',

@@ -82,6 +82,8 @@ export const enDictionary: Dictionary = {
     approvalMediaUnknown: 'Media',
     approvalNavBadge: '{count} posts awaiting approval',
     approvalTruncated: 'Showing {shown} of {count} posts awaiting approval',
+    approvalRejectTitle: 'Reject this post?',
+    approvalRejectBody: 'This cancels the scheduled post and clears its media. This cannot be undone.',
   },
   publishing: {
     mustSelectAccount: 'Select at least one account to publish to.',
