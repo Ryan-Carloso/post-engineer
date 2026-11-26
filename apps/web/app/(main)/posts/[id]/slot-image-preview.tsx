@@ -7,7 +7,7 @@ export function SlotImagePreview({ src }: { src: string }): React.JSX.Element {
   return (
     <div className="mt-4 overflow-hidden rounded-2xl bg-black">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt={t('posts.generationUploadedImage')} className="mx-auto size-auto max-h-[46vh] max-w-full" />
+      <img src={src} alt={t('posts.uploadedImage')} className="mx-auto size-auto max-h-[46vh] max-w-full" />
     </div>
   );
 }

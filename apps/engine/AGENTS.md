@@ -2,7 +2,7 @@
 
 These rules apply to every agent (human or AI) making changes in this
 directory. The engine is the publish worker: every 60 seconds it publishes
-the scheduled slots whose media the user uploaded (`app/services/fill_schedule/`).
+the scheduled slots whose media the user uploaded (`app/services/publisher/`).
 It generates no media.
 
 ---

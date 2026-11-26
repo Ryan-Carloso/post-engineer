@@ -66,5 +66,5 @@
   `restore`).
 - Tool configuration: `tool_config` (`get`, `save`) — the saved search tool and licensed stock
   sources; keys are stored encrypted and only presence + last 4 are ever returned.
-- Prompts: `/daily-news` (daily news becomes a video), `/github-prs`
-  (GitHub PRs become videos), `/full-setup` (full setup becomes videos).
+- Prompts: `/daily-news` (daily news becomes a post), `/github-prs`
+  (GitHub PRs become posts), `/full-setup` (full setup becomes posts).

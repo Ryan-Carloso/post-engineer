@@ -239,7 +239,7 @@ describe('cleanupPublishMedia', () => {
 describe('PUBLISH_MEDIA_BUCKET', () => {
   it('matches the bucket the engine publish worker downloads uploads from', () => {
     const source = readFileSync(
-      path.join(findRepoRoot(import.meta.url), 'apps/engine/app/services/fill_schedule/publish_existing_media.py'),
+      path.join(findRepoRoot(import.meta.url), 'apps/engine/app/services/publisher/publish_existing_media.py'),
       'utf8',
     );
     expect(source.includes(`store.download_storage_object("${PUBLISH_MEDIA_BUCKET}", storage_path)`)).toBe(true);

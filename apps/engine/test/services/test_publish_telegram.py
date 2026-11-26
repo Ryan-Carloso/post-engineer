@@ -2,7 +2,7 @@
 
 Covers PublishParams (schema), the publish_telegram module directly (so the
 mutation shard attributes tests to it), the upload_publisher wiring, the
-fill-schedule mapping for the telegram provider, and the caption ceiling
+publisher mapping for the telegram provider, and the caption ceiling
 pinned against the web Bot API client.
 """
 
@@ -13,8 +13,8 @@ from pathlib import Path
 
 from app.providers import SOCIAL_PROVIDERS
 from app.services import publish_telegram, upload_publisher
-from app.services.fill_schedule.account_outcomes import _account_ids
-from app.services.fill_schedule.metadata import metadata_for, validate_publish_plan
+from app.services.publisher.account_outcomes import _account_ids
+from app.services.publisher.metadata import metadata_for, validate_publish_plan
 
 
 def _repo_root() -> Path:
@@ -81,7 +81,7 @@ class TelegramPublisherWiringTest(unittest.TestCase):
         upload_publisher.validate_publish_metadata(["telegram"], None, None)
 
 
-class TelegramFillScheduleTest(unittest.TestCase):
+class TelegramPublishTest(unittest.TestCase):
     schedule = {
         "providers": ["telegram"],
         "telegram_account_ids": ["-1001234567890"],
@@ -103,7 +103,7 @@ class TelegramFillScheduleTest(unittest.TestCase):
             validate_publish_plan({"providers": ["telegram"]}, "title", "Agent description.")
 
     def test_slot_select_reads_the_telegram_column(self) -> None:
-        from app.services.fill_schedule.store import ScheduleStore
+        from app.services.publisher.store import ScheduleStore
 
         columns = ScheduleStore.SLOT_IDENTITY_SELECT.split(",")
         self.assertIn("telegram_account_ids", columns)

@@ -90,7 +90,7 @@ export function buildSpec(mapping, version) {
       title: 'Post Engineer API',
       version,
       description:
-        'Generate and schedule short videos for social accounts. Authenticate with an API key created in the dashboard: Authorization: Bearer <key>.',
+        'Schedule and publish short videos for social accounts. Authenticate with an API key created in the dashboard: Authorization: Bearer <key>.',
     },
     servers: [{ url: 'https://post-engineer.com' }],
     components: {

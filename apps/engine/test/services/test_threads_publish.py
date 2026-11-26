@@ -1,14 +1,14 @@
 """Contract tests for Threads publish support (engine side).
 
 Covers upload_publisher metadata/multipart rules and
-the fill-schedule mapping for the threads provider.
+the publisher mapping for the threads provider.
 """
 
 import unittest
 
 from app.providers import SOCIAL_PROVIDERS
 from app.services import upload_publisher
-from app.services.fill_schedule.metadata import metadata_for, validate_publish_plan
+from app.services.publisher.metadata import metadata_for, validate_publish_plan
 
 
 class ThreadsPublisherTest(unittest.TestCase):
@@ -47,7 +47,7 @@ class ThreadsPublisherTest(unittest.TestCase):
         self.assertIn("threads", upload_publisher._PART_BUILDERS)
 
 
-class ThreadsFillScheduleTest(unittest.TestCase):
+class ThreadsPublishTest(unittest.TestCase):
     schedule = {"providers": ["threads"], "threads_account_ids": ["42"]}
 
     def test_metadata_cuts_the_caption_to_the_limit_and_reads_accounts(self) -> None:

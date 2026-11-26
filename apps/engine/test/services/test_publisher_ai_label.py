@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from app.services.fill_schedule.metadata import metadata_for
+from app.services.publisher.metadata import metadata_for
 
 SCHEDULE = {
     "youtube_account_ids": ["yt-1"],

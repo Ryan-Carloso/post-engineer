@@ -1,11 +1,11 @@
-"""PostHog payloads for fill-schedule publish failures."""
+"""PostHog payloads for publisher publish failures."""
 
 from __future__ import annotations
 
 from typing import Any
 
 from app.services.analytics import nonempty_error_reason, scrub_error_text
-from app.services.fill_schedule.support import slot_user_id
+from app.services.publisher.support import slot_user_id
 
 
 def publish_tracking_context(

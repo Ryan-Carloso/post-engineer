@@ -1,4 +1,4 @@
-"""Continue-on-provider-failure in the fill-schedule publish path.
+"""Continue-on-provider-failure in the publisher publish path.
 
 One provider failing must not cancel the others: the failure is recorded,
 the loop continues, and the slot is marked published when at least one
@@ -12,8 +12,8 @@ import unittest
 from datetime import datetime, timezone
 from unittest.mock import patch
 
-from app.services import fill_schedule as fs
-from app.services.fill_schedule import publish as pub_module
+from app.services import publisher as fs
+from app.services.publisher import publish as pub_module
 from app.services.upload_publisher import PublishError
 
 UTC = timezone.utc
@@ -73,7 +73,7 @@ class ContinueOnProviderFailureTests(unittest.TestCase):
         }
 
     def _scheduler(self, store, publish):
-        scheduler = fs.FillScheduleScheduler(
+        scheduler = fs.PublishScheduler(
             store=store,
             publish_video=publish,
         )

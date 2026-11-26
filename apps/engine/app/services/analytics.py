@@ -1,14 +1,11 @@
 """PostHog product-analytics for the engine.
 
-Tracks the video lifecycle funnel as PostHog events:
-- video_generation_requested (funnel entry, before the pipeline starts)
-- video_generation_started / video_generation_failed / video_generated
-- video_generation_progress (50% and 70% milestones only)
+Tracks the publish funnel as PostHog events:
 - video_publish_started / video_published / video_publish_failed
 - video_publish_partial_failure (some providers published, others failed)
 
 Safety rules:
-- Never raises: telemetry must never break video generation.
+- Never raises: telemetry must never break publishing.
 - No-op when POSTHOG_API_KEY is missing (warns once).
 - Secret-bearing property keys are redacted before capture.
 - Never log PII, credentials, or raw request bodies in properties.
@@ -22,8 +19,8 @@ not a raw request body — prompts are never sent.
 
 Deliberate exception (user-requested, PR #228): the publish_provider_failed
 event carries response_body, up to 500 chars of the upstream provider's
-error response, so publish failures are diagnosable in PostHog from both
-publish paths (task_publish, fill_schedule). It is scrubbed with
+error response, so publish failures are diagnosable in PostHog from the
+publisher publish path. It is scrubbed with
 scrub_error_text (secrets + machine-local paths) before capture and never
 reaches Discord or the task error string.
 

@@ -208,7 +208,7 @@ def _log_storage_failure(task_id: str) -> None:
 
 
 def _log_scheduler_failure(task_id: str) -> None:
-    logger.error(f"fill_schedule: stage generated failed for {task_id}")
+    logger.error(f"publisher: stage published failed for {task_id}")
 
 
 def _log_fail_task_stage(task_id: str, stage: str) -> None:
@@ -314,7 +314,7 @@ class StartupWarmClientTests(unittest.TestCase):
         with (
             patch("app.asgi.warm_client", side_effect=lambda: calls.append("warm")),
             patch(
-                "app.asgi.start_fill_schedule_scheduler",
+                "app.asgi.start_publisher_scheduler",
                 side_effect=lambda: calls.append("scheduler"),
             ),
         ):

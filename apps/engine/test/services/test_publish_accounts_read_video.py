@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timezone
 
-from app.services.fill_schedule.publish_accounts import publish_slot_accounts
+from app.services.publisher.publish_accounts import publish_slot_accounts
 
 NOW = datetime(2026, 9, 7, 12, 0, tzinfo=timezone.utc)
 

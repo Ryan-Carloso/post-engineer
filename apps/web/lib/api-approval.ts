@@ -30,8 +30,8 @@ export async function rejectSlot(slotId: string): Promise<string> {
 }
 
 function invalidateSlotQueries(queryClient: QueryClient, slotId: string): void {
-  void queryClient.invalidateQueries({ queryKey: ['fill-schedule-status'] });
-  void queryClient.invalidateQueries({ queryKey: ['fill-schedule-range'] });
+  void queryClient.invalidateQueries({ queryKey: ['schedule-status'] });
+  void queryClient.invalidateQueries({ queryKey: ['schedule-range'] });
   void queryClient.invalidateQueries({ queryKey: ['post-detail', slotId] });
 }
 

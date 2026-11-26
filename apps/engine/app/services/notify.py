@@ -1,4 +1,4 @@
-"""Discord notifier for the fill schedule — fire-and-forget.
+"""Discord notifier for the publish scheduler — fire-and-forget.
 
 Reads ``DISCORD_WEBHOOK_URL`` from the environment. Without the variable
 set it's a no-op — a deployment without a webhook keeps working. NEVER
@@ -197,7 +197,7 @@ def _clip(text: str, max_chars: int) -> str:
 
 
 def scheduler_started_msg() -> str:
-    return "🗓️ Fill schedule scheduler started"
+    return "🗓️ Publish scheduler started"
 
 
 def slot_published_msg(persona: str, title: str, providers: list[str]) -> str:

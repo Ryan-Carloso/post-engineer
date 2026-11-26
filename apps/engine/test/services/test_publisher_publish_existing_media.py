@@ -15,17 +15,17 @@ import requests
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from app.services.fill_schedule import FillScheduleScheduler
-from app.services.fill_schedule.publish import BatchPublisher
-from app.services.fill_schedule.publish_accounts import AccountPublishResult
-from app.services.fill_schedule.publish_existing_media import (
+from app.services.publisher import PublishScheduler
+from app.services.publisher.publish import BatchPublisher
+from app.services.publisher.publish_accounts import AccountPublishResult
+from app.services.publisher.publish_existing_media import (
     claimed_upload_cleanup,
     cleanup_existing_media,
     image_cleanup,
     UPLOAD_EXTENSIONS,
     resolve_existing_media,
 )
-from app.services.fill_schedule.store import ScheduleStore
+from app.services.publisher.store import ScheduleStore
 
 UTC = timezone.utc
 NOW = datetime(2026, 11, 14, 12, 0, tzinfo=UTC)
@@ -218,7 +218,7 @@ class PublishExistingMediaTests(unittest.TestCase):
         store.download_storage_object.return_value = b"video-bytes"
         publisher = self._publisher(store)
         with patch(
-            "app.services.fill_schedule.publish.publish_slot_accounts",
+            "app.services.publisher.publish.publish_slot_accounts",
             return_value=_published_result(),
         ) as publish_accounts:
             published = publisher._publish_one(_media_slot(), NOW, resumed=False)
@@ -266,7 +266,7 @@ class PublishExistingMediaTests(unittest.TestCase):
             },
         )
         with patch(
-            "app.services.fill_schedule.publish.publish_slot_accounts",
+            "app.services.publisher.publish.publish_slot_accounts",
             return_value=_published_result(("instagram",)),
         ) as publish_accounts:
             published = publisher._publish_one(slot, NOW, resumed=False)
@@ -304,7 +304,7 @@ class PublishExistingMediaTests(unittest.TestCase):
             failure_reason="youtube rate limited",
         )
         with patch(
-            "app.services.fill_schedule.publish.publish_slot_accounts",
+            "app.services.publisher.publish.publish_slot_accounts",
             return_value=retrying,
         ):
             published = publisher._publish_one(_media_slot(), NOW, resumed=False)
@@ -325,7 +325,7 @@ class PublishExistingMediaTests(unittest.TestCase):
         )
         store.get_video_upload.return_value = _upload_row(status="consumed", consumed_at=CLAIMED_AT)
         with patch(
-            "app.services.fill_schedule.publish.publish_slot_accounts",
+            "app.services.publisher.publish.publish_slot_accounts",
             return_value=_published_result(),
         ) as publish_accounts:
             published = publisher._publish_one(_media_slot(media_claimed_at=CLAIMED_AT), NOW, resumed=True)
@@ -360,7 +360,7 @@ class PublishExistingMediaTests(unittest.TestCase):
         store.persona_bound_accounts.return_value = {"youtube": ["yt-other"]}
         store.get_video_upload.return_value = _upload_row(status="consumed", consumed_at=CLAIMED_AT)
         publisher = self._publisher(store)
-        with patch("app.services.fill_schedule.publish.notify_owner_async"):
+        with patch("app.services.publisher.publish.notify_owner_async"):
             published = publisher._publish_one(
                 self._bound_upload_slot(CLAIMED_AT), NOW, resumed=True
             )
@@ -381,7 +381,7 @@ class PublishExistingMediaTests(unittest.TestCase):
         store.persona_bound_accounts.return_value = {"youtube": ["yt-other"]}
         store.get_video_upload.return_value = _upload_row(status="consumed", consumed_at=CLAIMED_AT)
         publisher = self._publisher(store)
-        with patch("app.services.fill_schedule.publish.notify_owner_async"):
+        with patch("app.services.publisher.publish.notify_owner_async"):
             published = publisher._publish_one(
                 self._bound_upload_slot("2026-11-14T10:00:00+00:00"), NOW, resumed=True
             )
@@ -394,7 +394,7 @@ class PublishExistingMediaTests(unittest.TestCase):
         store.persona_bound_accounts.return_value = {"youtube": ["yt-other"]}
         store.get_video_upload.return_value = _upload_row()
         publisher = self._publisher(store)
-        with patch("app.services.fill_schedule.publish.notify_owner_async"):
+        with patch("app.services.publisher.publish.notify_owner_async"):
             published = publisher._publish_one(self._bound_upload_slot(None), NOW, resumed=False)
         self.assertEqual(published, 0)
         store.remove_storage_object.assert_not_called()
@@ -409,10 +409,10 @@ class PublishExistingMediaTests(unittest.TestCase):
         publisher = self._publisher(store)
         with (
             patch(
-                "app.services.fill_schedule.publish.publish_slot_accounts",
+                "app.services.publisher.publish.publish_slot_accounts",
                 return_value=_published_result(),
             ) as publish_accounts,
-            patch("app.services.fill_schedule.publish.notify_owner_async"),
+            patch("app.services.publisher.publish.notify_owner_async"),
         ):
             published = publisher._publish_one(_media_slot(), NOW, resumed=False)
         self.assertEqual(published, 0)
@@ -437,10 +437,10 @@ class PublishExistingMediaTests(unittest.TestCase):
         )
         with (
             patch(
-                "app.services.fill_schedule.publish.publish_slot_accounts",
+                "app.services.publisher.publish.publish_slot_accounts",
                 return_value=_published_result(),
             ) as publish_accounts,
-            patch("app.services.fill_schedule.publish.notify_owner_async"),
+            patch("app.services.publisher.publish.notify_owner_async"),
         ):
             published = publisher._publish_one(slot, NOW, resumed=False)
         self.assertEqual(published, 0)
@@ -461,7 +461,7 @@ class PublishExistingMediaTests(unittest.TestCase):
         store.download_storage_object.side_effect = OSError("storage down")
         publisher = self._publisher(store)
         with patch(
-            "app.services.fill_schedule.publish.publish_slot_accounts",
+            "app.services.publisher.publish.publish_slot_accounts",
             return_value=_published_result(),
         ) as publish_accounts:
             published = publisher._publish_one(_media_slot(), NOW, resumed=False)
@@ -482,10 +482,10 @@ class PublishExistingMediaTests(unittest.TestCase):
         slot = _media_slot(media_kind=None, media_ref=None, media_content_type=None)
         with (
             patch(
-                "app.services.fill_schedule.publish.publish_slot_accounts",
+                "app.services.publisher.publish.publish_slot_accounts",
                 return_value=_published_result(),
             ) as publish_accounts,
-            patch("app.services.fill_schedule.publish.notify_owner_async"),
+            patch("app.services.publisher.publish.notify_owner_async"),
         ):
             published = publisher._publish_one(slot, NOW, resumed=False)
         self.assertEqual(published, 0)
@@ -693,7 +693,7 @@ class ResolveExistingMediaDirectTests(unittest.TestCase):
             "uploads", "scheduled-media/user-1/a.jpg"
         )
         store.remove_storage_object.return_value = False
-        with patch("app.services.fill_schedule.publish_existing_media.logger") as log:
+        with patch("app.services.publisher.publish_existing_media.logger") as log:
             cleanup_existing_media(store, slot, ("uploads", "scheduled-media/user-1/a.jpg"))
         log.warning.assert_called_once()
         cleanup_existing_media(store, slot, None)
@@ -704,7 +704,7 @@ class PublishAccountsContentTypeTests(unittest.TestCase):
     """publish_slot_accounts threads the media content type to the upload API."""
 
     def test_image_content_type_reaches_the_upload_call(self):
-        from app.services.fill_schedule.publish_accounts import publish_slot_accounts
+        from app.services.publisher.publish_accounts import publish_slot_accounts
 
         calls: list[dict] = []
 
@@ -743,7 +743,7 @@ class PublishAccountsContentTypeTests(unittest.TestCase):
         self.assertEqual(calls[0]["video_bytes"], b"image-bytes")
 
     def test_video_content_type_defaults_to_mp4(self):
-        from app.services.fill_schedule.publish_accounts import publish_slot_accounts
+        from app.services.publisher.publish_accounts import publish_slot_accounts
 
         calls: list[dict] = []
 
@@ -808,7 +808,7 @@ class PublishExistingMediaSchedulerTests(unittest.TestCase):
                 "results": [{"accountId": "ig-1", "success": True, "postId": "ig-post-1"}],
             }
 
-        scheduler = FillScheduleScheduler(
+        scheduler = PublishScheduler(
             store=store,
             publish_video=publish_video,
             notify=MagicMock(),

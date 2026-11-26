@@ -5,6 +5,10 @@ document also implements it (see "What this PR implements"). It does
 not change the deploy: the worker is off until the production config
 names it.
 
+> Historical note: this plan describes the video-task rendering
+> architecture removed by #799. It is kept as a planning record; the
+> product no longer generates videos.
+
 The first draft of this file recommended leaving the CPU stack on one
 VPS. That is the wrong shape for the goal that replaced it: every
 video renders in its own container instead of waiting on one box.
@@ -98,8 +102,8 @@ The cap in `config.example.toml` is 40 seconds and 600 characters of
 script. The script is the segments the caller already sent.
 
 ```text
-web or fill scheduler
-  └─ HTTP to the engine (create task, or the 60s fill tick)
+web or publish scheduler
+  └─ HTTP to the engine (create task, or the 60s publish tick)
        └─ Supabase row: state=queued
        └─ InMemoryTaskManager.add_task          ← the queue
             └─ one thread, task.start
@@ -151,10 +155,10 @@ Temp files live under the task directory and die with the container.
    the task id, the validated request as JSON, and `stop_at`, writes
    `config.toml` from the `ENGINE_CONFIG_TOML` secret, starts the TTS
    server on loopback, and runs `task.start`. It does not start the
-   fill scheduler, the heartbeat autopsy, or `reconcile_orphaned_tasks`
+   publish scheduler, the heartbeat autopsy, or `reconcile_orphaned_tasks`
    (those run only in the ASGI startup hook).
 2. **Dispatcher**: `app/services/remote_dispatch.py`. Direct create,
-   the fill-schedule batch, and the boot redispatch all hand
+   the publisher batch, and the boot redispatch all hand
    `remote_dispatch.pipeline_entry()` to the task manager. With
    `[modal_worker] app_name` set, every video task is spawned on the
    function in the table above, and the manager thread waits for the
@@ -228,7 +232,7 @@ To turn it on in production (manual, not done by this PR):
    changes, or the workers render with stale settings.
 
 Web, MCP, Caddy, Postgres, and LongCat's HTTP contract stay. The
-engine process remains the dispatcher, the fill scheduler, and the
+engine process remains the dispatcher, the publish scheduler, and the
 reconcile. It stops being the renderer.
 
 ## Planning numbers

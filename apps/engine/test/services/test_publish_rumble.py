@@ -2,7 +2,7 @@
 
 Covers PublishParams (schema), the publish_rumble module directly (so the
 mutation shard attributes tests to it), the upload_publisher wiring and the
-fill-schedule mapping for the rumble provider.
+publisher mapping for the rumble provider.
 """
 
 import unittest
@@ -10,7 +10,7 @@ import unittest
 
 from app.providers import SOCIAL_PROVIDERS
 from app.services import publish_rumble, upload_publisher
-from app.services.fill_schedule.metadata import metadata_for, validate_publish_plan
+from app.services.publisher.metadata import metadata_for, validate_publish_plan
 
 
 class PublishRumbleModuleTest(unittest.TestCase):
@@ -73,7 +73,7 @@ class RumblePublisherWiringTest(unittest.TestCase):
         self.assertEqual(field_name, "video")
 
 
-class RumbleFillScheduleTest(unittest.TestCase):
+class RumblePublishTest(unittest.TestCase):
     schedule = {"providers": ["rumble"], "rumble_account_ids": ["123"]}
 
     def test_metadata_reads_the_title_description_and_accounts(self) -> None:
@@ -93,7 +93,7 @@ class RumbleFillScheduleTest(unittest.TestCase):
             validate_publish_plan({"providers": ["rumble"]}, "title", "Agent description.")
 
     def test_slot_select_reads_the_rumble_column(self) -> None:
-        from app.services.fill_schedule.store import ScheduleStore
+        from app.services.publisher.store import ScheduleStore
 
         columns = ScheduleStore.SLOT_IDENTITY_SELECT.split(",")
         self.assertIn("rumble_account_ids", columns)
