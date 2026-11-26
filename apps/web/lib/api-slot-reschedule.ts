@@ -21,7 +21,7 @@ export function useRescheduleSlotMutation() {
     mutationFn: ({ slotId, slotAt }: { slotId: string; slotAt: string }) =>
       rescheduleSlot(slotId, slotAt),
     onSuccess: (_data, variables) => {
-      void queryClient.invalidateQueries({ queryKey: ['fill-schedule-status'] });
+      void queryClient.invalidateQueries({ queryKey: ['schedule-status'] });
       void queryClient.invalidateQueries({ queryKey: ['post-detail', variables.slotId] });
     },
   });

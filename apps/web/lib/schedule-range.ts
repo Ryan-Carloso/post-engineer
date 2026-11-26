@@ -27,7 +27,7 @@ export async function fetchScheduleRange(from: string, to: string): Promise<Sche
 
 export function useScheduleRangeQuery(monthKey: string, from: string, to: string, enabled: boolean) {
   return useQuery<ScheduleRange>({
-    queryKey: ['fill-schedule-range', monthKey, from, to],
+    queryKey: ['schedule-range', monthKey, from, to],
     queryFn: () => fetchScheduleRange(from, to),
     enabled,
     refetchInterval: 60_000,
@@ -36,7 +36,7 @@ export function useScheduleRangeQuery(monthKey: string, from: string, to: string
 
 export function useHasAnyPostQuery(enabled: boolean) {
   return useQuery<boolean>({
-    queryKey: ['fill-schedule-has-any-post'],
+    queryKey: ['schedule-has-any-post'],
     queryFn: async () => {
       const { hasAnyPost } = await fetchScheduleStatus(1);
       return hasAnyPost;

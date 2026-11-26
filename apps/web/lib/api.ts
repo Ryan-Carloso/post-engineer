@@ -241,7 +241,7 @@ async function fetchSchedules(): Promise<ScheduleConfig[]> {
 
 export function useSchedulesQuery() {
   return useQuery<ScheduleConfig[]>({
-    queryKey: ['fill-schedules'],
+    queryKey: ['schedules'],
     queryFn: fetchSchedules,
     staleTime: 30_000,
   });
@@ -262,7 +262,7 @@ export type { ScheduledSlot, SlotRow } from './schedule-status';
 
 export function useScheduleStatusQuery(limit?: number) {
   return useQuery<{ upcoming: ScheduledSlot[]; recent: ScheduledSlot[]; hasAnyPost: boolean }>({
-    queryKey: ['fill-schedule-status', limit ?? 'default'],
+    queryKey: ['schedule-status', limit ?? 'default'],
     queryFn: () => fetchScheduleStatus(limit),
     refetchInterval: 60_000,
   });
@@ -295,7 +295,7 @@ export function useUpdateSlotMutation() {
     mutationFn: ({ slotId, title }: { slotId: string; title: string }) =>
       updateSlotTitle(slotId, title),
     onSuccess: (_data, variables) => {
-      void queryClient.invalidateQueries({ queryKey: ['fill-schedule-status'] });
+      void queryClient.invalidateQueries({ queryKey: ['schedule-status'] });
       void queryClient.invalidateQueries({ queryKey: ['post-detail', variables.slotId] });
     },
   });
@@ -306,7 +306,7 @@ export function useDeleteSlotMutation() {
   return useMutation({
     mutationFn: deleteSlot,
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['fill-schedule-status'] });
+      void queryClient.invalidateQueries({ queryKey: ['schedule-status'] });
     },
   });
 }
