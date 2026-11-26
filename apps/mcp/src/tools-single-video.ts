@@ -150,7 +150,7 @@ export async function generatePersonaVideoOutcome(
         : `Scheduled 1 video in schedule ${scheduleId}: it is generated and auto-published at its slot.`;
     const slotLines = narrowed.slots.map(
       (slot, i) =>
-        `${i + 1}. ${slot.title} → ${slot.slotAt} [${slot.status}${slot.taskId ? `, task ${slot.taskId}` : ''}]`,
+        `${i + 1}. ${slot.title} → ${slot.slotAt} [${slot.status}${slot.status === 'failed' && slot.reason !== undefined ? `: ${slot.reason}` : ''}${slot.taskId ? `, task ${slot.taskId}` : ''}]`,
     );
     return {
       response: {

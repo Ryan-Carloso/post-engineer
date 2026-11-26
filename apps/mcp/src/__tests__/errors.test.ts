@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ApiError, apiErrorFromResponse, getErrorMessage, ImageTooLargeError, parseRetryAfterSeconds } from '../errors.js';
+import { ApiError, apiErrorFromResponse, getErrorMessage, ImageTooLargeError, parseRetryAfterSeconds, readApiFailure } from '../errors.js';
 
 describe('getErrorMessage', () => {
   it('returns the message for Error instances', () => {
@@ -45,6 +45,35 @@ describe('parseRetryAfterSeconds', () => {
   });
 });
 
+describe('readApiFailure', () => {
+  it('returns the engine reason and prefixes the detail with it', () => {
+    const failure = readApiFailure(
+      JSON.stringify({ success: false, error: 'The video service rejected the request.', code: 'ENGINE_REJECTED', reason: "video_type: unknown video_type 'voiceover'" }),
+    );
+    expect(failure.reason).toBe("video_type: unknown video_type 'voiceover'");
+    expect(failure.detail).toBe("video_type: unknown video_type 'voiceover' — The video service rejected the request.");
+    expect(failure.code).toBe('ENGINE_REJECTED');
+  });
+
+  it('caps a long reason at 200 chars', () => {
+    const failure = readApiFailure(JSON.stringify({ success: false, error: 'Rejected.', reason: 'r'.repeat(250) }));
+    expect(failure.reason).toHaveLength(200);
+    expect(failure.detail).toHaveLength(200);
+  });
+
+  it('returns null reason and the plain detail when the body has no reason', () => {
+    const failure = readApiFailure(JSON.stringify({ success: false, error: 'Poll at most once per minute.' }));
+    expect(failure.reason).toBeNull();
+    expect(failure.detail).toBe('Poll at most once per minute.');
+  });
+
+  it('returns null reason for a non-string reason', () => {
+    const failure = readApiFailure(JSON.stringify({ success: false, error: 'Rejected.', reason: 42 }));
+    expect(failure.reason).toBeNull();
+    expect(failure.detail).toBe('Rejected.');
+  });
+});
+
 describe('apiErrorFromResponse', () => {
   it('carries the status, body fields and Retry-After of a 429', async () => {
     const response = new Response(
@@ -67,5 +96,29 @@ describe('apiErrorFromResponse', () => {
 
     expect(error.retryAfterSeconds).toBeNull();
     expect(error).toMatchObject({ code: 'X', field: 'f', delivered: true, postUrl: 'https://p', status: 410 });
+  });
+
+  it('carries the engine reason on a 400 ENGINE_REJECTED', async () => {
+    const response = new Response(
+      JSON.stringify({ success: false, error: 'The video service rejected the request.', code: 'ENGINE_REJECTED', reason: "video_type: unknown video_type 'voiceover'" }),
+      { status: 400 },
+    );
+
+    const error = await apiErrorFromResponse(response, 'generate video');
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.status).toBe(400);
+    expect(error.code).toBe('ENGINE_REJECTED');
+    expect(error.reason).toBe("video_type: unknown video_type 'voiceover'");
+    expect(error.message).toBe("Failed to generate video: 400 video_type: unknown video_type 'voiceover' — The video service rejected the request.");
+  });
+
+  it('leaves reason null when the body has none', async () => {
+    const response = new Response(JSON.stringify({ error: 'gone', code: 'X' }), { status: 410 });
+
+    const error = await apiErrorFromResponse(response, 'get video status');
+
+    expect(error.reason).toBeNull();
+    expect(error.message).toBe('Failed to get video status: 410 gone');
   });
 });

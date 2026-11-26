@@ -10,6 +10,7 @@ export class ApiError extends Error {
   readonly delivered: boolean;
   readonly postUrl: string | null;
   readonly retryAfterSeconds: number | null;
+  readonly reason: string | null;
 
   constructor(
     message: string,
@@ -19,6 +20,7 @@ export class ApiError extends Error {
     delivered: boolean = false,
     postUrl: string | null = null,
     retryAfterSeconds: number | null = null,
+    reason: string | null = null,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -28,6 +30,7 @@ export class ApiError extends Error {
     this.delivered = delivered;
     this.postUrl = postUrl;
     this.retryAfterSeconds = retryAfterSeconds;
+    this.reason = reason;
   }
 }
 
@@ -73,11 +76,13 @@ export function readApiFailure(errorText: string): {
   field: string | null;
   delivered: boolean;
   postUrl: string | null;
+  reason: string | null;
 } {
   let code: string | null = null;
   let field: string | null = null;
   let delivered = false;
   let postUrl: string | null = null;
+  let reason: string | null = null;
   let detail = errorText.slice(0, MAX_ERROR_BODY_CHARS);
   try {
     const parsed: unknown = JSON.parse(errorText);
@@ -92,10 +97,16 @@ export function readApiFailure(errorText: string): {
       if (typeof record.field === 'string') field = record.field;
       if (record.delivered === true) delivered = true;
       if (typeof record.postUrl === 'string') postUrl = record.postUrl;
+      if (typeof record.reason === 'string' && record.reason.length > 0) {
+        reason = record.reason.slice(0, MAX_ERROR_BODY_CHARS);
+      }
     }
   } catch {
   }
-  return { detail, code, field, delivered, postUrl };
+  if (reason !== null) {
+    detail = `${reason} — ${detail}`.slice(0, MAX_ERROR_BODY_CHARS);
+  }
+  return { detail, code, field, delivered, postUrl, reason };
 }
 
 export function parseRetryAfterSeconds(header: string | null): number | null {
@@ -109,5 +120,6 @@ export async function apiErrorFromResponse(response: Response, action: string): 
     `Failed to ${action}: ${response.status} ${failure.detail}`,
     failure.code, failure.field, response.status, failure.delivered, failure.postUrl,
     parseRetryAfterSeconds(response.headers.get('retry-after')),
+    failure.reason,
   );
 }
