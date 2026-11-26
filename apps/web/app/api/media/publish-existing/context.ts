@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { AccountNeedsReconnectWarning } from '@/lib/account-needs-reconnect';
+import type { ApprovalMode } from '@/lib/api-keys';
 import type { VideoUploadRow } from '@/lib/videos/signed-upload';
 import type { Provider } from './providers-validation';
 import type { ExistingMediaFormFields } from './publish-form';
@@ -8,6 +9,7 @@ import type { ImageContentType, PublishExistingRequest } from './schema';
 
 export interface PublishExistingContext {
   aiLabel: boolean;
+  approvalMode: ApprovalMode;
   route: string;
   supabase: SupabaseClient;
   userId: string;

@@ -261,9 +261,9 @@ function fakeSupabase(config: FakeConfig = {}) {
   return client;
 }
 
-function authAs(personaIds?: string[] | null, isApiKey = false): void {
+function authAs(personaIds?: string[] | null, isApiKey = false, approvalMode?: 'yolo' | 'approval'): void {
   vi.mocked(requireSupabaseSession).mockResolvedValue({
-    auth: { userId: USER_ID, accessToken: 'token', personaIds, isApiKey },
+    auth: { userId: USER_ID, accessToken: 'token', personaIds, isApiKey, approvalMode },
     error: null,
   } as never);
 }
@@ -645,6 +645,38 @@ describe('POST /api/media/publish-existing', () => {
     );
   });
 
+  it('schedules an approval-key upload as awaiting_approval instead of ready', async () => {
+    const publishAt = futurePublishAt(48);
+    const client = fakeSupabase({
+      socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }],
+    });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    mockUploadStore({ uploadRow: uploadRow() });
+    authAs(null, true, 'approval');
+
+    const response = await POST(
+      jsonRequest({
+        media: { kind: 'upload', uploadId: UPLOAD_ID },
+        title: 'Held video',
+        description: 'Edited outside.',
+        publishing: {
+          mode: 'scheduled',
+          providers: ['youtube'],
+          accounts: { youtube: ['UC1'] },
+          schedule: { publishAt, timezone: 'UTC' },
+        },
+        tags: ['ready'],
+        privacyStatus: 'public',
+        idempotencyKey: 'key-approval',
+      }),
+    );
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    const slot = client.__insertedSlots[0] as Record<string, unknown>;
+    expect(slot.status).toBe('awaiting_approval');
+  });
+
   it('replays the winner of a schedule primary-key race instead of failing', async () => {
     const publishAt = futurePublishAt(48);
     const scheduleId = deterministicUuid('publish-existing/v1', `${USER_ID}:key-race`);
@@ -779,6 +811,39 @@ describe('POST /api/media/publish-existing', () => {
     expect(body.replayed).toBe(true);
     expect(body.schedule.id).toBe(scheduleId);
     expect(client.__insertedSchedules).toHaveLength(0);
+    expect(client.__insertedSlots).toHaveLength(0);
+  });
+
+  it('replays an awaiting_approval slot without changing its status', async () => {
+    const publishAt = futurePublishAt(48);
+    const scheduleId = deterministicUuid('publish-existing/v1', `${USER_ID}:key-held`);
+    const client = fakeSupabase({
+      socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }],
+      existingSchedule: { id: scheduleId },
+      existingSlots: [
+        { id: 'slot-1', slot_at: publishAt, title: 'Held video', media_kind: 'upload', media_ref: UPLOAD_ID, status: 'awaiting_approval' },
+      ],
+    });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await POST(
+      jsonRequest({
+        media: { kind: 'upload', uploadId: UPLOAD_ID },
+        title: 'Held video',
+        description: 'Walking the riverside.',
+        publishing: {
+          mode: 'scheduled',
+          providers: ['youtube'],
+          accounts: { youtube: ['UC1'] },
+          schedule: { publishAt, timezone: 'UTC' },
+        },
+        idempotencyKey: 'key-held',
+      }),
+    );
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body.replayed).toBe(true);
+    expect(body.slots[0].status).toBe('awaiting_approval');
     expect(client.__insertedSlots).toHaveLength(0);
   });
 

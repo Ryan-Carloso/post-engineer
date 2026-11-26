@@ -154,7 +154,7 @@ async function scheduleExistingMedia(ctx: PublishExistingContext): Promise<NextR
     promptVersionId: input.promptVersionId,
   }).map((row) => ({
     ...row,
-    status: 'ready',
+    status: ctx.approvalMode === 'approval' ? 'awaiting_approval' : 'ready',
     media_kind: mediaKindValue,
     media_ref: mediaRef,
     media_content_type: mediaContentType,
@@ -310,7 +310,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     aiLabel = personaRow?.ai_label === true;
   }
 
-  const ctx: PublishExistingContext = { route: ROUTE, supabase, userId, request, input, accountIds, reconnectWarning, aiLabel, ...verified, logId, startTime };
+  const ctx: PublishExistingContext = { route: ROUTE, supabase, userId, request, input, accountIds, reconnectWarning, aiLabel, approvalMode: auth.approvalMode ?? 'yolo', ...verified, logId, startTime };
   if (input.publishing.mode === 'scheduled') {
     return scheduleExistingMedia(ctx);
   }
