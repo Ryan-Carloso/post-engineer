@@ -72,6 +72,12 @@ describe('readApiFailure', () => {
     expect(failure.reason).toBeNull();
     expect(failure.detail).toBe('Rejected.');
   });
+
+  it('returns null reason for an empty-string reason', () => {
+    const failure = readApiFailure(JSON.stringify({ success: false, error: 'Rejected.', reason: '' }));
+    expect(failure.reason).toBeNull();
+    expect(failure.detail).toBe('Rejected.');
+  });
 });
 
 describe('apiErrorFromResponse', () => {

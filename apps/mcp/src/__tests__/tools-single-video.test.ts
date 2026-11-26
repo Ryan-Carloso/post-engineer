@@ -85,6 +85,7 @@ describe('generate_persona_video tool', () => {
     expect(input).not.toHaveProperty('topics');
     expect(input.options).toMatchObject({ segments, language: 'en-US' });
     expect(textOf(response)).toContain('Porto trip');
+    expect(textOf(response)).toContain('\n1. Porto trip → 2026-10-30T18:00:00Z [scheduled, task task-1]');
   });
 
   it('renders the engine reason on a failed slot line', async () => {
@@ -107,7 +108,7 @@ describe('generate_persona_video tool', () => {
       times: ['18:00'],
       timezone: 'Europe/Lisbon',
     });
-    expect(textOf(response)).toContain("1. Porto trip → 2026-10-30T18:00:00Z [failed: video_type: unknown video_type 'voiceover']");
+    expect(textOf(response)).toContain("\n1. Porto trip → 2026-10-30T18:00:00Z [failed: video_type: unknown video_type 'voiceover']");
   });
 
   it('renders a bare failed slot line when the slot carries no reason', async () => {
@@ -130,7 +131,30 @@ describe('generate_persona_video tool', () => {
       times: ['18:00'],
       timezone: 'Europe/Lisbon',
     });
-    expect(textOf(response)).toContain('1. Porto trip → 2026-10-30T18:00:00Z [failed]');
+    expect(textOf(response)).toContain('\n1. Porto trip → 2026-10-30T18:00:00Z [failed]');
+  });
+
+  it('does not render a reason on a non-failed slot line', async () => {
+    const client = mockClient();
+    vi.mocked(client.generatePersonaVideo).mockResolvedValue({
+      schedule: { id: 'sch-1', mode: 'scheduled' },
+      slots: [{ slotId: 's1', slotAt: '2026-10-30T18:00:00Z', title: 'Porto trip', taskId: null, status: 'scheduled', errorCode: 'engine_rejected', reason: "video_type: unknown video_type 'voiceover'" }],
+      replayed: false,
+    });
+    const response = await handleGeneratePersonaVideo(client, {
+      personaId: 'persona-1',
+      segments,
+      title: 'Porto trip',
+      description: 'Agent description.',
+      language: 'en-US',
+      providers: ['youtube'],
+      youtubeAccountIds: ['acct-1'],
+      mode: 'scheduled',
+      startAt: '2026-10-30T18:00:00',
+      times: ['18:00'],
+      timezone: 'Europe/Lisbon',
+    });
+    expect(textOf(response)).toContain('\n1. Porto trip → 2026-10-30T18:00:00Z [scheduled]');
   });
 
   it('forwards the pacing options to the client verbatim', async () => {
