@@ -155,15 +155,14 @@ def validate_publish_plan(
     description: str,
     bound_accounts: dict[str, list[str]] | None = None,
 ) -> None:
-    """Pre-flight of the publish plan BEFORE generating the video.
+    """Pre-flight of the publish plan before publishing.
 
     Validates providers, accounts and caption limits with the real title;
-    any problem fails the slot here, without spending tokens/money
-    on a generation that could never be published.
+    any problem fails the slot here, before it reaches the providers.
 
     When bound_accounts is given (a schedule with a persona), every
     account the schedule publishes to must be bound to that persona
-    (issue #572). The binding is read at generate time, so an account
+    (issue #572). The binding is read at publish time, so an account
     unbound after scheduling fails here instead of publishing to an
     account the persona no longer owns. A persona with zero bound
     accounts fails every account it names. Voiceover schedules pass no

@@ -1,4 +1,4 @@
-"""PostHog payloads for fill-schedule publish failures."""
+"""PostHog payloads for publisher publish failures."""
 
 from __future__ import annotations
 

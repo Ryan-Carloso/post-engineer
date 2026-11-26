@@ -2,7 +2,7 @@
 
 Covers PublishParams (schema), the publish_telegram module directly (so the
 mutation shard attributes tests to it), the upload_publisher wiring, the
-fill-schedule mapping for the telegram provider, and the caption ceiling
+publisher mapping for the telegram provider, and the caption ceiling
 pinned against the web Bot API client.
 """
 
@@ -81,7 +81,7 @@ class TelegramPublisherWiringTest(unittest.TestCase):
         upload_publisher.validate_publish_metadata(["telegram"], None, None)
 
 
-class TelegramFillScheduleTest(unittest.TestCase):
+class TelegramPublishTest(unittest.TestCase):
     schedule = {
         "providers": ["telegram"],
         "telegram_account_ids": ["-1001234567890"],

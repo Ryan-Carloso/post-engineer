@@ -124,7 +124,7 @@ class ScheduleStore:
     def persona_bound_accounts(self, persona_id: str) -> dict[str, list[str]]:
         """The persona's bound publishing accounts (issue #572), grouped per provider.
 
-        Read from persona_default_accounts at generate time: the binding is
+        Read from persona_default_accounts at publish time: the binding is
         the source of truth, so an account unbound after scheduling never
         publishes. Malformed rows are skipped, never crash the tick.
         """

@@ -2,7 +2,7 @@
 
 Covers PublishParams (schema), the publish_threespeak module directly (so the
 mutation shard attributes tests to it), the upload_publisher wiring and the
-fill-schedule mapping for the 3speak provider.
+publisher mapping for the 3speak provider.
 """
 
 import unittest
@@ -67,7 +67,7 @@ class ThreespeakPublisherWiringTest(unittest.TestCase):
         self.assertEqual(field_name, "video")
 
 
-class ThreespeakFillScheduleTest(unittest.TestCase):
+class ThreespeakPublishTest(unittest.TestCase):
     schedule = {"providers": ["3speak"], "threespeak_account_ids": ["alice"]}
 
     def test_metadata_reads_the_caption_and_accounts(self) -> None:

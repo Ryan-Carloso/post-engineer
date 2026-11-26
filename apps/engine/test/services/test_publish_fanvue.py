@@ -2,7 +2,7 @@
 
 Covers PublishParams (schema), the publish_fanvue module directly (so the
 mutation shard attributes tests to it), the upload_publisher wiring and the
-fill-schedule mapping for the fanvue provider.
+publisher mapping for the fanvue provider.
 """
 
 import unittest
@@ -76,7 +76,7 @@ class FanvuePublisherWiringTest(unittest.TestCase):
         self.assertEqual(field_name, "video")
 
 
-class FanvueFillScheduleTest(unittest.TestCase):
+class FanvuePublishTest(unittest.TestCase):
     schedule = {
         "providers": ["fanvue"],
         "fanvue_account_ids": ["user-9"],

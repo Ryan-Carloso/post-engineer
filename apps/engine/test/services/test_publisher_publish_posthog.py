@@ -1,6 +1,6 @@
-"""PostHog publish_provider_failed event in the fill-schedule publish path.
+"""PostHog publish_provider_failed event in the publisher publish path.
 
-The fill-schedule publisher (apps/engine/app/services/publisher/publish.py)
+The publisher publisher (apps/engine/app/services/publisher/publish.py)
 is the single publish path. A provider failure here emits the
 publish_provider_failed diagnostic event (provider, status_code,
 response_body) so failures are visible in PostHog.
@@ -56,7 +56,7 @@ class _FakeStore:
         return True
 
 
-class FillSchedulePublishPostHogTests(TestCase):
+class PublishPostHogTests(TestCase):
     def _slot(self, **overrides):
         slot = {
             "id": "slot-1",

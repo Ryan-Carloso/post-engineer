@@ -1,4 +1,4 @@
-"""Tests for the fill schedule bootstrap in asgi (app/asgi.py).
+"""Tests for the publisher bootstrap in asgi (app/asgi.py).
 
 The scheduler starts on its own at app boot — no env flag — when the
 Supabase envs are present. Without the envs → skip with a log, never a

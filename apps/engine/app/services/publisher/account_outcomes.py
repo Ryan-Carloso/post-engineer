@@ -1,4 +1,4 @@
-"""Account outcome rules for fill-schedule publish (issue #500)."""
+"""Account outcome rules for publisher publish (issue #500)."""
 
 from __future__ import annotations
 

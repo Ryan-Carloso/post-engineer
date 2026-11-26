@@ -1,6 +1,6 @@
-"""Tests for the PostgREST ScheduleStore (app/services/publisher.py).
+"""Tests for the PostgREST ScheduleStore (app/services/publisher/store.py).
 
-The store is the fill schedule data layer: reads ``schedules`` (with embedded
+The store is the publisher data layer: reads ``schedules`` (with embedded
 personas) and writes ``scheduled_posts`` to Supabase via PostgREST using the
 service role. Requires explicit SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY (no
 fallback — repo rule). HTTP calls validated with a mocked ``requests``.

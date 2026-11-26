@@ -1,4 +1,4 @@
-"""Continue-on-provider-failure in the fill-schedule publish path.
+"""Continue-on-provider-failure in the publisher publish path.
 
 One provider failing must not cancel the others: the failure is recorded,
 the loop continues, and the slot is marked published when at least one

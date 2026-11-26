@@ -2,7 +2,7 @@
 
 Covers PublishParams (schema), the publish_facebook module directly (so the
 mutation shard attributes tests to it), the upload_publisher wiring and the
-fill-schedule mapping for the facebook provider.
+publisher mapping for the facebook provider.
 """
 
 import unittest
@@ -74,7 +74,7 @@ class FacebookPublisherWiringTest(unittest.TestCase):
         self.assertEqual(field_name, "video")
 
 
-class FacebookFillScheduleTest(unittest.TestCase):
+class FacebookPublishTest(unittest.TestCase):
     schedule = {"providers": ["facebook"], "facebook_account_ids": ["123"]}
 
     def test_metadata_reads_the_caption_and_accounts(self) -> None:

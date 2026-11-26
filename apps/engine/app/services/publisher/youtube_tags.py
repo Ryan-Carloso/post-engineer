@@ -52,7 +52,7 @@ def derive_tags_from_title(title: str) -> tuple[str, ...]:
     Returns lowercase, de-duplicated tokens in first-seen order. When the
     strict pass finds nothing usable, falls back to cutting the title into
     raw words with looser rules: tags are metadata garnish, not worth
-    failing a slot over — a rough tag beats a failed generation. Only a
+    failing a slot over — a rough tag beats a failed publish. Only a
     title with no words at all (pure punctuation) still yields ``()``,
     and only then does the publish pre-flight fail the slot.
     """

@@ -2,7 +2,7 @@
 
 Covers PublishParams (schema), the publish_pinterest module directly (so the
 mutation shard attributes tests to it), the upload_publisher wiring and the
-fill-schedule mapping for the pinterest provider.
+publisher mapping for the pinterest provider.
 """
 
 import unittest
@@ -82,7 +82,7 @@ class PinterestPublisherWiringTest(unittest.TestCase):
         self.assertEqual(field_name, "video")
 
 
-class PinterestFillScheduleTest(unittest.TestCase):
+class PinterestPublishTest(unittest.TestCase):
     schedule = {
         "providers": ["pinterest"],
         "pinterest_account_ids": ["user-9"],
