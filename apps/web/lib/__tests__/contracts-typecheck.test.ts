@@ -262,7 +262,7 @@ describe('contracts typecheck', () => {
       success: true,
       slot: {
         id: 'slot-1', scheduleId: 'sched-1', slotAt: '2026-10-10T20:00:00Z', status: 'awaiting',
-        title: 'T', taskId: null, progress: 0, stage: null, error: null, publishedAt: null,
+        title: 'T', taskId: null, media: null, progress: 0, stage: null, error: null, publishedAt: null,
         postUrl: null, publishLinks: [], progressHistory: [], scriptAngle: null,
         retryable: null, queuePosition: null, queueTotal: null, userNotices: [], providerFailures: [],
       },
@@ -275,7 +275,7 @@ describe('contracts typecheck', () => {
       },
       persona: null,
       generation: {
-        voiceover: true, language: null, voiceId: null, videoAspect: '9:16',
+        voiceover: true, mediaKind: null, language: null, voiceId: null, videoAspect: '9:16',
         videoLayout: null, niche: null, paragraphNumber: null, faceQuality: null,
       },
     };

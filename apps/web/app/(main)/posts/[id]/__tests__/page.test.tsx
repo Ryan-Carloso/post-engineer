@@ -88,6 +88,7 @@ function generationPayload(overrides: Record<string, unknown> = {}): Record<stri
   return {
     prompt: null,
     voiceover: false,
+    mediaKind: null,
     language: null,
     voiceId: null,
     videoAspect: null,
@@ -112,6 +113,7 @@ function slotPayload(
       error: null,
       publishedAt: null,
       taskId: null,
+      media: null,
       progress: 0,
       stage: null,
       retryable: null,
@@ -429,6 +431,63 @@ describe('PostDetailPage', () => {
 
     expect(await screen.findByTestId('video-debug')).toHaveTextContent('posts.videoLoadError');
     expect(screen.getByTestId('video-debug')).toHaveTextContent('4');
+  });
+
+  it('plays a directly uploaded video from its signed url without leaking the url or offering a download', async () => {
+    const signedUrl = 'https://storage.test/object/sign/videos/user-1/direct-uploads/upload-1.mp4?token=secret';
+    mockQueries({
+      slot: slotPayload(
+        { id: 'up1', status: 'ready', taskId: null, media: { kind: 'upload', url: signedUrl, contentType: 'video/mp4' } },
+        { generation: generationPayload({ voiceover: true, mediaKind: 'upload' }) },
+      ),
+    });
+    vi.mocked(useParams).mockReturnValue({ id: 'up1' });
+    render(<DetailPage />);
+
+    const region = screen.getByRole('region', { name: 'posts.detailsTitle' });
+    const video = region.querySelector('video');
+    expect(video?.getAttribute('src')).toBe(signedUrl);
+    expect(screen.queryByText('posts.coverNoVideo')).not.toBeInTheDocument();
+    expect(screen.queryByText('posts.downloadVideo')).not.toBeInTheDocument();
+    Object.defineProperty(video, 'videoWidth', { value: 1080 });
+    Object.defineProperty(video, 'videoHeight', { value: 1920 });
+    Object.defineProperty(video, 'duration', { value: 8 });
+    video?.dispatchEvent(new Event('loadedmetadata'));
+    const debug = await screen.findByTestId('video-debug');
+    expect(debug).toHaveTextContent('1080×1920');
+    expect(debug.textContent).not.toContain('token=secret');
+    const facts = screen.getByRole('region', { name: 'posts.generationFactsLabel' });
+    expect(within(facts).getByText('posts.generationMediaLabel')).toBeInTheDocument();
+    expect(within(facts).getByText('posts.generationUploadedVideo')).toBeInTheDocument();
+    expect(within(facts).queryByText('posts.generationVoiceover')).not.toBeInTheDocument();
+  });
+
+  it('shows a scheduled image as an image, never inside the video player', () => {
+    const signedUrl = 'https://storage.test/object/sign/uploads/scheduled-media/user-1/pic.jpg?token=secret';
+    mockQueries({
+      slot: slotPayload(
+        { id: 'img1', status: 'ready', taskId: null, media: { kind: 'image', url: signedUrl, contentType: 'image/jpeg' } },
+        { generation: generationPayload({ voiceover: true, mediaKind: 'image' }) },
+      ),
+    });
+    vi.mocked(useParams).mockReturnValue({ id: 'img1' });
+    render(<DetailPage />);
+
+    const region = screen.getByRole('region', { name: 'posts.detailsTitle' });
+    expect(region.querySelector('video')).toBeNull();
+    expect(region.querySelector('img')?.getAttribute('src')).toBe(signedUrl);
+    expect(screen.queryByText('posts.coverNoVideo')).not.toBeInTheDocument();
+  });
+
+  it('keeps the no-video placeholder when an uploaded video has no preview url', () => {
+    mockQueries({
+      slot: slotPayload({ id: 'up2', status: 'published', taskId: null, media: { kind: 'upload', url: null, contentType: 'video/mp4' } }),
+    });
+    vi.mocked(useParams).mockReturnValue({ id: 'up2' });
+    render(<DetailPage />);
+
+    expect(screen.getByRole('region', { name: 'posts.detailsTitle' }).querySelector('video')).toBeNull();
+    expect(screen.getByText('posts.coverNoVideo')).toBeInTheDocument();
   });
 
   it('shows live progress and stage for a generating slot, without a player', () => {

@@ -127,7 +127,7 @@ describe('getSlotPost', () => {
     const detail = await getSlotPost(supabase, 'slot-1', 'user-1', null);
     expect(detail?.slot.id).toBe('slot-1');
     expect(chains['scheduled_posts'].select).toHaveBeenCalledWith(
-      'id, schedule_id, slot_at, status, title, error, published_at, task_id, voiceover, publish_outcomes, segments, prompt_version_id'
+      'id, schedule_id, slot_at, status, title, error, published_at, task_id, voiceover, publish_outcomes, segments, prompt_version_id, media_kind, media_ref, media_content_type'
     );
     expect(chains['schedules'].select).toHaveBeenCalledWith(
       'id, persona_id, providers, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, threads_account_ids, facebook_account_ids, pinterest_account_ids, pinterest_board_id, threespeak_account_ids, rumble_account_ids, fanvue_account_ids, telegram_account_ids, timezone, post_language, post_voice_id, post_video_aspect, post_video_layout, post_niche, post_paragraph_number, post_face_quality, publish_mode'
@@ -138,6 +138,62 @@ describe('getSlotPost', () => {
     expect(detail?.persona?.name).toBe('Viva Leve');
     expect(detail?.generation).toMatchObject({ voiceover: false });
     expect(detail?.generation).not.toHaveProperty('material');
+  });
+
+  it('returns a signed preview for a directly uploaded video slot', async () => {
+    const { createSupabaseServiceClient } = await import('../supabase/service');
+    const maybeSingle = vi.fn(async () => ({
+      data: { storage_path: 'user-1/direct-uploads/upload-1.mp4', user_id: 'user-1', status: 'ready' },
+      error: null,
+    }));
+    vi.mocked(createSupabaseServiceClient).mockReturnValue({
+      from: vi.fn(() => ({ select: vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle })) })) })),
+      storage: {
+        from: vi.fn(() => ({
+          createSignedUrl: vi.fn(async () => ({ data: { signedUrl: 'https://signed.test/v.mp4' }, error: null })),
+        })),
+      },
+    } as never);
+    const { supabase } = mockSupabase({
+      scheduled_posts: {
+        data: { ...SLOT_ROW, status: 'ready', task_id: null, media_kind: 'upload', media_ref: 'upload-1', media_content_type: 'video/mp4' },
+        error: null,
+      },
+      schedules: { data: SCHEDULE_ROW, error: null },
+      personas: { data: { id: 'persona-1', name: 'Viva Leve' }, error: null },
+      scheduled_post_progress_history: { data: [], error: null },
+    });
+    const detail = await getSlotPost(supabase, 'slot-1', 'user-1', null);
+    expect(detail?.slot.media).toEqual({ kind: 'upload', url: 'https://signed.test/v.mp4', contentType: 'video/mp4' });
+    expect(detail?.generation.mediaKind).toBe('upload');
+  });
+
+  it('labels an image published as an upload as an image', async () => {
+    const { createSupabaseServiceClient } = await import('../supabase/service');
+    const maybeSingle = vi.fn(async () => ({
+      data: { storage_path: 'user-1/direct-uploads/upload-1.jpg', user_id: 'user-1', status: 'ready' },
+      error: null,
+    }));
+    vi.mocked(createSupabaseServiceClient).mockReturnValue({
+      from: vi.fn(() => ({ select: vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle })) })) })),
+      storage: {
+        from: vi.fn(() => ({
+          createSignedUrl: vi.fn(async () => ({ data: { signedUrl: 'https://signed.test/pic.jpg' }, error: null })),
+        })),
+      },
+    } as never);
+    const { supabase } = mockSupabase({
+      scheduled_posts: {
+        data: { ...SLOT_ROW, status: 'ready', task_id: null, media_kind: 'upload', media_ref: 'upload-1', media_content_type: 'image/jpeg' },
+        error: null,
+      },
+      schedules: { data: SCHEDULE_ROW, error: null },
+      personas: { data: { id: 'persona-1', name: 'Viva Leve' }, error: null },
+      scheduled_post_progress_history: { data: [], error: null },
+    });
+    const detail = await getSlotPost(supabase, 'slot-1', 'user-1', null);
+    expect(detail?.slot.media).toEqual({ kind: 'image', url: 'https://signed.test/pic.jpg', contentType: 'image/jpeg' });
+    expect(detail?.generation.mediaKind).toBe('image');
   });
 
   it('returns the hook photo URL from the first segment photo', async () => {

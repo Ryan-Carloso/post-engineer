@@ -18,6 +18,8 @@ import { isPersonaAllowed, isScopedApiKey, type PersonaScopeContext } from './ap
 import { logger } from './logger';
 import { postUrlFor } from './post-url';
 import { createSupabaseServiceClient } from './supabase/service';
+import { resolveSlotMedia } from './post-detail-media';
+import type { SlotMedia } from './slot-detail';
 
 export function personaScopeOf(auth: PersonaScopeContext): readonly string[] | null {
   return isScopedApiKey(auth) ? (auth.personaIds ?? []) : null;
@@ -38,6 +40,7 @@ export interface SlotPostDetail {
     error: string | null;
     publishedAt: string | null;
     taskId: string | null;
+    media: SlotMedia | null;
     progress: number;
     stage: string | null;
     retryable: boolean | null;
@@ -74,6 +77,7 @@ export interface SlotPostDetail {
   generation: {
     prompt: PostPromptFacts | null;
     voiceover: boolean;
+    mediaKind: 'upload' | 'image' | null;
     language: string | null;
     voiceId: string | null;
     videoAspect: string | null;
@@ -145,7 +149,7 @@ export async function getSlotPost(
 ): Promise<SlotPostDetail | null> {
   const { data: slot, error: slotError } = await supabase
     .from('scheduled_posts')
-    .select('id, schedule_id, slot_at, status, title, error, published_at, task_id, voiceover, publish_outcomes, segments, prompt_version_id')
+    .select('id, schedule_id, slot_at, status, title, error, published_at, task_id, voiceover, publish_outcomes, segments, prompt_version_id, media_kind, media_ref, media_content_type')
     .eq('id', slotId)
     .eq('user_id', userId)
     .single();
@@ -166,6 +170,9 @@ export async function getSlotPost(
     publish_outcomes: unknown;
     segments: unknown;
     prompt_version_id: string | null;
+    media_kind: string | null;
+    media_ref: string | null;
+    media_content_type: string | null;
   };
 
   const { data: schedule, error: scheduleError } = await supabase
@@ -270,6 +277,11 @@ export async function getSlotPost(
   const userNoticesOut = publishNotices.userNotices;
   const providerFailuresOut = publishNotices.providerFailures;
 
+  const mediaOut =
+    row.media_kind === 'upload' || row.media_kind === 'image'
+      ? await resolveSlotMedia(createSupabaseServiceClient(), slotIdOut, userId, row)
+      : null;
+
   const promptVersionId = row.prompt_version_id ?? null;
   const prompt =
     promptVersionId === null ? null : await readPostPromptFacts(createSupabaseServiceClient(), promptVersionId);
@@ -284,6 +296,7 @@ export async function getSlotPost(
       error: errorOut,
       publishedAt: publishedAtOut,
       taskId: taskIdOut,
+      media: mediaOut,
       postUrl: postUrlOut,
       hookPhoto: hookPhotoOut,
       progress: progressOut,
