@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextResponse } from 'next/server';
 import { findRepoRoot } from '@/test/repo-root';
@@ -141,6 +143,7 @@ interface DbConfig {
   slotInsertFails?: boolean;
   engineFailSubjects?: string[];
   engineRejectedSubjects?: string[];
+  engineRejectedReasonSubjects?: string[];
   engineRateLimitedSubjects?: string[];
   engineUnavailableSubjects?: string[];
   signUrlError?: boolean;
@@ -360,6 +363,19 @@ function makeClient(cfg: DbConfig): unknown {
   };
 }
 
+const ENGINE_400_FIXTURE = JSON.parse(
+  readFileSync(
+    path.join(
+      findRepoRoot(import.meta.url),
+      'apps/web/lib/generation/__tests__/fixtures/engine-400-unknown-video-type.json',
+    ),
+    'utf8',
+  ),
+) as unknown;
+
+const ENGINE_REASON =
+  "video_type: unknown video_type 'voiceover'; use full_lipsync (8/15), hook_lipsync (2/3) or faceless (1)";
+
 function setup(cfg: DbConfig = {}): void {
   rpcCalls.length = 0;
   for (const key of Object.keys(inserts)) delete inserts[key];
@@ -382,6 +398,9 @@ function setup(cfg: DbConfig = {}): void {
     }
     if (cfg.engineRejectedSubjects?.includes(subject)) {
       return { ok: false, response: NextResponse.json({}), upstreamStatus: 400, body: null };
+    }
+    if (cfg.engineRejectedReasonSubjects?.includes(subject)) {
+      return { ok: false, response: NextResponse.json({}), upstreamStatus: 400, upstreamBody: ENGINE_400_FIXTURE };
     }
     if (cfg.engineRateLimitedSubjects?.includes(subject)) {
       return { ok: false, response: NextResponse.json({}), upstreamStatus: 429, body: null };
@@ -2579,8 +2598,21 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(res.status).toBe(400);
       expect(json.success).toBe(false);
       expect(json.code).toBe('ENGINE_REJECTED');
+      expect(json).not.toHaveProperty('reason');
       expect(json.slots).toHaveLength(1);
       expect(json.slots[0]).toMatchObject({ title: 'Porto trip', status: 'failed', errorCode: 'engine_rejected' });
+    });
+
+    it('returns the engine reason on 400 ENGINE_REJECTED when the slot carries one', async () => {
+      setup({ ...DEFAULT_CFG, engineRejectedReasonSubjects: ['Porto trip'] });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.success).toBe(false);
+      expect(json.code).toBe('ENGINE_REJECTED');
+      expect(json.reason).toBe(ENGINE_REASON);
+      expect(json.slots).toHaveLength(1);
+      expect(json.slots[0]).toMatchObject({ title: 'Porto trip', status: 'failed', errorCode: 'engine_rejected', reason: ENGINE_REASON });
     });
 
     it('returns 502 ENGINE_UNAVAILABLE when the engine rate-limits every slot', async () => {

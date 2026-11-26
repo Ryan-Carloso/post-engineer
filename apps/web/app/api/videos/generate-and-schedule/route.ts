@@ -485,7 +485,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     ...(warnings.length > 0 ? { warnings } : {}),
   };
   if (failed > 0 && accepted === 0) {
-    const { status, code } = classifyDispatchFailure(results);
+    const { status, code, reason } = classifyDispatchFailure(results);
     trackApiEvent('video_creation_failed', {
       userId,
       personaId,
@@ -497,7 +497,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
       refunded: results.every((r) => r.status !== 'failed' || r.tokensRefunded === true),
     });
     return NextResponse.json(
-      { success: false, error: formatErrorMessage(code), code, ...envelope },
+      { success: false, error: formatErrorMessage(code), code, ...(reason !== undefined ? { reason } : {}), ...envelope },
       { status },
     );
   }

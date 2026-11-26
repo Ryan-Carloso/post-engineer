@@ -2,11 +2,13 @@ import { ERROR_CODES, type ErrorCode } from '@/lib/error-codes';
 
 export interface DispatchFailureResult {
   errorCode?: string;
+  reason?: string;
 }
 
 export interface DispatchFailureClassification {
   status: number;
   code: ErrorCode;
+  reason?: string;
 }
 
 const TRANSIENT_ENGINE_CODES = ['engine_unavailable', 'no_task_id'];
@@ -30,7 +32,16 @@ export function classifyDispatchFailure(
   }
   const codes = results.map((result) => result.errorCode ?? '');
   if (codes.every((code) => code === 'engine_rejected')) {
-    return { status: 400, code: ERROR_CODES.ENGINE_REJECTED };
+    const firstReason = results[0].reason;
+    const sharedReason =
+      firstReason !== undefined && results.every((result) => result.reason === firstReason)
+        ? firstReason
+        : undefined;
+    return {
+      status: 400,
+      code: ERROR_CODES.ENGINE_REJECTED,
+      ...(sharedReason !== undefined ? { reason: sharedReason } : {}),
+    };
   }
   if (codes.every((code) => code === 'engine_rejected' || TRANSIENT_ENGINE_CODES.includes(code))) {
     return { status: 502, code: ERROR_CODES.ENGINE_UNAVAILABLE };

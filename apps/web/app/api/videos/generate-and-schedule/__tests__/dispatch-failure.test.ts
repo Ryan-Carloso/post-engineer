@@ -10,6 +10,42 @@ describe('classifyDispatchFailure', () => {
     });
   });
 
+  it('returns the shared engine reason when every rejected slot carries the same reason', () => {
+    expect(
+      classifyDispatchFailure([
+        { errorCode: 'engine_rejected', reason: 'video_type: unknown video_type' },
+        { errorCode: 'engine_rejected', reason: 'video_type: unknown video_type' },
+      ]),
+    ).toEqual({ status: 400, code: 'ENGINE_REJECTED', reason: 'video_type: unknown video_type' });
+  });
+
+  it('returns no reason when rejected slots disagree on the reason', () => {
+    expect(
+      classifyDispatchFailure([
+        { errorCode: 'engine_rejected', reason: 'first reason' },
+        { errorCode: 'engine_rejected', reason: 'second reason' },
+      ]),
+    ).toEqual({ status: 400, code: 'ENGINE_REJECTED' });
+  });
+
+  it('returns no reason when a rejected slot carries no reason', () => {
+    expect(
+      classifyDispatchFailure([
+        { errorCode: 'engine_rejected', reason: 'video_type: unknown video_type' },
+        { errorCode: 'engine_rejected' },
+      ]),
+    ).toEqual({ status: 400, code: 'ENGINE_REJECTED' });
+  });
+
+  it('returns no reason on the transient 502 branch even when a rejected slot has one', () => {
+    expect(
+      classifyDispatchFailure([
+        { errorCode: 'engine_rejected', reason: 'video_type: unknown video_type' },
+        { errorCode: 'engine_unavailable' },
+      ]),
+    ).toEqual({ status: 502, code: 'ENGINE_UNAVAILABLE' });
+  });
+
   it('returns 502 ENGINE_UNAVAILABLE when every slot is a transient engine failure', () => {
     expect(classifyDispatchFailure([{ errorCode: 'engine_unavailable' }, { errorCode: 'no_task_id' }])).toEqual({
       status: 502,
