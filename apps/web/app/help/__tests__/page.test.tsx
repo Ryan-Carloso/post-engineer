@@ -11,12 +11,23 @@ import EnHelpSlugPage, {
   generateStaticParams as generateEnStaticParams,
 } from '../../en/help/[slug]/page';
 
+function stripTags(html: string): string {
+  let out = '';
+  let inTag = false;
+  for (const ch of html) {
+    if (ch === '<') inTag = true;
+    else if (ch === '>') inTag = false;
+    else if (!inTag) out += ch;
+  }
+  return out;
+}
+
 function tableRows(markup: string): string[][] {
   const rows = [...markup.matchAll(/<tr[^>]*>(.*?)<\/tr>/gs)].map((match) => match[1]);
   return rows
     .map((row) =>
       [...row.matchAll(/<t[dh][^>]*>(.*?)<\/t[dh]>/gs)].map((cell) =>
-        cell[1].replace(/<[^>]+>/g, ''),
+        stripTags(cell[1]),
       ),
     )
     .filter((cells) => cells[0] !== 'Video type');

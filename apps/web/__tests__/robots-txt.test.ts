@@ -91,7 +91,7 @@ function patternToRegExp(pattern: string): RegExp {
   for (const char of pattern) {
     if (char === '*') source += '.*';
     else if (char === '$') source += '$';
-    else source += char.replace(/[.*+?^${}()|[\]\\]/, '\\$&');
+    else source += char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
   return new RegExp(`^${source}`);
 }
