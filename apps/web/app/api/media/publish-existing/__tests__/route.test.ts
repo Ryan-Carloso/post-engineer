@@ -1278,6 +1278,72 @@ describe('POST /api/media/publish-existing', () => {
     expect(body.code).toBe('ACCOUNT_NOT_BOUND_TO_PERSONA');
   });
 
+  describe('persona ai_label lookup', () => {
+    function taskFetch(): void {
+      const fetchFn = vi.fn(async (url: string) => {
+        if (url.includes('/api/v1/tasks/')) return new Response(JSON.stringify(taskEnvelope()), { status: 200 });
+        return new Response(new Uint8Array([1, 2, 3, 4]), { status: 200, headers: { 'content-type': 'video/mp4' } });
+      });
+      vi.stubGlobal('fetch', fetchFn);
+    }
+
+    it('labels the form as AI-made when the persona opts in', async () => {
+      taskFetch();
+      const client = fakeSupabase({
+        personaRow: { id: PERSONA_ID, ai_label: true },
+        socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }],
+        boundRows: [{ provider: 'youtube', provider_account_id: 'UC1' }],
+      });
+      vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+      const response = await POST(boundRequest());
+      const body = await response.json();
+      expect(response.status).toBe(200);
+      expect(body.success).toBe(true);
+      const form = vi.mocked(dispatchPublish).mock.calls[0]?.[1] as FormData;
+      expect(form.get('aiLabel')).toBe('true');
+    });
+
+    it('labels the form as not AI-made when the persona opts out', async () => {
+      taskFetch();
+      const client = fakeSupabase({
+        personaRow: { id: PERSONA_ID, ai_label: false },
+        socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }],
+        boundRows: [{ provider: 'youtube', provider_account_id: 'UC1' }],
+      });
+      vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+      const response = await POST(boundRequest());
+      const body = await response.json();
+      expect(response.status).toBe(200);
+      expect(body.success).toBe(true);
+      const form = vi.mocked(dispatchPublish).mock.calls[0]?.[1] as FormData;
+      expect(form.get('aiLabel')).toBe('false');
+    });
+
+    it('answers a logged 500 when the ai_label lookup fails', async () => {
+      taskFetch();
+      const dbError = { message: 'db down' };
+      const client = fakeSupabase({
+        personaReads: [
+          { data: { id: PERSONA_ID }, error: null },
+          { data: { id: PERSONA_ID }, error: null },
+          { data: null, error: dbError },
+        ],
+        socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }],
+        boundRows: [{ provider: 'youtube', provider_account_id: 'UC1' }],
+      });
+      vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+      const response = await POST(boundRequest());
+      expect(response.status).toBe(500);
+      const body = await response.json();
+      expect(body.code).toBe('INTERNAL_ERROR');
+      expect(logger.error).toHaveBeenCalledWith('[publish-existing] persona ai_label lookup failed', dbError, { userId: USER_ID });
+      expect(vi.mocked(dispatchPublish)).not.toHaveBeenCalled();
+    });
+  });
+
   it('answers 400 for a schedule inside the 3h lead time', async () => {
     const fetchFn = vi.fn(async () => new Response(JSON.stringify(taskEnvelope()), { status: 200 }));
     vi.stubGlobal('fetch', fetchFn);

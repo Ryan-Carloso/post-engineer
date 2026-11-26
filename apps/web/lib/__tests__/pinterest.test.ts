@@ -247,6 +247,26 @@ describe('publishPinterestVideo', () => {
     });
   });
 
+  it('declares a synthetic performer on the video Pin when aiLabel is set', async () => {
+    queueSuccess();
+    const sleep = vi.fn(async () => {});
+    await publishPinterestVideo({
+      accessToken: 'at-1',
+      boardId: 'b1',
+      video,
+      filename: 'clip.mp4',
+      contentType: 'video/mp4',
+      title: 'My pin',
+      description: 'The description',
+      aiLabel: true,
+      sleep,
+    });
+    const pin = call(5);
+    expect(JSON.parse(String(pin.init.body))).toMatchObject({
+      ai_disclosures: { values: ['SYNTHETIC_PERFORMER'] },
+    });
+  });
+
   it('sends a caller cover image instead of the first-frame keyframe', async () => {
     queueSuccess();
     await publishPinterestVideo({

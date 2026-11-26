@@ -110,6 +110,37 @@ describe('handleFacebookUpload', () => {
     });
   });
 
+  it('rejects an aiLabel that is not true or false before storing anything', async () => {
+    const fd = formData();
+    fd.set('aiLabel', 'yes');
+    const result = await handleFacebookUpload(fd, 'user-1');
+    expect(result.success).toBe(false);
+    expect(result.results[0].error).toContain('Invalid aiLabel');
+    expect(uploadPublishMedia).not.toHaveBeenCalled();
+    expect(publishFacebookMedia).not.toHaveBeenCalled();
+  });
+
+  it('passes aiLabel through to Facebook and reports a failed label edit', async () => {
+    const fd = formData();
+    fd.set('aiLabel', 'true');
+    const result = await handleFacebookUpload(fd, 'user-1');
+    expect(result.success).toBe(true);
+    expect(vi.mocked(publishFacebookMedia).mock.calls[0][0]).toMatchObject({ aiLabel: true });
+    const { onAiLabelError } = vi.mocked(publishFacebookMedia).mock.calls[0][0];
+    expect(typeof onAiLabelError).toBe('function');
+    onAiLabelError?.(new Error('FACEBOOK_AI_LABEL_FAILED: boom'));
+    expect(logger.error).toHaveBeenCalledWith(
+      'upload-content/facebook: AI label edit failed; the post is live without the AI disclosure',
+      expect.any(Error),
+      { accountId: '111' },
+    );
+  });
+
+  it('passes aiLabel false when the form omits it', async () => {
+    await handleFacebookUpload(formData(), 'user-1');
+    expect(vi.mocked(publishFacebookMedia).mock.calls[0][0]).toMatchObject({ aiLabel: false });
+  });
+
   it.each([
     ['no Page', { ids: [] as string[] }, 'At least one Facebook Page ID'],
     ['missing caption', { caption: null }, 'Caption is required'],
