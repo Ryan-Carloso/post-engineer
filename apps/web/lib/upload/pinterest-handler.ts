@@ -38,6 +38,10 @@ export async function handlePinterestUpload(
   ownerUserId: string,
 ): Promise<PinterestUploadResponse> {
   const accountIds = getAccountIdsFromFormData(formData, 'pinterestAccountIds');
+  const aiLabelRaw = formData.get('aiLabel');
+  if (aiLabelRaw !== null && aiLabelRaw !== 'true' && aiLabelRaw !== 'false') {
+    return rejected('Invalid aiLabel. Use "true" or "false"');
+  }
   const boardIdRaw = formData.get('boardId');
   const titleRaw = formData.get('title');
   const descriptionRaw = formData.get('description');
@@ -84,13 +88,14 @@ export async function handlePinterestUpload(
 
       const text = { ...(title === '' ? {} : { title }), ...(description === '' ? {} : { description }) };
       const published = media.kind === 'image'
-        ? await publishPinterestImage({ accessToken, boardId, image: media.buffer, contentType: media.contentType, ...text })
+        ? await publishPinterestImage({ accessToken, boardId, image: media.buffer, contentType: media.contentType, aiLabel: aiLabelRaw === 'true', ...text })
         : await publishPinterestVideo({
           accessToken,
           boardId,
           video: media.buffer,
           filename,
           contentType: media.contentType,
+          aiLabel: aiLabelRaw === 'true',
           ...text,
           ...(coverImageUrl === undefined ? {} : { coverImageUrl }),
         });

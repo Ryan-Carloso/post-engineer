@@ -31,6 +31,10 @@ export async function handleThreadsUpload(
   ownerUserId: string,
 ): Promise<ThreadsUploadResponse> {
   const accountIds = getAccountIdsFromFormData(formData, 'threadsAccountIds');
+  const aiLabelRaw = formData.get('aiLabel');
+  if (aiLabelRaw !== null && aiLabelRaw !== 'true' && aiLabelRaw !== 'false') {
+    return rejected('Invalid aiLabel. Use "true" or "false"');
+  }
   const captionRaw = formData.get('caption');
   const rawFile = formData.get('video');
 
@@ -76,6 +80,7 @@ export async function handleThreadsUpload(
         userId: accountId,
         media,
         text: caption,
+        aiLabel: aiLabelRaw === 'true',
         onPermalinkError: (error) => logger.warn('upload-content/threads: permalink read failed', { accountId, error: String(error) }),
       });
 

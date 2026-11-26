@@ -151,6 +151,7 @@ export interface PublishThreadsMediaInput {
   userId: string;
   media: { kind: 'video' | 'image'; url: string };
   text: string;
+  aiLabel?: boolean;
   sleep?: (ms: number) => Promise<void>;
   onPermalinkError?: (error: unknown) => void;
 }
@@ -184,7 +185,7 @@ export async function publishThreadsMedia(input: PublishThreadsMediaInput): Prom
   const container = await threadsFetch(
     'THREADS_CONTAINER_FAILED',
     `${graphUser}/threads`,
-    formPost({ ...mediaParams, text, access_token: accessToken }),
+    formPost({ ...mediaParams, text, ...(input.aiLabel === true ? { is_made_with_ai: 'true' } : {}), access_token: accessToken }),
   );
   const containerId = requireId('THREADS_CONTAINER_FAILED', container);
   await waitForContainer(containerId, accessToken, input.sleep ?? realSleep);

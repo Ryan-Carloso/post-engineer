@@ -165,6 +165,15 @@ describe('publishPinterestImage', () => {
     });
   });
 
+  it('declares a synthetic performer only when aiLabel is set', async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse({ id: '78' }));
+    const image = Buffer.from([0xff, 0xd8, 0xff, 0xe0]);
+    await publishPinterestImage({ accessToken: 'at-1', boardId: 'b1', image, contentType: 'image/jpeg', aiLabel: true });
+    expect(JSON.parse(String(call(0).init.body))).toMatchObject({
+      ai_disclosures: { values: ['SYNTHETIC_PERFORMER'] },
+    });
+  });
+
   it('throws PINTEREST_PUBLISH_FAILED when the Pin has no id', async () => {
     mockFetch.mockResolvedValueOnce(jsonResponse({}));
     await expect(publishPinterestImage({ accessToken: 'at-1', boardId: 'b1', image: Buffer.from([1]), contentType: 'image/png' }))

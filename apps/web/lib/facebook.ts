@@ -210,6 +210,7 @@ export async function fetchFacebookPageProfile(
 export interface FacebookPublishResult {
   postId: string;
   permalink: string | null;
+  aiLabelApplied: boolean;
 }
 
 export interface PublishFacebookMediaInput {
@@ -217,8 +218,12 @@ export interface PublishFacebookMediaInput {
   pageId: string;
   media: { kind: 'video' | 'image'; url: string };
   description: string;
+  aiLabel?: boolean;
   onPermalinkError: (error: unknown) => void;
+  onAiLabelError?: (error: unknown) => void;
 }
+
+const FACEBOOK_AI_LABEL_GRAPH = `${FACEBOOK_GRAPH_ORIGIN}/v27.0`;
 
 function absolutePermalink(raw: string): string {
   if (raw.startsWith('https://')) return raw;
@@ -243,6 +248,20 @@ export async function publishFacebookMedia(
   const postId = readOptionalString(published, 'id');
   if (postId === null) throw new FacebookError('FACEBOOK_PUBLISH_FAILED: missing id', 502);
 
+  let aiLabelApplied = false;
+  if (input.aiLabel === true) {
+    try {
+      await facebookFetch(
+        'FACEBOOK_AI_LABEL_FAILED',
+        `${FACEBOOK_AI_LABEL_GRAPH}/${encodeURIComponent(postId)}`,
+        formPost({ is_ai_generated: 'true' }, input.pageAccessToken),
+      );
+      aiLabelApplied = true;
+    } catch (error) {
+      input.onAiLabelError?.(error);
+    }
+  }
+
   let permalink: string | null = null;
   try {
     const media = await facebookFetch(
@@ -255,7 +274,7 @@ export async function publishFacebookMedia(
   } catch (error) {
     input.onPermalinkError(error);
   }
-  return { postId, permalink };
+  return { postId, permalink, aiLabelApplied };
 }
 
 function readSummaryTotal(body: JsonRecord, key: string): number | null {

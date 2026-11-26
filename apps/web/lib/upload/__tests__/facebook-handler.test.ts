@@ -42,7 +42,7 @@ function tokens(value: Record<string, unknown>): never {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getSocialAccountTokens).mockResolvedValue(tokens({ access_token: 'page-tok' }));
-  vi.mocked(publishFacebookMedia).mockResolvedValue({ postId: 'vid-1', permalink: 'https://www.facebook.com/111/videos/vid-1/' });
+  vi.mocked(publishFacebookMedia).mockResolvedValue({ postId: 'vid-1', permalink: 'https://www.facebook.com/111/videos/vid-1/', aiLabelApplied: false });
 });
 
 describe('handleFacebookUpload', () => {
@@ -95,7 +95,7 @@ describe('handleFacebookUpload', () => {
   });
 
   it('omits the permalink when Facebook returned none', async () => {
-    vi.mocked(publishFacebookMedia).mockResolvedValue({ postId: 'vid-1', permalink: null });
+    vi.mocked(publishFacebookMedia).mockResolvedValue({ postId: 'vid-1', permalink: null, aiLabelApplied: false });
     const result = await handleFacebookUpload(formData(), 'user-1');
     expect(result.results[0]).toEqual({ accountId: '111', success: true, postId: 'vid-1' });
   });

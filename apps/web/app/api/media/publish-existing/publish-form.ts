@@ -46,6 +46,9 @@ export function buildExistingMediaForm(
     return formData;
   }
   formData.append('video', file);
+  if (provider === 'threads' || provider === 'facebook' || provider === 'pinterest') {
+    formData.append('aiLabel', String(fields.aiLabel));
+  }
   if (isTitleProvider(provider)) {
     formData.append('title', fields.title.trim());
     formData.append('description', fields.description.trim());

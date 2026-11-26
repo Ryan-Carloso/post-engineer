@@ -9,6 +9,10 @@ from app.services.fill_schedule.metadata import metadata_for
 SCHEDULE = {
     "youtube_account_ids": ["yt-1"],
     "instagram_account_ids": ["ig-1"],
+    "threads_account_ids": ["th-1"],
+    "facebook_account_ids": ["fb-1"],
+    "pinterest_account_ids": ["pin-1"],
+    "pinterest_board_id": "board-1",
 }
 
 
@@ -17,6 +21,16 @@ class PersonaAiLabelTests(unittest.TestCase):
         schedule = dict(SCHEDULE, personas={"ai_label": True})
         self.assertTrue(metadata_for("youtube", "Slot title", schedule, "Copy.").ai_label)
         self.assertTrue(metadata_for("instagram", "Slot title", schedule, "Copy.").ai_label)
+
+    def test_threads_facebook_and_pinterest_carry_the_persona_ai_label(self):
+        schedule = dict(SCHEDULE, personas={"ai_label": True})
+        for provider in ("threads", "facebook", "pinterest"):
+            with self.subTest(provider=provider):
+                self.assertTrue(metadata_for(provider, "Slot title", schedule, "Copy.").ai_label)
+        plain = dict(SCHEDULE)
+        for provider in ("threads", "facebook", "pinterest"):
+            with self.subTest(provider=provider):
+                self.assertFalse(metadata_for(provider, "Slot title", plain, "Copy.").ai_label)
 
     def test_ai_label_defaults_off_without_a_persona(self):
         self.assertFalse(metadata_for("youtube", "Slot title", SCHEDULE, "Copy.").ai_label)

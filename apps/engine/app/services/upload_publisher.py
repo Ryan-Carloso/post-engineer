@@ -132,6 +132,7 @@ class ThreadsMetadata:
 
     caption: str
     account_ids: tuple[str, ...]
+    ai_label: bool = False
 
     def __post_init__(self) -> None:
         self.account_ids = tuple(self.account_ids)
@@ -317,6 +318,7 @@ def build_threads_parts(metadata: ThreadsMetadata) -> MultipartParts:
         fields=[
             ("provider", THREADS_PROVIDER),
             ("caption", metadata.caption),
+            ("aiLabel", "true" if metadata.ai_label else "false"),
             *(("threadsAccountIds", account_id) for account_id in metadata.account_ids),
         ],
     )

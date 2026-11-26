@@ -67,6 +67,7 @@ describe('buildExistingMediaForm', () => {
     expect(entries).toContainEqual(['boardId', '123456']);
     expect(entries).toContainEqual(['title', 'Porto walk']);
     expect(entries).toContainEqual(['pinterestAccountIds', 'acc-1']);
+    expect(entries).toContainEqual(['aiLabel', 'true']);
   });
 
   it('builds the bluesky form (video + caption + did)', () => {

@@ -51,6 +51,7 @@ def _threads_metadata(title: str, schedule: dict[str, Any], copy: str):
     return upload_publisher.ThreadsMetadata(
         caption=copy[: upload_publisher.THREADS_CAPTION_MAX_LENGTH],
         account_ids=tuple(str(value) for value in schedule.get("threads_account_ids", [])),
+        ai_label=_persona_ai_label(schedule),
     )
 
 
@@ -58,6 +59,7 @@ def _facebook_metadata(title: str, schedule: dict[str, Any], copy: str):
     return upload_publisher.FacebookMetadata(
         caption=copy[: FACEBOOK_CAPTION_MAX_LENGTH],
         account_ids=tuple(str(value) for value in schedule.get("facebook_account_ids", [])),
+        ai_label=_persona_ai_label(schedule),
     )
 
 
@@ -67,6 +69,7 @@ def _pinterest_metadata(title: str, schedule: dict[str, Any], copy: str):
         description=copy[: PINTEREST_DESCRIPTION_MAX_LENGTH],
         board_id=str(schedule.get("pinterest_board_id") or ""),
         account_ids=tuple(str(value) for value in schedule.get("pinterest_account_ids", [])),
+        ai_label=_persona_ai_label(schedule),
     )
 
 
