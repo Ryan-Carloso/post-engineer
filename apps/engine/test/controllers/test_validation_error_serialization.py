@@ -59,3 +59,20 @@ def test_plain_field_error_still_returns_400(auth_headers):
     response = _post({"video_description": "Test description."}, auth_headers)
     assert response.status_code == 400
     assert response.json()["message"] == "field required"
+
+
+def test_unknown_video_type_returns_400_with_prefixed_message(auth_headers):
+    response = _post(
+        {
+            "video_title": "Porto",
+            "video_description": "Test description.",
+            "video_type": "bogus",
+            "segments": valid_segments(),
+        },
+        auth_headers,
+    )
+    assert response.status_code == 400
+    assert response.json()["message"] == "field required"
+    error = response.json()["body"][0]
+    assert error["msg"].startswith("Value error, unknown video_type 'bogus'")
+    assert "input" in error

@@ -1,0 +1,1 @@
+{"body":[{"ctx":{"error":{}},"input":"voiceover","loc":["body","video_type"],"msg":"Value error, unknown video_type 'voiceover'; use full_lipsync (8/15), hook_lipsync (2/3) or faceless (1)","type":"value_error","url":"https://errors.pydantic.dev/2/v/value_error"}],"message":"field required","status":400}
