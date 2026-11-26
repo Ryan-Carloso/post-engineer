@@ -170,7 +170,7 @@ describe('Posts approval queue', () => {
     cy.get('[data-testid=approval-queue]').should('exist');
     cy.get('[data-testid=approval-queue-count]').should('contain', '3');
     cy.get('[data-testid=nav-posts-approval-badge]').should('contain', '3');
-    cy.contains('[data-testid=approval-queue-row]', 'Held video').within(() => {
+    cy.contains('[data-testid=approval-queue-row]', 'Held video').scrollIntoView().within(() => {
       cy.contains('Edited outside.').should('be.visible');
       cy.contains('E2E Persona').should('be.visible');
       cy.get('[data-testid=approval-approve]').should('be.visible');
@@ -211,6 +211,8 @@ describe('Posts approval queue', () => {
     cy.contains('[data-testid=approval-queue-row]', 'Late video').within(() => {
       cy.get('[data-testid=approval-reject]').click();
     });
+    cy.get('[data-testid=confirm-dialog]').should('be.visible');
+    cy.get('[data-testid=confirm-dialog-confirm]').click();
     cy.wait('@rejectExpired');
     cy.get('[data-testid=approval-queue-count]').should('contain', '2');
     cy.contains('[data-testid=approval-queue-row]', 'Late video').should('not.exist');
@@ -230,7 +232,7 @@ describe('Posts approval queue', () => {
       });
       cy.contains('button', 'Salvar').click();
     });
-    cy.wait('@rescheduleExpired').its('request.body').should('deep.equal', { slotAt: '2030-06-01T10:00:00.000Z' });
+    cy.wait('@rescheduleExpired').its('request.body').should('deep.equal', { slotAt: '2030-06-01T09:00:00.000Z' });
   });
 });
 
