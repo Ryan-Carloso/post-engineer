@@ -30,7 +30,7 @@ function holdResponse(slot: { id: string; slotAt: string; status: string }, repl
   return NextResponse.json({
     success: true,
     mode: 'asap',
-    approvalRequired: true,
+    approvalRequired: slot.status === 'awaiting_approval',
     ...(replayed ? { replayed: true } : {}),
     slot: { id: slot.id, slotAt: slot.slotAt, status: slot.status },
   });

@@ -769,6 +769,54 @@ describe('POST /api/media/publish-existing', () => {
     expect(client.__rpcCalls).toHaveLength(0);
   });
 
+  it('replays an approved ASAP hold without claiming approval is still required', async () => {
+    const scheduleId = deterministicUuid('publish-existing/v1', `${USER_ID}:replay-key-approved`);
+    const client = fakeSupabase({
+      socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }],
+      existingSchedule: { id: scheduleId, user_id: USER_ID, publish_mode: 'asap' },
+      existingSlots: [
+        {
+          id: 'slot-1',
+          schedule_id: scheduleId,
+          user_id: USER_ID,
+          title: 'Hold video',
+          slot_at: '2026-11-20T18:00:00Z',
+          status: 'published',
+          media_ref: UPLOAD_ID,
+          media_kind: 'upload',
+        },
+      ],
+    });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    authAs(null, true, 'approval');
+
+    const response = await POST(
+      jsonRequest({
+        media: { kind: 'upload', uploadId: UPLOAD_ID },
+        title: 'Hold video',
+        description: 'Approve it later.',
+        publishing: { mode: 'asap', providers: ['youtube'], accounts: { youtube: ['UC1'] } },
+        tags: ['ready'],
+        privacyStatus: 'public',
+        idempotencyKey: 'replay-key-approved',
+      }),
+    );
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      success: true,
+      mode: 'asap',
+      approvalRequired: false,
+      replayed: true,
+      slot: { id: 'slot-1', status: 'published' },
+    });
+    expect(client.__insertedSchedules).toHaveLength(0);
+    expect(client.__insertedSlots).toHaveLength(0);
+    expect(vi.mocked(dispatchPublish)).not.toHaveBeenCalled();
+    expect(vi.mocked(claimUploadForPublish)).not.toHaveBeenCalled();
+    expect(client.__rpcCalls).toHaveLength(0);
+  });
+
   it('stores an approval-key ASAP image for the later approval instead of publishing inline', async () => {
     const client = fakeSupabase({
       socialRows: [{ provider: 'instagram', provider_account_id: 'ig-1' }],
