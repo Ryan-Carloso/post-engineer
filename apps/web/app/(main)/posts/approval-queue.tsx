@@ -70,7 +70,7 @@ function ApprovalQueueRow({ slot, joins }: { slot: ScheduledSlot; joins: PostJoi
   const personaName =
     personaId === null ? t('posts.noPersona') : (joins.personaNameById.get(personaId) ?? t('posts.personaFallback'));
   const accounts = resolveSlotAccounts(schedule, joins.accountOptions);
-  const expired = isSlotExpired(slot);
+  const expired = schedule?.publishMode === 'asap' ? false : isSlotExpired(slot);
   const canReschedule = expired && schedule?.publishMode === 'scheduled';
   const busy = approve.isPending || reject.isPending;
   const displayTitle = slot.title ?? t('posts.unknownTitle');

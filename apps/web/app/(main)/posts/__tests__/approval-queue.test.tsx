@@ -270,12 +270,13 @@ describe('ApprovalQueue', () => {
     expect(document.querySelector('input[type="datetime-local"]')).toBeInTheDocument();
   });
 
-  it('does not offer reschedule for an expired ASAP holding row', () => {
+  it('keeps an old ASAP holding row approvable without an expired badge or reschedule', () => {
     queueState.slots = [slot({ id: 'slot-asap', scheduleId: 's2', slotAt: EXPIRED_AT, title: 'ASAP hold' })];
     detailById.set('slot-asap', detailFor('slot-asap', { kind: 'upload', url: null, contentType: 'video/mp4' }, null));
     renderQueue();
 
-    expect(screen.getByTestId('approval-expired')).toBeInTheDocument();
+    expect(screen.queryByTestId('approval-expired')).not.toBeInTheDocument();
+    expect(screen.getByTestId('approval-approve')).toBeEnabled();
     expect(screen.queryByTestId('approval-reschedule')).not.toBeInTheDocument();
   });
 });

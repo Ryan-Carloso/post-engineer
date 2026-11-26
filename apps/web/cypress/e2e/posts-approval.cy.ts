@@ -1,6 +1,8 @@
 const SCHEDULE_ID = 'sched-e2e-approval';
+const ASAP_SCHEDULE_ID = 'sched-e2e-approval-asap';
 const FRESH_SLOT_ID = 'slot-e2e-await-fresh';
 const EXPIRED_SLOT_ID = 'slot-e2e-await-expired';
+const ASAP_SLOT_ID = 'slot-e2e-await-asap';
 
 function visitPosts() {
   cy.visit('/posts', {
@@ -63,6 +65,30 @@ function schedulesPayload() {
         publish_mode: 'scheduled',
         active: true,
       },
+      {
+        id: ASAP_SCHEDULE_ID,
+        persona_id: 'persona-e2e-1',
+        providers: ['youtube'],
+        youtube_account_ids: ['ch-e2e-1'],
+        instagram_account_ids: [],
+        linkedin_account_ids: [],
+        bluesky_account_ids: [],
+        threads_account_ids: [],
+        facebook_account_ids: [],
+        pinterest_account_ids: [],
+        pinterest_board_id: null,
+        threespeak_account_ids: [],
+        rumble_account_ids: [],
+        fanvue_account_ids: [],
+        telegram_account_ids: [],
+        days_of_week: [],
+        start_hour: null,
+        end_hour: null,
+        posts_per_day: 1,
+        timezone: 'Europe/Lisbon',
+        publish_mode: 'asap',
+        active: true,
+      },
     ],
   };
 }
@@ -87,12 +113,22 @@ function expiredSlot() {
   };
 }
 
-function detailPayload(slotId: string, title: string, slotAt: string) {
+function asapSlot() {
+  return {
+    id: ASAP_SLOT_ID,
+    schedule_id: ASAP_SCHEDULE_ID,
+    slot_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
+    status: 'awaiting_approval',
+    title: 'ASAP hold',
+  };
+}
+
+function detailPayload(slotId: string, title: string, slotAt: string, scheduleId = SCHEDULE_ID, publishMode = 'scheduled') {
   return {
     success: true,
     slot: {
       id: slotId,
-      scheduleId: SCHEDULE_ID,
+      scheduleId,
       slotAt,
       status: 'awaiting_approval',
       title,
@@ -103,7 +139,7 @@ function detailPayload(slotId: string, title: string, slotAt: string) {
       media: { kind: 'image', url: null, contentType: 'image/jpeg' },
     },
     schedule: {
-      id: SCHEDULE_ID,
+      id: scheduleId,
       personaId: 'persona-e2e-1',
       providers: ['youtube'],
       youtubeAccountIds: ['ch-e2e-1'],
@@ -119,7 +155,7 @@ function detailPayload(slotId: string, title: string, slotAt: string) {
       fanvueAccountIds: [],
       telegramAccountIds: [],
       timezone: 'Europe/Lisbon',
-      publishMode: 'scheduled',
+      publishMode,
     },
     persona: { id: 'persona-e2e-1', name: 'E2E Persona' },
     prompt: null,
@@ -137,11 +173,11 @@ describe('Posts approval queue', () => {
     cy.intercept('GET', '/api/account', postAccountsPayload()).as('accounts');
     cy.intercept('GET', '/api/schedule', schedulesPayload()).as('schedules');
     cy.intercept('GET', '/api/schedule/status*', (req) => {
-      const upcoming = [freshSlot(), expiredSlot()].filter((slot) => !decided.has(slot.id));
+      const upcoming = [freshSlot(), expiredSlot(), asapSlot()].filter((slot) => !decided.has(slot.id));
       if (req.url.includes('limit=')) {
         req.reply({ success: true, upcoming, recent: [], hasAnyPost: true });
       } else {
-        req.reply({ success: true, slots: [freshSlot(), expiredSlot()], truncated: false });
+        req.reply({ success: true, slots: [freshSlot(), expiredSlot(), asapSlot()], truncated: false });
       }
     }).as('status');
     cy.intercept('GET', `/api/posts/${FRESH_SLOT_ID}`, detailPayload(FRESH_SLOT_ID, 'Held video', freshSlot().slot_at)).as(
@@ -150,10 +186,19 @@ describe('Posts approval queue', () => {
     cy.intercept('GET', `/api/posts/${EXPIRED_SLOT_ID}`, detailPayload(EXPIRED_SLOT_ID, 'Late video', expiredSlot().slot_at)).as(
       'expiredDetail',
     );
+    cy.intercept(
+      'GET',
+      `/api/posts/${ASAP_SLOT_ID}`,
+      detailPayload(ASAP_SLOT_ID, 'ASAP hold', asapSlot().slot_at, ASAP_SCHEDULE_ID, 'asap'),
+    ).as('asapDetail');
     cy.intercept('POST', `/api/schedule/slots/${FRESH_SLOT_ID}/approve`, (req) => {
       decided.add(FRESH_SLOT_ID);
       req.reply({ success: true, status: 'ready' });
     }).as('approveFresh');
+    cy.intercept('POST', `/api/schedule/slots/${ASAP_SLOT_ID}/approve`, (req) => {
+      decided.add(ASAP_SLOT_ID);
+      req.reply({ success: true, status: 'ready' });
+    }).as('approveAsap');
     cy.intercept('POST', `/api/schedule/slots/${EXPIRED_SLOT_ID}/reject`, (req) => {
       decided.add(EXPIRED_SLOT_ID);
       req.reply({ success: true, status: 'cancelled' });
@@ -167,8 +212,8 @@ describe('Posts approval queue', () => {
     visitPosts();
 
     cy.get('[data-testid=approval-queue]').should('exist');
-    cy.get('[data-testid=approval-queue-count]').should('contain', '2');
-    cy.get('[data-testid=nav-posts-approval-badge]').should('contain', '2');
+    cy.get('[data-testid=approval-queue-count]').should('contain', '3');
+    cy.get('[data-testid=nav-posts-approval-badge]').should('contain', '3');
     cy.contains('[data-testid=approval-queue-row]', 'Held video').within(() => {
       cy.contains('Edited outside.').should('be.visible');
       cy.contains('E2E Persona').should('be.visible');
@@ -184,10 +229,24 @@ describe('Posts approval queue', () => {
       cy.get('[data-testid=approval-approve]').click();
     });
     cy.wait('@approveFresh');
-    cy.get('[data-testid=approval-queue-count]').should('contain', '1');
-    cy.get('[data-testid=nav-posts-approval-badge]').should('contain', '1');
+    cy.get('[data-testid=approval-queue-count]').should('contain', '2');
+    cy.get('[data-testid=nav-posts-approval-badge]').should('contain', '2');
     cy.contains('[data-testid=approval-queue-row]', 'Held video').should('not.exist');
     cy.contains('[data-testid=approval-queue-row]', 'Late video').should('exist');
+  });
+
+  it('keeps an old ASAP hold approvable without an expired badge and approves it', () => {
+    visitPosts();
+
+    cy.contains('[data-testid=approval-queue-row]', 'ASAP hold').within(() => {
+      cy.get('[data-testid=approval-expired]').should('not.exist');
+      cy.get('[data-testid=approval-approve]').should('be.enabled');
+      cy.get('[data-testid=approval-reschedule]').should('not.exist');
+      cy.get('[data-testid=approval-approve]').click();
+    });
+    cy.wait('@approveAsap');
+    cy.get('[data-testid=approval-queue-count]').should('contain', '2');
+    cy.contains('[data-testid=approval-queue-row]', 'ASAP hold').should('not.exist');
   });
 
   it('rejects a slot and drops it from the queue', () => {
@@ -197,7 +256,7 @@ describe('Posts approval queue', () => {
       cy.get('[data-testid=approval-reject]').click();
     });
     cy.wait('@rejectExpired');
-    cy.get('[data-testid=approval-queue-count]').should('contain', '1');
+    cy.get('[data-testid=approval-queue-count]').should('contain', '2');
     cy.contains('[data-testid=approval-queue-row]', 'Late video').should('not.exist');
   });
 
