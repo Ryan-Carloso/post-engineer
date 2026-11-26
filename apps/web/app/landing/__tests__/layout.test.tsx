@@ -63,7 +63,7 @@ describe('app/landing/layout — FAQ structured data', () => {
     );
   });
 
-  it('emits FAQPage, Organization and WebSite, one script each', () => {
+  it('emits FAQPage, Organization, WebSite and SoftwareApplication, one script each', () => {
     render(
       <LandingLayout>
         <span>landing</span>
@@ -73,6 +73,6 @@ describe('app/landing/layout — FAQ structured data', () => {
     const types = scripts.map(
       (script) => (JSON.parse(script.textContent ?? '') as { '@type': string })['@type'],
     );
-    expect(types).toEqual(['FAQPage', 'Organization', 'WebSite']);
+    expect(types).toEqual(['FAQPage', 'Organization', 'WebSite', 'SoftwareApplication']);
   });
 });

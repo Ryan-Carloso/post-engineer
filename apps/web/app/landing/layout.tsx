@@ -8,7 +8,11 @@ import {
   buildFaqJsonLd,
   serializeJsonLd,
 } from '@/lib/seo';
-import { buildOrganizationJsonLd, buildWebSiteJsonLd } from '@/lib/seo-json-ld';
+import {
+  buildOrganizationJsonLd,
+  buildSoftwareApplicationJsonLd,
+  buildWebSiteJsonLd,
+} from '@/lib/seo-json-ld';
 
 export const metadata: Metadata = {
   title: LANDING_TITLE,
@@ -59,6 +63,10 @@ export default function LandingLayout({ children }: { children: React.ReactNode 
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(buildWebSiteJsonLd()) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(buildSoftwareApplicationJsonLd()) }}
       />
     </>
   );
