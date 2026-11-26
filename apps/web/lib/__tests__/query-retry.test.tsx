@@ -12,19 +12,13 @@ import { HttpStatusError } from '../errors';
 import {
   fetchApiKeys,
   fetchPostDetail,
-  deletePersonaImage,
-  usePersonaImagesQuery,
   usePersonaListQuery,
   usePostDetailQuery,
   useApiKeysQuery,
   useScheduleStatusQuery,
   useSchedulesQuery,
   useSocialAccountsQuery,
-  useVideoGenerationsQuery,
-  useVoicesQuery,
 } from '../api';
-import { fetchClonedVoice, fetchClonedVoices } from '../cloned-voices-client';
-import * as sessionExpiry from '../session-expiry';
 
 function response(status: number, body: unknown = { success: false, error: 'nope' }): Response {
   return { ok: status >= 200 && status < 300, status, json: async () => body } as unknown as Response;
@@ -58,8 +52,6 @@ describe('fetchers carry the HTTP status', () => {
   it.each<[string, () => Promise<unknown>]>([
     ['fetchApiKeys', () => fetchApiKeys()],
     ['fetchPostDetail', () => fetchPostDetail('slot-1')],
-    ['fetchClonedVoices', () => fetchClonedVoices()],
-    ['fetchClonedVoice', () => fetchClonedVoice('clone-1')],
   ])('%s throws an HttpStatusError with the response status', async (_name, run) => {
     vi.stubGlobal('fetch', vi.fn(async () => response(401)));
     const error = await run().catch((caught: unknown) => caught);
@@ -87,11 +79,9 @@ describe('dashboard queries with the default retry policy', () => {
   const hooks: Array<[string, () => UseQueryResult<unknown, Error>]> = [
     ['useSocialAccountsQuery', () => useSocialAccountsQuery()],
     ['usePersonaListQuery', () => usePersonaListQuery()],
-    ['usePersonaImagesQuery', () => usePersonaImagesQuery('p-1')],
     ['useSchedulesQuery', () => useSchedulesQuery()],
     ['useScheduleStatusQuery', () => useScheduleStatusQuery()],
     ['useApiKeysQuery', () => useApiKeysQuery()],
-    ['useVideoGenerationsQuery', () => useVideoGenerationsQuery()],
     ['usePostDetailQuery', () => usePostDetailQuery('slot-1')],
   ];
 
@@ -105,7 +95,6 @@ describe('dashboard queries with the default retry policy', () => {
   it.each<[string, () => UseQueryResult<unknown, Error>]>([
     ['useSchedulesQuery', () => useSchedulesQuery()],
     ['useScheduleStatusQuery', () => useScheduleStatusQuery()],
-    ['useVideoGenerationsQuery', () => useVideoGenerationsQuery()],
   ])('%s fails on a 200 with success:false and retries it once', async (_name, useHook) => {
     vi.stubGlobal('fetch', vi.fn(async () => response(200, { success: false })));
     const { result } = renderHook(useHook, { wrapper: wrapper() });
@@ -123,10 +112,8 @@ describe('dashboard queries with the default retry policy', () => {
   });
 
   it.each<[string, () => UseQueryResult<unknown, Error>]>([
-    ['useVoicesQuery', () => useVoicesQuery()],
     ['useSchedulesQuery', () => useSchedulesQuery()],
     ['useScheduleStatusQuery', () => useScheduleStatusQuery()],
-    ['useVideoGenerationsQuery', () => useVideoGenerationsQuery()],
   ])('%s keeps the 401 status when the error body is not JSON', async (_name, useHook) => {
     vi.stubGlobal(
       'fetch',
@@ -146,47 +133,5 @@ describe('dashboard queries with the default retry policy', () => {
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
-  it('keeps a per-query override: the voices query never retries, even on a 500', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => response(500)));
-    const { result } = renderHook(() => useVoicesQuery(), { wrapper: wrapper() });
-    await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(fetch).toHaveBeenCalledTimes(1);
-  });
 });
 
-describe('fetcher branches around the HTTP status', () => {
-  function wrapper(): (props: { children: ReactNode }) => ReactNode {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    return ({ children }) => QueryClientProvider({ client, children }) as ReactNode;
-  }
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
-  });
-
-  it('persona images: a non-OK answer without an error body falls back to the status message', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => ({ ok: false, status: 503, json: async () => { throw new SyntaxError('html'); } })),
-    );
-    const { result } = renderHook(() => usePersonaImagesQuery('p-1'), { wrapper: wrapper() });
-    await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(result.current.error?.message).toBe('Persona images request failed with status 503');
-    expect((result.current.error as HttpStatusError).status).toBe(503);
-  });
-
-  it('image mutation: a 200 with success:false fails without the session-expiry notify', async () => {
-    const notify = vi.spyOn(sessionExpiry, 'notifyIfSessionExpired');
-    vi.stubGlobal('fetch', vi.fn(async () => response(200, { success: false, error: 'Image not found.' })));
-    await expect(deletePersonaImage('img-1')).resolves.toEqual({ success: false, error: 'Image not found.' });
-    expect(notify).not.toHaveBeenCalled();
-  });
-
-  it('video generations: a successful read returns the generations', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => response(200, { success: true, generations: [{ id: 'g-1' }] })));
-    const { result } = renderHook(() => useVideoGenerationsQuery(), { wrapper: wrapper() });
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data).toEqual([{ id: 'g-1' }]);
-  });
-});

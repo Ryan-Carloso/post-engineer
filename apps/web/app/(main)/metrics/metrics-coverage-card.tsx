@@ -121,10 +121,8 @@ function CoverageItemRow({ item, personaLabel, accountLabel, formatDateTime }: C
           <ProviderIcon provider={item.provider} />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-ink">{item.scriptAngle ?? t('metrics.noAngle')}</p>
-          <p className="truncate text-xs text-muted-text">
-            {personaLabel(item.personaId)} · {accountLabel(item.accountId)}
-          </p>
+          <p className="truncate text-sm font-semibold text-ink">{accountLabel(item.accountId)}</p>
+          <p className="truncate text-xs text-muted-text">{personaLabel(item.personaId)}</p>
         </div>
         <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold', REASON_CHIP_CLASS[item.reason])}>
           {t(REASON_LABEL_KEYS[item.reason])}

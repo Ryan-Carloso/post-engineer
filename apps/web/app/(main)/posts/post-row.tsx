@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ChevronRight, Loader2 } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 
 import type { ScheduledSlot } from '@/lib/api';
 import { Card } from '@/components/ui/card';
@@ -9,21 +9,16 @@ import { ProviderIcon } from '@/components/provider-icon';
 import { useI18n } from '@/lib/i18n/provider';
 import type { Locale } from '@/lib/i18n';
 import type { AccountOption } from '@/lib/account-options';
-import { categorizeGenerationError, GENERATION_ERROR_KEY } from '@/lib/generation/generation-errors';
 import { cn } from '@/lib/utils';
 import {
   CALENDAR_GROUP_ICON,
   CALENDAR_GROUP_KEY,
   CALENDAR_GROUP_PILL,
-  STATUS_KEY,
-  STATUS_STYLE,
   calendarGroupOf,
 } from './status';
-import { StatusBadge, formatDate, formatTime, videoUrlFor } from './post-card';
+import { StatusBadge, formatDate, formatTime } from './post-card';
 import { PublishAccountNotices } from './publish-user-notice';
 
-const SLOT_VIDEO_STATUSES = new Set<ScheduledSlot['status']>(['ready', 'publishing', 'published']);
-export const SLOT_PROGRESS_STATUSES = new Set<ScheduledSlot['status']>(['generating', 'publishing']);
 const MAX_STATUS_ICONS = 3;
 
 export function PostRow({
@@ -48,14 +43,6 @@ export function PostRow({
   const group = calendarGroupOf(slot.status);
   const GroupIcon = CALENDAR_GROUP_ICON[group];
   const isFailed = slot.status === 'failed';
-  const isGenerating = slot.status === 'generating';
-  const showProgress = SLOT_PROGRESS_STATUSES.has(slot.status);
-  const thumbSrc = SLOT_VIDEO_STATUSES.has(slot.status) ? videoUrlFor(slot.taskId) : null;
-  const failureCode = isFailed ? categorizeGenerationError(slot.error) : 'unknown';
-  const failureMessage =
-    failureCode === 'unknown'
-      ? t(slot.retryable === true ? 'posts.cardFailedRetryable' : 'posts.cardFailedPermanent')
-      : t(GENERATION_ERROR_KEY[failureCode]);
   const displayTitle = slot.title ?? t('posts.unknownTitle');
 
   return (
@@ -72,18 +59,14 @@ export function PostRow({
       >
         <div className="flex items-center gap-3">
           <div className="relative size-14 shrink-0 overflow-hidden rounded-lg bg-sunken">
-            {thumbSrc !== null ? (
-              <video src={`${thumbSrc}#t=0.1`} preload="metadata" muted playsInline className="size-full object-cover" />
-            ) : (
-              <span
-                className={cn(
-                  'flex size-full items-center justify-center',
-                  isFailed ? 'text-destructive' : 'text-muted-text',
-                )}
-              >
-                <GroupIcon className="size-4" aria-hidden />
-              </span>
-            )}
+            <span
+              className={cn(
+                'flex size-full items-center justify-center',
+                isFailed ? 'text-destructive' : 'text-muted-text',
+              )}
+            >
+              <GroupIcon className="size-4" aria-hidden />
+            </span>
           </div>
 
           <div className="min-w-0 flex-1">
@@ -106,38 +89,13 @@ export function PostRow({
             </p>
             {isFailed && (
               <p data-post-row-error className="mt-1 flex items-center gap-1.5 text-xs text-destructive">
-                <span className="truncate">{failureMessage}</span>
+                <span className="truncate">{t('posts.cardFailedPermanent')}</span>
               </p>
-            )}
-            {showProgress && (
-              <div className="mt-1.5 flex w-full items-center gap-2">
-                <div
-                  role="progressbar"
-                  aria-label={t('posts.progressLabel')}
-                  aria-valuenow={slot.progress}
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-sunken"
-                >
-                  <div className="h-full rounded-full bg-info transition-all" style={{ width: `${slot.progress}%` }} />
-                </div>
-                <span className="shrink-0 text-[11px] font-semibold text-info tabular-nums">{slot.progress}%</span>
-              </div>
             )}
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
-            {showProgress ? (
-              <StatusBadge
-                status={slot.status}
-                label={t(STATUS_KEY[slot.status] ?? 'posts.groupInProgress')}
-                style={STATUS_STYLE[slot.status] ?? CALENDAR_GROUP_PILL[group]}
-                icon={isGenerating ? Loader2 : undefined}
-                iconClassName={isGenerating ? 'animate-spin' : undefined}
-              />
-            ) : (
-              <StatusBadge status={slot.status} label={t(CALENDAR_GROUP_KEY[group])} style={CALENDAR_GROUP_PILL[group]} />
-            )}
+            <StatusBadge status={slot.status} label={t(CALENDAR_GROUP_KEY[group])} style={CALENDAR_GROUP_PILL[group]} />
             <ChevronRight
               className="size-4 text-muted-text transition-transform group-hover/card:translate-x-0.5"
               aria-hidden

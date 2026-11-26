@@ -1,14 +1,4 @@
-import { isIP } from 'node:net';
 import { z } from 'zod';
-import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from './language.js';
-import { isPublicIp } from './public-ip.js';
-import { VIDEO_TRANSITION_MODES, SUBTITLE_POSITIONS } from './contracts/videos.js';
-import { VIDEO_LAYOUTS } from './limits.js';
-import { VIDEO_TYPES, VIDEO_TYPE_ERROR_SUFFIX, unknownVideoTypeMessage } from './video-type.js';
-import { personaVoiceField } from './voice-filters.js';
-import { musicMoodField } from './music-mood-field.js';
-import { hookTitleField } from './hook-title-field.js';
-import { LIPSYNC_WINDOW_SECONDS, MAX_LIPSYNC_PHOTOS, MIN_LIPSYNC_PHOTOS } from './contracts/videos.js';
 
 export const ListSchedulesShape = {};
 
@@ -33,7 +23,7 @@ export const CancelScheduleShape = {
     .string()
     .min(1, 'scheduleId is required')
     .describe(
-      'The ID of the schedule to cancel. Unpublished slots (pending, generating, or ready) are removed. Only slots whose generation never ran get their prepaid tokens back — a generating or ready slot keeps its charge, because the GPU cost is already spent. A post already publishing or published is not recalled.',
+      'The ID of the schedule to cancel. Unpublished slots (ready) are removed. A post already publishing or published is not recalled.',
     ),
 };
 
@@ -43,7 +33,7 @@ export const GetSlotShape = {
   slotId: z
     .string()
     .min(1, 'slotId is required')
-    .describe('The slot ID (the slotId field from posts (action: list) or generate_video).'),
+    .describe('The slot ID (the slotId field from posts (action: list) or publish_video (action: publish_existing)).'),
 };
 
 export const GetSlotSchema = z.object(GetSlotShape);
@@ -52,11 +42,11 @@ export const UpdateSlotTitleShape = {
   slotId: z
     .string()
     .min(1, 'slotId is required')
-    .describe('The slot ID (the slotId field from posts (action: list) or generate_video).'),
+    .describe('The slot ID (the slotId field from posts (action: list) or publish_video (action: publish_existing)).'),
   title: z
     .string()
     .min(1, 'title is required')
-    .describe('The new title text for the slot. Only a slot that has not started generating (status pending/awaiting) can be edited; published or mid-flight slots are rejected.'),
+    .describe('The new title text for the slot. Only a slot that is still ready (not yet publishing) can be edited; published or mid-flight slots are rejected.'),
 };
 
 export const UpdateSlotTitleSchema = z.object(UpdateSlotTitleShape);
@@ -66,137 +56,8 @@ export const DeleteSlotShape = {
     .string()
     .min(1, 'slotId is required')
     .describe(
-      'The slot ID to delete. Only pending (awaiting) or failed slots can be deleted; published or mid-flight slots are rejected. The schedule\'s last slot cannot be deleted — delete the whole schedule with schedules (action: cancel) instead.',
+      'The slot ID to delete. Only ready or failed slots can be deleted; published or mid-flight slots are rejected. The schedule\'s last slot cannot be deleted — delete the whole schedule with schedules (action: cancel) instead.',
     ),
 };
 
 export const DeleteSlotSchema = z.object(DeleteSlotShape);
-
-const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
-
-function isHttpsOrLoopbackHttp(url: string): boolean {
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    return false;
-  }
-  if (parsed.protocol === 'https:') return true;
-  return parsed.protocol === 'http:' && LOOPBACK_HOSTS.has(parsed.hostname);
-}
-
-function httpsUrlField(fieldName: string) {
-  return z
-    .string()
-    .url(`${fieldName} must be a valid URL`)
-    .refine(isHttpsOrLoopbackHttp, {
-      message: `${fieldName} must be an https URL (http is allowed only for loopback hosts like localhost)`,
-    });
-}
-
-function isPublicHttpsWebhookUrl(url: string): boolean {
-  if (!URL.canParse(url)) return false;
-  const parsed = new URL(url);
-  if (parsed.protocol !== 'https:') return false;
-  const host = parsed.hostname.replace(/^\[|\]$/g, '');
-  if (host.toLowerCase() === 'localhost') return false;
-  if (isIP(host) !== 0 && !isPublicIp(host)) return false;
-  return true;
-}
-
-function webhookUrlField() {
-  return z
-    .string()
-    .url('webhookUrl must be a valid URL')
-    .refine(isPublicHttpsWebhookUrl, {
-      message: 'webhookUrl must be https on a public host',
-    });
-}
-
-export const GeneratePersonaVideoOptionsShape = {
-  videoType: z
-    .enum(VIDEO_TYPES, {
-      error: (issue) =>
-        issue.input === undefined
-          ? `options.videoType is required; ${VIDEO_TYPE_ERROR_SUFFIX}`
-          : unknownVideoTypeMessage(issue.input),
-    })
-    .describe('The one video mode: full_lipsync = the whole video is the persona talking (requires a persona with a photo and options.lipsyncPhotos; 8 tokens at face quality ok, 15 at very_good); hook_lipsync = lip sync on the hook only, agent images after (requires a persona with a photo, and a first photo in the segments — the hook photo; the persona\'s saved photo is never shown in the video; 2 tokens ok, 3 very_good); voiceover = the persona voice over the agent images, no lip sync and no persona on camera; the images may show people (persona optional — with one, its voice and niche still apply; 1 token). Required: the mode decides the render path and the price.'),
-  musicMood: musicMoodField,
-  lipsyncPhotos: z
-    .array(
-      z
-        .object({ mediaId: z.string().min(1).optional(), url: z.string().min(1).optional() })
-        .strict()
-        .refine((photo) => (photo.mediaId === undefined) !== (photo.url === undefined), {
-          message: 'Each lipsync photo needs exactly one of mediaId or url.',
-        }),
-    )
-    .min(MIN_LIPSYNC_PHOTOS, `Send at least ${MIN_LIPSYNC_PHOTOS} different face photos`)
-    .max(MAX_LIPSYNC_PHOTOS, `Send at most ${MAX_LIPSYNC_PHOTOS} face photos`)
-    .optional()
-    .describe(
-      `full_lipsync only, and required there: ${MIN_LIPSYNC_PHOTOS}-${MAX_LIPSYNC_PHOTOS} different face photos of the persona, all the same person (other outfits, places or angles), so the video does not stay on one photo. ` +
-        `The narration is cut into windows of at most ${LIPSYNC_WINDOW_SECONDS}s and window i shows photo i (photo i % count when there are fewer photos than windows): send one photo per ${LIPSYNC_WINDOW_SECONDS}s of narration, e.g. 2 for a 24s video, 4 for 48s, ${MAX_LIPSYNC_PHOTOS} for 60s. ` +
-        'Each item is mediaId (from media (action: upload), a temporary asset, 1 hour) or url (a public image URL). Every photo must show a detectable face and no photo may repeat. Rejected for hook_lipsync and voiceover.',
-    ),
-  audioUrl: httpsUrlField('audioUrl').optional().describe('Public URL of custom audio for the videos (overrides the persona voice).'),
-  imageId: z.string().min(1, 'imageId must be a non-empty string').optional().describe('Library image ID to pin for every video (overrides the deterministic per-video selection; see persona_media (action: list_images)). The pinned photo is only used for the lip-sync-active check and is never rendered in the video.'),
-  voiceId: personaVoiceField().optional().describe('Voice ID override: id or label from voices (action: list). Never type a provider prefix.'),
-  webhookUrl: webhookUrlField().optional().describe('Callback URL the server POSTs to when each video reaches a terminal state (completed/failed).'),
-  videoAspect: z.enum(['9:16', '16:9', '1:1']).optional().describe('Frame shape. Overrides the persona when one is given; a post without a persona defaults to 9:16.'),
-  videoLayout: z
-    .enum(VIDEO_LAYOUTS)
-    .optional()
-    .describe('How the persona hook is composed with the video material (the agent images). Overrides the persona when one is given; a post without a persona defaults to "standard". Same render cost either way.'),
-  hookPanel: z
-    .boolean()
-    .optional()
-    .describe('hook_lipsync only: false keeps the face alone during the hook (no photo panel under it). Omitted uses the persona default; rejected for other video types.'),
-  paragraphNumber: z.number().int().min(1).max(10).optional().describe('Paragraph count (1-10). Overrides the persona when one is given.'),
-  language: z
-    .string()
-    .min(1)
-    .max(32)
-    .refine(isEnglishLanguage, { message: ONLY_ENGLISH_VIDEOS_MESSAGE })
-    .optional()
-    .describe('Spoken language code — English only for now, e.g. en-US. Overrides the persona when one is given.'),
-  niche: z.string().min(1).max(300).optional().describe('Content niche. Overrides the persona when one is given.'),
-  hookTitle: hookTitleField.optional(),
-  videoClipDuration: z
-    .number()
-    .int()
-    .min(1)
-    .max(60)
-    .optional()
-    .describe('Pacing weight, not exact seconds: maximum seconds per photo (1-60). Omitted keeps the 2s default. The engine fits photo holds to the real spoken audio, stretching each photo at most 1.5x its pace, so a larger value means slower holds and fewer photos, not a longer video. A/B test it: change one knob at a time between videos of the same niche and compare their results.'),
-  videoTransitionMode: z
-    .enum(VIDEO_TRANSITION_MODES)
-    .optional()
-    .describe('Transition between clips: Shuffle varies it per clip, Crossfade blends segment photos over 0.5s, FadeIn/FadeOut fade each clip in/out, SlideIn/SlideOut slide it in/out. Omitted keeps hard cuts. A/B test it like videoClipDuration: one knob at a time, same niche, and compare results.'),
-  videoVariationSeed: z
-    .number()
-    .int()
-    .optional()
-    .describe('Seed for per-video variation of the segment photos zoom direction; the same seed repeats the same pattern. Omitted keeps the fixed in/out alternation. Change it for a different look of the same script without changing pacing.'),
-  subtitlePosition: z
-    .enum(SUBTITLE_POSITIONS)
-    .optional()
-    .describe(
-      'Caption placement: top keeps the caption near the top of the frame, clear of the face and the lower photo area; center is the default; bottom sits near the bottom; custom places it at subtitleCustomPosition percent from the top. A/B rule: change one knob at a time, in the same niche, and compare before changing another.',
-    ),
-  subtitleCustomPosition: z
-    .number()
-    .int()
-    .min(0)
-    .max(100)
-    .optional()
-    .describe('Caption height as percent from the top (0-100). Only with subtitlePosition "custom"; rejected otherwise.'),
-};
-
-export const GeneratePersonaVideoOptionsSchema = z
-  .object(GeneratePersonaVideoOptionsShape)
-  .refine((value) => value.subtitleCustomPosition === undefined || value.subtitlePosition === 'custom', {
-    message: "subtitleCustomPosition only allowed with subtitlePosition 'custom'",
-    path: ['subtitleCustomPosition'],
-  });

@@ -29,10 +29,7 @@ export function isOAuthConnectProvider(value: unknown): value is OAuthConnectPro
   return typeof value === 'string' && (OAUTH_CONNECT_PROVIDERS as readonly string[]).includes(value);
 }
 
-export const IMAGE_PROVIDERS = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'pinterest', 'telegram'] as const satisfies readonly SocialProvider[];
-export const IMAGE_AS_SHORT_PROVIDERS = ['youtube'] as const satisfies readonly ImageProvider[];
-export const IMAGE_AS_SHORT_NOTE =
-  'YouTube has no public image-post API yet (the posts resource is a pilot for approved Google Cloud projects, GA planned for 2027: https://developers.google.com/youtube/data/reference/rest/v3/posts), so an image published to YouTube becomes an 8-second vertical Short with background music.';
+export const IMAGE_PROVIDERS = ['instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'pinterest', 'telegram'] as const satisfies readonly SocialProvider[];
 export type ImageProvider = (typeof IMAGE_PROVIDERS)[number];
 
 export function isImageProvider(value: unknown): value is ImageProvider {

@@ -82,7 +82,7 @@ const UPCOMING_SLOT = {
   id: 'u1',
   scheduleId: 's1',
   slotAt: '2030-06-01T10:00:00.000Z',
-  status: 'awaiting',
+  status: 'ready',
   title: 'Upcoming topic',
   error: null,
   publishedAt: null,
@@ -591,52 +591,25 @@ describe('PostsPage card links', () => {
 });
 
 describe('PostsPage card progress', () => {
-  const GENERATING_SLOT = {
-    id: 'g1',
-    scheduleId: 's1',
-    slotAt: '2030-06-01T10:00:00.000Z',
-    status: 'generating',
-    title: 'Generating topic',
-    error: null,
-    publishedAt: null,
-    taskId: 'task-42',
-    progress: 42,
-    stage: 'lipsync',
-  };
-
-  const AWAITING_SLOT = {
-    id: 'a1',
-    scheduleId: 's1',
-    slotAt: '2030-06-01T11:00:00.000Z',
-    status: 'awaiting',
-    title: 'Awaiting topic',
-    error: null,
-    publishedAt: null,
-    taskId: null,
-    progress: 0,
-    stage: null,
-  };
-
-  it('shows the live progress percent on a generating card', () => {
-    mockQueries({ upcoming: [GENERATING_SLOT] });
+  it('shows no progress bar on a ready card', () => {
+    mockQueries({
+      upcoming: [{ ...UPCOMING_SLOT, id: 'a1', status: 'ready', title: 'Ready topic' }],
+    });
     render(<PostsPage />);
 
-    expect(screen.getByText('42%')).toBeInTheDocument();
-    const bar = screen.getByRole('progressbar', { name: 'posts.progressLabel' });
-    expect(bar).toHaveAttribute('aria-valuenow', '42');
-    expect(bar).toHaveAttribute('aria-valuemin', '0');
-    expect(bar).toHaveAttribute('aria-valuemax', '100');
-  });
-
-  it('shows no progress bar on an awaiting card — 0% of work not started yet looks stuck', () => {
-    mockQueries({ upcoming: [AWAITING_SLOT] });
-    render(<PostsPage />);
-
-    expect(dayPanelCardText('Awaiting topic')).toBeInTheDocument();
-    expect(screen.queryByText('0%')).not.toBeInTheDocument();
+    expect(dayPanelCardText('Ready topic')).toBeInTheDocument();
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
   });
 
+  it('shows no progress bar on a publishing card', () => {
+    mockQueries({
+      upcoming: [{ ...UPCOMING_SLOT, id: 'p1', status: 'publishing', title: 'Publishing topic' }],
+    });
+    render(<PostsPage />);
+
+    expect(dayPanelCardText('Publishing topic')).toBeInTheDocument();
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+  });
 });
 
 describe('PostsPage fallbacks', () => {
@@ -650,29 +623,25 @@ describe('PostsPage fallbacks', () => {
     expect(badge.className).toContain('bg-line');
   });
 
-  it('shows a progress bar on a publishing card but not on a ready one', () => {
+  it('shows no progress bar on a publishing or a ready card', () => {
     const readySlot = {
       ...UPCOMING_SLOT,
       id: 'u7',
       status: 'ready',
       title: 'Ready topic',
-      progress: 71,
-      taskId: 'task-7',
     };
     const publishingSlot = {
       ...UPCOMING_SLOT,
       id: 'u8',
       status: 'publishing',
       title: 'Publishing topic',
-      progress: 88,
-      taskId: 'task-8',
     };
     mockQueries({ upcoming: [readySlot, publishingSlot] });
     render(<PostsPage />);
 
-    expect(screen.queryByText('71%')).not.toBeInTheDocument();
-    expect(screen.getByText('88%')).toBeInTheDocument();
-    expect(screen.getAllByRole('progressbar', { name: 'posts.progressLabel' })).toHaveLength(1);
+    expect(dayPanelCardText('Ready topic')).toBeInTheDocument();
+    expect(dayPanelCardText('Publishing topic')).toBeInTheDocument();
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
   });
 
   it('falls back to the persona placeholder for slots whose persona is gone', () => {
@@ -720,12 +689,9 @@ describe('PostsPage calendar view', () => {
     {
       ...UPCOMING_SLOT,
       id: 'c1',
-      status: 'generating',
+      status: 'ready',
       slotAt: '2030-06-05T12:00:00.000Z',
       title: 'Calendar upcoming',
-      taskId: 'task-42',
-      progress: 42,
-      stage: 'lipsync',
     },
     { ...PUBLISHED_SLOT, id: 'c2', slotAt: '2030-06-05T15:00:00.000Z', title: 'Calendar published' },
     { ...FAILED_SLOT, id: 'c3', slotAt: '2030-06-07T12:00:00.000Z', title: 'Calendar failed' },
@@ -803,7 +769,7 @@ describe('PostsPage calendar view', () => {
     expect(document.querySelectorAll('[data-event-id]')).toHaveLength(0);
   });
 
-  it('shows one scheduled chip and no persona in the cell for a day with one awaiting post', () => {
+  it('shows one scheduled chip and no persona in the cell for a day with one ready post', () => {
     mockQueries();
     render(<PostsPage />);
 
@@ -895,25 +861,24 @@ describe('PostsPage calendar view', () => {
     expect(dayPanelCardText('Today slot')).toBeInTheDocument();
   });
 
-  it('shows the categorized failure reason on a failed card, never the raw engine text', async () => {
-    const restartSlot = {
+  it('shows the generic failure label on a failed card, never the raw error text', async () => {
+    const failedSlot = {
       ...FAILED_SLOT,
       id: 'c4',
       slotAt: '2030-06-07T14:00:00.000Z',
-      title: 'Calendar restart failure',
-      error: 'The engine restarted while generating your video.',
-      retryable: true,
+      title: 'Calendar publish failure',
+      error: 'Upload failed with provider detail',
     };
-    mockQueries({ range: [restartSlot] });
+    mockQueries({ range: [failedSlot] });
     const user = userEvent.setup();
     render(<PostsPage />);
 
     const day7 = screen.getByRole('button', { name: 'Friday, June 7' });
     await user.click(day7);
 
-    expect(dayPanelCardText('Calendar restart failure')).toBeInTheDocument();
-    expect(screen.getByText('posts.errorEngineRestart')).toBeInTheDocument();
-    expect(screen.queryByText('The engine restarted while generating your video.')).not.toBeInTheDocument();
+    expect(dayPanelCardText('Calendar publish failure')).toBeInTheDocument();
+    expect(screen.getByText('posts.cardFailedPermanent')).toBeInTheDocument();
+    expect(screen.queryByText('Upload failed with provider detail')).not.toBeInTheDocument();
   });
 
   it('draws no thumbnail tile at all on a card without video', async () => {

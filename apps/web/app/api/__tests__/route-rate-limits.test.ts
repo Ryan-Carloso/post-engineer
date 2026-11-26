@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyRateLimit, CALLER_RATE_LIMITS, RATE_LIMITS, type RateLimitProfile } from '@/lib/rate-limit';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { fetchPersonaVoiceOptions } from '@/lib/voice-catalog-fetch';
+import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { getOAuthKeys } from '@/lib/oauth/keys';
 import { parseAuthorizeRequest } from '@/lib/oauth/authorize';
 
@@ -19,7 +19,6 @@ vi.mock('@/lib/request-auth', async (importOriginal) => ({
 }));
 vi.mock('@/lib/supabase/service', () => ({ createSupabaseServiceClient: vi.fn(() => ({})) }));
 vi.mock('@/lib/supabase/server', () => ({ createSupabaseServerClient: vi.fn() }));
-vi.mock('@/lib/voice-catalog-fetch', () => ({ fetchPersonaVoiceOptions: vi.fn() }));
 vi.mock('@/lib/oauth/keys', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/oauth/keys')>()),
   getOAuthKeys: vi.fn(),
@@ -57,33 +56,17 @@ const CASES: RateLimitCase[] = [
   { route: 'DELETE /api/account', profile: RATE_LIMITS.accountDisconnect, bucket: 'user', method: 'DELETE', url: `/api/account?id=${UUID}`, load: async () => handler((await import('@/app/api/account/route')).DELETE) },
   { route: 'GET /api/api-keys', profile: RATE_LIMITS.apiKeyList, bucket: 'user', method: 'GET', url: '/api/api-keys', load: async () => handler((await import('@/app/api/api-keys/route')).GET) },
   { route: 'DELETE /api/api-keys/[id]', profile: RATE_LIMITS.apiKeyManage, bucket: 'user', method: 'DELETE', url: `/api/api-keys/${UUID}`, params: { id: UUID }, load: async () => handler((await import('@/app/api/api-keys/[id]/route')).DELETE) },
-  { route: 'GET /api/billing/tokens', profile: CALLER_RATE_LIMITS.billingTokens.machine, browser: CALLER_RATE_LIMITS.billingTokens.browser, bucket: 'user', method: 'GET', url: '/api/billing/tokens', load: async () => handler((await import('@/app/api/billing/tokens/route')).GET) },
-  { route: 'GET /api/billing/transactions', profile: CALLER_RATE_LIMITS.billingTransactions.machine, browser: CALLER_RATE_LIMITS.billingTransactions.browser, bucket: 'user', method: 'GET', url: '/api/billing/transactions', load: async () => handler((await import('@/app/api/billing/transactions/route')).GET) },
   { route: 'GET /api/health', profile: RATE_LIMITS.healthProbe, bucket: 'user', method: 'GET', url: '/api/health', load: async () => handler((await import('@/app/api/health/route')).GET) },
-  { route: 'GET /api/moneyprint/health', profile: RATE_LIMITS.engineHealthProbe, bucket: 'user', method: 'GET', url: '/api/moneyprint/health', load: async () => handler((await import('@/app/api/moneyprint/health/route')).GET) },
   { route: 'GET /api/version', profile: RATE_LIMITS.versionProbe, bucket: 'ip', method: 'GET', url: '/api/version', load: async () => handler((await import('@/app/api/version/route')).GET) },
-  { route: 'POST /api/persona/avatar', profile: RATE_LIMITS.personaAvatar, bucket: 'user', method: 'POST', url: '/api/persona/avatar', body: '{"prompt":"x"}', load: async () => handler((await import('@/app/api/persona/avatar/route')).POST) },
-  { route: 'GET /api/persona/faces', profile: RATE_LIMITS.personaFaces, bucket: 'user', method: 'GET', url: '/api/persona/faces', load: async () => handler((await import('@/app/api/persona/faces/route')).GET) },
   { route: 'GET /api/persona/list', profile: CALLER_RATE_LIMITS.personaList.machine, browser: CALLER_RATE_LIMITS.personaList.browser, bucket: 'user', method: 'GET', url: '/api/persona/list', load: async () => handler((await import('@/app/api/persona/list/route')).GET) },
-  { route: 'GET /api/persona/voices', profile: CALLER_RATE_LIMITS.personaVoices.machine, browser: CALLER_RATE_LIMITS.personaVoices.browser, bucket: 'user', method: 'GET', url: '/api/persona/voices', load: async () => handler((await import('@/app/api/persona/voices/route')).GET) },
-  { route: 'GET /api/persona/images', profile: CALLER_RATE_LIMITS.personaImagesRead.machine, browser: CALLER_RATE_LIMITS.personaImagesRead.browser, bucket: 'user', method: 'GET', url: `/api/persona/images?personaId=${UUID}`, load: async () => handler((await import('@/app/api/persona/images/route')).GET) },
   { route: 'GET /api/persona/identity-card', profile: CALLER_RATE_LIMITS.personaIdentityCard.machine, browser: CALLER_RATE_LIMITS.personaIdentityCard.browser, bucket: 'user', method: 'GET', url: `/api/persona/identity-card?personaId=${UUID}`, load: async () => handler((await import('@/app/api/persona/identity-card/route')).GET) },
   { route: 'POST /api/persona/identity-card', profile: CALLER_RATE_LIMITS.personaIdentityCard.machine, browser: CALLER_RATE_LIMITS.personaIdentityCard.browser, bucket: 'user', method: 'POST', url: '/api/persona/identity-card', body: `{"personaId":"${UUID}","scene":{"lighting":"studio","framing":"close_up"}}`, load: async () => handler((await import('@/app/api/persona/identity-card/route')).POST) },
-  { route: 'PATCH /api/persona/images', profile: RATE_LIMITS.personaImageEdit, bucket: 'user', method: 'PATCH', url: '/api/persona/images', body: `{"id":"${UUID}","prompt":"x"}`, load: async () => handler((await import('@/app/api/persona/images/route')).PATCH) },
-  { route: 'DELETE /api/persona/images', profile: RATE_LIMITS.personaImageEdit, bucket: 'user', method: 'DELETE', url: `/api/persona/images?id=${UUID}`, load: async () => handler((await import('@/app/api/persona/images/route')).DELETE) },
-  { route: 'GET /api/persona/cloned-voices', profile: RATE_LIMITS.clonedVoiceList, bucket: 'user', method: 'GET', url: '/api/persona/cloned-voices', load: async () => handler((await import('@/app/api/persona/cloned-voices/route')).GET) },
-  { route: 'GET /api/persona/cloned-voices/[cloneId]', profile: CALLER_RATE_LIMITS.clonedVoiceRead.machine, browser: CALLER_RATE_LIMITS.clonedVoiceRead.browser, bucket: 'user', method: 'GET', url: '/api/persona/cloned-voices/c1', params: { cloneId: 'c1' }, load: async () => handler((await import('@/app/api/persona/cloned-voices/[cloneId]/route')).GET) },
-  { route: 'DELETE /api/persona/cloned-voices/[cloneId]', profile: RATE_LIMITS.clonedVoiceDelete, bucket: 'user', method: 'DELETE', url: '/api/persona/cloned-voices/c1', params: { cloneId: 'c1' }, load: async () => handler((await import('@/app/api/persona/cloned-voices/[cloneId]/route')).DELETE) },
-  { route: 'DELETE /api/persona/video-task/[taskId]', profile: RATE_LIMITS.videoTaskCancel, bucket: 'user', method: 'DELETE', url: '/api/persona/video-task/task-1', params: { taskId: 'task-1' }, load: async () => handler((await import('@/app/api/persona/video-task/[taskId]/route')).DELETE) },
-  { route: 'GET /api/persona/video-generations', profile: CALLER_RATE_LIMITS.videoGenerationList.machine, browser: CALLER_RATE_LIMITS.videoGenerationList.browser, bucket: 'user', method: 'GET', url: '/api/persona/video-generations', load: async () => handler((await import('@/app/api/persona/video-generations/route')).GET) },
-  { route: 'GET /api/persona/video-generations/[generationId]', profile: CALLER_RATE_LIMITS.videoGenerationRead.machine, browser: CALLER_RATE_LIMITS.videoGenerationRead.browser, bucket: 'user', method: 'GET', url: `/api/persona/video-generations/${UUID}`, params: { generationId: UUID }, load: async () => handler((await import('@/app/api/persona/video-generations/[generationId]/route')).GET) },
   { route: 'GET /api/schedule', profile: CALLER_RATE_LIMITS.scheduleList.machine, browser: CALLER_RATE_LIMITS.scheduleList.browser, bucket: 'user', method: 'GET', url: '/api/schedule', load: async () => handler((await import('@/app/api/schedule/route')).GET) },
   { route: 'DELETE /api/schedule', profile: RATE_LIMITS.scheduleDelete, bucket: 'user', method: 'DELETE', url: `/api/schedule?id=${UUID}`, load: async () => handler((await import('@/app/api/schedule/route')).DELETE) },
   { route: 'GET /api/schedule/status', profile: CALLER_RATE_LIMITS.scheduleStatus.machine, browser: CALLER_RATE_LIMITS.scheduleStatus.browser, bucket: 'user', method: 'GET', url: '/api/schedule/status', load: async () => handler((await import('@/app/api/schedule/status/route')).GET) },
   { route: 'DELETE /api/schedule/slots/[slotId]', profile: RATE_LIMITS.slotWrite, bucket: 'user', method: 'DELETE', url: `/api/schedule/slots/${UUID}`, params: { slotId: UUID }, load: async () => handler((await import('@/app/api/schedule/slots/[slotId]/route')).DELETE) },
   { route: 'PATCH /api/schedule/slots/[slotId]', profile: RATE_LIMITS.slotWrite, bucket: 'user', method: 'PATCH', url: `/api/schedule/slots/${UUID}`, params: { slotId: UUID }, body: '{"title":"x"}', load: async () => handler((await import('@/app/api/schedule/slots/[slotId]/route')).PATCH) },
   { route: 'GET /api/share-links', profile: RATE_LIMITS.shareLinkList, bucket: 'user', method: 'GET', url: '/api/share-links', load: async () => handler((await import('@/app/api/share-links/route')).GET) },
-  { route: 'POST /api/videos/validate-script', profile: RATE_LIMITS.validateScript, bucket: 'user', method: 'POST', url: '/api/videos/validate-script', body: '{"segments":[]}', load: async () => handler((await import('@/app/api/videos/validate-script/route')).POST) },
   { route: 'GET /oauth/authorize', profile: RATE_LIMITS.oauthAuthorize, bucket: 'ip', method: 'GET', url: '/oauth/authorize?client_id=c', load: async () => handler((await import('@/app/oauth/authorize/route')).GET) },
   { route: 'POST /oauth/approve', profile: RATE_LIMITS.oauthApprove, bucket: 'ip', method: 'POST', url: '/oauth/approve', body: 'request=r&decision=approve', load: async () => handler((await import('@/app/oauth/approve/route')).POST) },
 ];
@@ -124,6 +107,13 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
+function emptyPersonaListClient(): unknown {
+  const chain: Record<string, unknown> = {};
+  for (const method of ['select', 'eq', 'in']) chain[method] = () => chain;
+  chain.order = async () => ({ data: [], error: null });
+  return { from: () => chain };
+}
+
 describe('rate limits on API-key reachable and expensive routes', () => {
   it.each(CASES.map((entry) => [entry.route, entry] as const))('%s answers 429 with Retry-After once its budget is spent', async (_route, entry) => {
     const route = await entry.load();
@@ -139,7 +129,6 @@ describe('rate limits on API-key reachable and expensive routes', () => {
     expect(response.headers.get('X-RateLimit-Limit')).toBe(String(entry.profile.limit));
     await expect(response.json()).resolves.toMatchObject({ success: false, errorType: 'RATE_LIMITED', retryAfterSeconds: retryAfter });
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(fetchPersonaVoiceOptions).not.toHaveBeenCalled();
     expect(getOAuthKeys).not.toHaveBeenCalled();
     expect(parseAuthorizeRequest).not.toHaveBeenCalled();
   });
@@ -160,36 +149,36 @@ describe('rate limits on API-key reachable and expensive routes', () => {
   });
 
   it('does not spend the browser budget on API-key calls', async () => {
-    const entry = CASES.find((candidate) => candidate.route === 'GET /api/persona/voices');
+    const entry = CASES.find((candidate) => candidate.route === 'GET /api/persona/list');
     if (entry === undefined) throw new Error('missing case');
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(emptyPersonaListClient() as never);
     const route = await entry.load();
     await exhaust(entry);
     vi.mocked(requireSupabaseSession).mockResolvedValue({ auth: { userId: USER_ID, accessToken: 'session' }, error: null } as never);
-    vi.mocked(fetchPersonaVoiceOptions).mockResolvedValue({ ok: true, voices: [] } as never);
 
     const response = await route(makeRequest(entry), { params: Promise.resolve({}) });
 
-    expect(response.status).toBe(200);
+    expect(response.status).not.toBe(429);
+    expect(response.headers.get('Retry-After')).toBeNull();
   });
 
   it('keys user-bucketed limits by the caller, so another user is not throttled', async () => {
-    const entry = CASES.find((candidate) => candidate.route === 'GET /api/persona/voices');
+    const entry = CASES.find((candidate) => candidate.route === 'GET /api/persona/list');
     if (entry === undefined) throw new Error('missing case');
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(emptyPersonaListClient() as never);
     const route = await entry.load();
     await exhaust(entry);
     vi.mocked(requireSupabaseSession).mockResolvedValue({ auth: { userId: UUID, accessToken: 'k', isApiKey: true }, error: null } as never);
-    vi.mocked(fetchPersonaVoiceOptions).mockResolvedValue({ ok: true, voices: [] } as never);
 
     const response = await route(makeRequest(entry), { params: Promise.resolve({}) });
 
-    expect(response.status).toBe(200);
-    expect(fetchPersonaVoiceOptions).toHaveBeenCalledWith(UUID);
+    expect(response.status).not.toBe(429);
+    expect(response.headers.get('Retry-After')).toBeNull();
   });
 
   it('keeps browser polling budgets above the UI refetch rates', () => {
     const perMinute = (intervalMs: number): number => Math.ceil(60_000 / intervalMs);
-    expect(CALLER_RATE_LIMITS.billingTokens.browser.limit).toBeGreaterThan(perMinute(3000));
-    expect(CALLER_RATE_LIMITS.clonedVoiceRead.browser.limit).toBeGreaterThan(perMinute(2500));
+    expect(CALLER_RATE_LIMITS.personaList.browser.limit).toBeGreaterThan(perMinute(30_000));
     expect(CALLER_RATE_LIMITS.scheduleStatus.browser.limit).toBeGreaterThan(3 * perMinute(60_000));
   });
 });

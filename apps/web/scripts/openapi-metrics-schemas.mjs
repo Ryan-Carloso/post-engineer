@@ -1,8 +1,5 @@
-import { batchOperationSchemas } from './openapi-batch-schemas.mjs';
-
 export function metricsOperationSchemas({ success, object, anyObject, str }) {
   return {
-    ...batchOperationSchemas({ success, object, str }),
     'GET /api/metrics': {
       query: [
         { name: 'window', required: true, enum: ['24h', '7d', '28d'] },

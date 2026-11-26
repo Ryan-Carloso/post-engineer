@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { actionShape } from '../action-tool.js';
 import type { PostEngineerClient } from '../client.js';
-import { GenerateVideoSchema, handleGenerateVideo } from '../generate-video.js';
 import { createRefResolvers, resolveAccountRef, withOptionalPersona, withPersona } from '../refs.js';
 import type { McpToolResponse } from '../tools-call.js';
 
@@ -92,38 +91,5 @@ describe('persona helpers', () => {
     const unknown = await withOptionalPersona<{ persona?: string; name: string }>(client({ listPersonas: { personas: [] } }), { persona: 'Ghost', name: 'x' }, run);
     expect(unknown.isError).toBe(true);
     expect(run).toHaveBeenCalledTimes(2);
-  });
-});
-
-const HOOK = 'Most people burn out because they train every single day without any plan, and here is the simple weekly structure that fixes it for good.';
-const SEGMENTS = [
-  { kind: 'hook' as const, text: HOOK },
-  { kind: 'content' as const, text: 'Start with three focused sessions a week, each one built around a single goal, so your body can recover and your progress keeps moving forward instead of stalling.' },
-  { kind: 'content' as const, text: 'Track every session in a simple notebook, review it on Sunday, and change only one thing at a time, because small and steady adjustments beat dramatic restarts.' },
-];
-const baseVideo = { title: 'T', description: 'D', segments: SEGMENTS, mode: 'asap' as const, options: { videoType: 'full_lipsync' as const } };
-
-describe('generate_video reference failures', () => {
-  it('stops at an account that does not exist, and says which video of a batch', async () => {
-    const generate = vi.fn();
-    const c = {
-      listPersonas: vi.fn(async () => ({ personas: [{ id: MARIA, name: 'Maria' }] })),
-      listSocialAccounts: vi.fn(async () => ({ accounts: [{ provider: 'youtube', channelId: 'UC1', channelName: 'Maria' }] })),
-      generatePersonaVideo: generate,
-      request: vi.fn(),
-      getHeaders: () => ({}),
-    } as unknown as PostEngineerClient;
-    const args = GenerateVideoSchema.parse({ videos: [{ ...baseVideo, persona: 'Maria', accounts: ['Maria'] }, { ...baseVideo, persona: 'Maria', accounts: ['Nobody'] }], batchKey: 'b1' });
-    const response = await handleGenerateVideo(c, args);
-    expect(response.isError).toBe(true);
-    expect(text(response)).toContain('Video 2 of 2: No account matches "Nobody"');
-    expect(generate).not.toHaveBeenCalled();
-  });
-
-  it('deduplicates repeated providers', async () => {
-    const generate = vi.fn(async (_input: { providers: string[] }) => ({ success: true, schedule: { id: 's' }, slots: [] }));
-    const c = { generatePersonaVideo: generate, getHeaders: () => ({}) } as unknown as PostEngineerClient;
-    await handleGenerateVideo(c, GenerateVideoSchema.parse({ videos: [{ ...baseVideo, persona: MARIA, providers: ['youtube', 'youtube'] }] }));
-    expect(generate.mock.calls[0]?.[0].providers).toEqual(['youtube']);
   });
 });

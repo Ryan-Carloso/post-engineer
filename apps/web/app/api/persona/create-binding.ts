@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import { ERROR_CODES } from '@/lib/error-codes';
-import { rollbackStoragePath } from '@/lib/persona-remote-face';
+import { rollbackStoragePath } from '@/lib/persona-photo';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import {
   setPersonaDefaultAccounts,

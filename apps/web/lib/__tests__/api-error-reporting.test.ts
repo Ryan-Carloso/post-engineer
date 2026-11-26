@@ -586,7 +586,7 @@ describe('withApiErrorReporting', () => {
 describe('withApiErrorReporting reportSuccess opt-out', () => {
   it('suppresses the 2xx success event when reportSuccess is false', async () => {
     const wrapped = withApiErrorReporting(
-      'GET /api/persona/video-status/[taskId]',
+      'GET /api/schedule/status',
       async () => NextResponse.json({ status: 'processing' }),
       { reportSuccess: false },
     );
@@ -616,7 +616,7 @@ describe('withApiErrorReporting reportSuccess opt-out', () => {
 
   it('still reports a 4xx warning when reportSuccess is false', async () => {
     const wrapped = withApiErrorReporting(
-      'GET /api/persona/video-status/[taskId]',
+      'GET /api/schedule/status',
       async () => NextResponse.json({ error: 'nope' }, { status: 404 }),
       { reportSuccess: false },
     );
@@ -626,13 +626,13 @@ describe('withApiErrorReporting reportSuccess opt-out', () => {
     expect(res.status).toBe(404);
     await vi.waitFor(() => expect(client.capture).toHaveBeenCalledTimes(1));
     const [event] = client.capture.mock.calls[0] as [string];
-    expect(event).toBe('video_status_fetched_rejected');
+    expect(event).toBe('schedule_status_fetched_rejected');
     expect(client.captureException).not.toHaveBeenCalled();
   });
 
   it('still reports a 5xx via $exception when reportSuccess is false', async () => {
     const wrapped = withApiErrorReporting(
-      'GET /api/persona/video-status/[taskId]',
+      'GET /api/schedule/status',
       async () => NextResponse.json({ error: 'boom' }, { status: 500 }),
       { reportSuccess: false },
     );
@@ -647,7 +647,7 @@ describe('withApiErrorReporting reportSuccess opt-out', () => {
 describe('withApiErrorReporting semantic event names', () => {
   it('emits the semantic name (not server_success) for a 2xx on a mapped route', async () => {
     const wrapped = withApiErrorReporting(
-      'GET /api/billing/transactions',
+      'GET /api/schedule',
       async () => NextResponse.json({ transactions: [] }),
     );
 
@@ -659,9 +659,9 @@ describe('withApiErrorReporting semantic event names', () => {
       string,
       Record<string, unknown>,
     ];
-    expect(event).toBe('billing_transactions_fetched');
+    expect(event).toBe('schedule_fetched');
     expect(properties).toMatchObject({
-      route: 'GET /api/billing/transactions',
+      route: 'GET /api/schedule',
       status: 200,
     });
     expect(client.captureException).not.toHaveBeenCalled();

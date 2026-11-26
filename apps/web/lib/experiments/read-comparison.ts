@@ -3,14 +3,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { MetricsWindow } from '@/lib/contracts/metrics';
 import { COMPARISON_ROW_LIMIT } from './comparison-limits';
-import {
-  comparePrompts,
-  unversionedAccounts,
-  type AccountResult,
-  type ComparedVideo,
-  type PromptVersionFacts,
-  type UnversionedAccount,
-} from './prompt-comparison';
+import { comparePrompts, type AccountResult, type ComparedVideo, type PromptVersionFacts } from './prompt-comparison';
 
 export interface ComparisonQuery {
   userId: string;
@@ -24,9 +17,7 @@ export interface ComparisonView {
   truncated: boolean;
 }
 
-export type ComparisonOutcome =
-  | { ok: true; value: ComparisonView; unversioned: UnversionedAccount[] }
-  | { ok: false; cause: unknown };
+export type ComparisonOutcome = { ok: true; value: ComparisonView } | { ok: false; cause: unknown };
 
 interface MetricsRow {
   provider: string;
@@ -46,7 +37,7 @@ function isSource(value: string): value is PromptVersionFacts['source'] {
 
 export async function readPromptComparison(supabase: SupabaseClient, query: ComparisonQuery): Promise<ComparisonOutcome> {
   if (query.personaIds !== null && query.personaIds.length === 0) {
-    return { ok: true, value: { window: query.window, accounts: [], truncated: false }, unversioned: [] };
+    return { ok: true, value: { window: query.window, accounts: [], truncated: false } };
   }
   let select = supabase
     .from('post_metrics')
@@ -77,9 +68,5 @@ export async function readPromptComparison(supabase: SupabaseClient, query: Comp
       isSource(row.source) ? [{ versionId: row.id, slug: row.slug, title: row.title, version: row.version, source: row.source }] : [],
     );
   }
-  return {
-    ok: true,
-    value: { window: query.window, accounts: comparePrompts(videos, versions), truncated },
-    unversioned: unversionedAccounts(videos),
-  };
+  return { ok: true, value: { window: query.window, accounts: comparePrompts(videos, versions), truncated } };
 }

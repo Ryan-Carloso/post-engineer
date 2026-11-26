@@ -10,8 +10,6 @@
   { "file": "apps/web/app/api/linkedin-auth/callback/route.ts", "method": "GET", "kind": "oauth-callback", "reason": "Provider redirect with a single-use code and a signed state cookie; the start route is rate limited." },
   { "file": "apps/web/app/api/pinterest-auth/callback/route.ts", "method": "GET", "kind": "oauth-callback", "reason": "Provider redirect with a single-use code and a signed state cookie; the start route is rate limited." },
   { "file": "apps/web/app/api/threads-auth/callback/route.ts", "method": "GET", "kind": "oauth-callback", "reason": "Provider redirect with a single-use code and a signed state cookie; the start route is rate limited." },
-  { "file": "apps/web/app/api/billing/webhook/route.ts", "method": "POST", "kind": "signed-webhook", "reason": "Stripe webhook verified by the Stripe-Signature header; a 429 would make Stripe retry and delay paid token grants." },
-  { "file": "apps/web/app/api/billing/check-tokens/route.ts", "method": "POST", "kind": "engine-callback", "reason": "Engine charges tokens for a generation, authenticated by MONEYPRINT_API_SECRET; a 429 would fail a paid batch mid-run." },
   { "file": "apps/web/app/api/logout/route.ts", "method": "POST", "kind": "session-teardown", "reason": "Browser-session sign-out only (no API key or OAuth path); a 429 would leave the user unable to sign out." },
   { "file": "apps/web/app/api/coverage/route.ts", "method": "GET", "kind": "test-only", "reason": "Returns the in-memory Istanbul coverage map for E2E runs; 204 in production builds and no service call." }
 ]

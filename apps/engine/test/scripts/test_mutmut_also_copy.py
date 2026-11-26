@@ -32,3 +32,10 @@ def test_scripts_imported_by_tests_are_in_mutmut_also_copy():
         f"scripts/{name}.py" for name in _scripts_imports() if f"scripts/{name}.py" not in also_copy
     )
     assert not missing, f"scripts imported by tests but missing from mutmut also_copy: {missing}"
+
+
+def test_every_also_copy_entry_exists():
+    with open(ENGINE_ROOT / "pyproject.toml", "rb") as handle:
+        config = tomllib.load(handle)
+    missing = [entry for entry in config["tool"]["mutmut"]["also_copy"] if not (ENGINE_ROOT / entry).exists()]
+    assert not missing, f"mutmut also_copy names files that do not exist: {missing}"

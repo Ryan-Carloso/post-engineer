@@ -9,45 +9,6 @@ export type Json = unknown;
 export interface Database {
   public: {
     Tables: {
-      cloned_voices: {
-        Row: {
-        id: string;
-        user_id: string;
-        status: 'pending' | 'ready' | 'failed';
-        consent_at: string;
-        storage_path: string;
-        engine_voice_key: string;
-        language: string;
-        error_code: string | null;
-        created_at: string;
-        updated_at: string;
-        };
-        Insert: {
-        id?: string;
-        user_id: string;
-        status?: 'pending' | 'ready' | 'failed';
-        consent_at: string;
-        storage_path: string;
-        engine_voice_key: string;
-        language: string;
-        error_code?: string | null;
-        created_at?: string;
-        updated_at?: string;
-        };
-        Update: {
-        id?: string;
-        user_id?: string;
-        status?: 'pending' | 'ready' | 'failed';
-        consent_at?: string;
-        storage_path?: string;
-        engine_voice_key?: string;
-        language?: string;
-        error_code?: string | null;
-        created_at?: string;
-        updated_at?: string;
-        };
-        Relationships: [];
-      };
       engine_heartbeat: {
         Row: {
         id: number;
@@ -75,33 +36,6 @@ export interface Database {
         rss_mb?: number | null;
         vram_mb?: number | null;
         clean_shutdown_at?: string | null;
-        };
-        Relationships: [];
-      };
-      engine_task_state: {
-        Row: {
-        task_id: string;
-        user_id: string | null;
-        state: number;
-        progress: number;
-        data: Json;
-        updated_at: string;
-        };
-        Insert: {
-        task_id: string;
-        user_id?: string | null;
-        state?: number;
-        progress?: number;
-        data?: Json;
-        updated_at?: string;
-        };
-        Update: {
-        task_id?: string;
-        user_id?: string | null;
-        state?: number;
-        progress?: number;
-        data?: Json;
-        updated_at?: string;
         };
         Relationships: [];
       };
@@ -231,39 +165,6 @@ export interface Database {
         };
         Relationships: [];
       };
-      persona_images: {
-        Row: {
-        id: string;
-        persona_id: string;
-        user_id: string;
-        image_path: string;
-        tag: string;
-        description: string;
-        is_primary: boolean;
-        created_at: string;
-        };
-        Insert: {
-        id?: string;
-        persona_id: string;
-        user_id: string;
-        image_path: string;
-        tag?: string;
-        description?: string;
-        is_primary?: boolean;
-        created_at?: string;
-        };
-        Update: {
-        id?: string;
-        persona_id?: string;
-        user_id?: string;
-        image_path?: string;
-        tag?: string;
-        description?: string;
-        is_primary?: boolean;
-        created_at?: string;
-        };
-        Relationships: [];
-      };
       personas: {
         Row: {
         id: string;
@@ -271,21 +172,7 @@ export interface Database {
         name: string;
         photo_path: string | null;
         avatar_url: string | null;
-        voice_id: string | null;
-        voice_audio_path: string | null;
         created_at: string;
-        language: string | null;
-        video_aspect: string | null;
-        script_prompt: string | null;
-        paragraph_number: number | null;
-        niche: string | null;
-        face_quality: 'ok' | 'very_good' | null;
-        recent_image_ids: string[];
-        video_layout: 'standard' | 'react' | null;
-        cta_type: 'follow' | 'comment' | 'share' | 'save' | 'link' | 'buy' | 'other';
-        cta_url: string | null;
-        cta_instruction: string | null;
-        hook_panel: boolean;
         identity_card: Json | null;
         ai_label: boolean;
         };
@@ -295,21 +182,7 @@ export interface Database {
         name: string;
         photo_path?: string | null;
         avatar_url?: string | null;
-        voice_id?: string | null;
-        voice_audio_path?: string | null;
         created_at?: string;
-        language?: string | null;
-        video_aspect?: string | null;
-        script_prompt?: string | null;
-        paragraph_number?: number | null;
-        niche?: string | null;
-        face_quality?: 'ok' | 'very_good' | null;
-        recent_image_ids?: string[];
-        video_layout?: 'standard' | 'react' | null;
-        cta_type?: 'follow' | 'comment' | 'share' | 'save' | 'link' | 'buy' | 'other';
-        cta_url?: string | null;
-        cta_instruction?: string | null;
-        hook_panel?: boolean;
         identity_card?: Json | null;
         ai_label?: boolean;
         };
@@ -319,21 +192,7 @@ export interface Database {
         name?: string;
         photo_path?: string | null;
         avatar_url?: string | null;
-        voice_id?: string | null;
-        voice_audio_path?: string | null;
         created_at?: string;
-        language?: string | null;
-        video_aspect?: string | null;
-        script_prompt?: string | null;
-        paragraph_number?: number | null;
-        niche?: string | null;
-        face_quality?: 'ok' | 'very_good' | null;
-        recent_image_ids?: string[];
-        video_layout?: 'standard' | 'react' | null;
-        cta_type?: 'follow' | 'comment' | 'share' | 'save' | 'link' | 'buy' | 'other';
-        cta_url?: string | null;
-        cta_instruction?: string | null;
-        hook_panel?: boolean;
         identity_card?: Json | null;
         ai_label?: boolean;
         };
@@ -354,7 +213,6 @@ export interface Database {
         saves: number | null;
         collected_at: string;
         persona_id: string | null;
-        script_angle: string | null;
         analytics_views: number | null;
         engaged_views: number | null;
         average_view_duration_seconds: number | null;
@@ -379,7 +237,6 @@ export interface Database {
         saves?: number | null;
         collected_at?: string;
         persona_id?: string | null;
-        script_angle?: string | null;
         analytics_views?: number | null;
         engaged_views?: number | null;
         average_view_duration_seconds?: number | null;
@@ -404,7 +261,6 @@ export interface Database {
         saves?: number | null;
         collected_at?: string;
         persona_id?: string | null;
-        script_angle?: string | null;
         analytics_views?: number | null;
         engaged_views?: number | null;
         average_view_duration_seconds?: number | null;
@@ -579,33 +435,6 @@ export interface Database {
         };
         Relationships: [];
       };
-      scheduled_post_progress_history: {
-        Row: {
-        id: string;
-        post_id: string;
-        user_id: string;
-        progress: number;
-        stage: string | null;
-        recorded_at: string;
-        };
-        Insert: {
-        id?: string;
-        post_id: string;
-        user_id: string;
-        progress: number;
-        stage?: string | null;
-        recorded_at?: string;
-        };
-        Update: {
-        id?: string;
-        post_id?: string;
-        user_id?: string;
-        progress?: number;
-        stage?: string | null;
-        recorded_at?: string;
-        };
-        Relationships: [];
-      };
       scheduled_posts: {
         Row: {
         id: string;
@@ -613,32 +442,20 @@ export interface Database {
         user_id: string;
         slot_at: string;
         status: string;
-        task_id: string | null;
         error: string | null;
         published_at: string | null;
         created_at: string;
         updated_at: string;
-        voiceover: boolean;
         publish_attempts: number;
         publish_not_before: string | null;
-        voiceover_material: string;
-        segments: Json | null;
         title: string | null;
-        full_lipsync: boolean;
-        charged_tokens: number;
-        batch_id: string | null;
-        discount_tokens: number;
-        music_mood: string | null;
         publish_outcomes: Json;
         description: string | null;
-        video_type: 'full_lipsync' | 'hook_lipsync' | 'voiceover';
         media_kind: 'upload' | 'image' | null;
         media_ref: string | null;
         media_content_type: string | null;
         media_claimed_at: string | null;
         prompt_version_id: string | null;
-        lipsync_photos: Json | null;
-        hook_title: string | null;
         };
         Insert: {
         id?: string;
@@ -646,32 +463,20 @@ export interface Database {
         user_id: string;
         slot_at: string;
         status?: string;
-        task_id?: string | null;
         error?: string | null;
         published_at?: string | null;
         created_at?: string;
         updated_at?: string;
-        voiceover?: boolean;
         publish_attempts?: number;
         publish_not_before?: string | null;
-        voiceover_material?: string;
-        segments?: Json | null;
         title?: string | null;
-        full_lipsync?: boolean;
-        charged_tokens: number;
-        batch_id?: string | null;
-        discount_tokens?: number;
-        music_mood?: string | null;
         publish_outcomes?: Json;
         description?: string | null;
-        video_type?: 'full_lipsync' | 'hook_lipsync' | 'voiceover';
         media_kind?: 'upload' | 'image' | null;
         media_ref?: string | null;
         media_content_type?: string | null;
         media_claimed_at?: string | null;
         prompt_version_id?: string | null;
-        lipsync_photos?: Json | null;
-        hook_title?: string | null;
         };
         Update: {
         id?: string;
@@ -679,32 +484,20 @@ export interface Database {
         user_id?: string;
         slot_at?: string;
         status?: string;
-        task_id?: string | null;
         error?: string | null;
         published_at?: string | null;
         created_at?: string;
         updated_at?: string;
-        voiceover?: boolean;
         publish_attempts?: number;
         publish_not_before?: string | null;
-        voiceover_material?: string;
-        segments?: Json | null;
         title?: string | null;
-        full_lipsync?: boolean;
-        charged_tokens?: number;
-        batch_id?: string | null;
-        discount_tokens?: number;
-        music_mood?: string | null;
         publish_outcomes?: Json;
         description?: string | null;
-        video_type?: 'full_lipsync' | 'hook_lipsync' | 'voiceover';
         media_kind?: 'upload' | 'image' | null;
         media_ref?: string | null;
         media_content_type?: string | null;
         media_claimed_at?: string | null;
         prompt_version_id?: string | null;
-        lipsync_photos?: Json | null;
-        hook_title?: string | null;
         };
         Relationships: [];
       };
@@ -749,15 +542,7 @@ export interface Database {
         linkedin_account_ids: string[];
         scheduled_at: string | null;
         bluesky_account_ids: string[];
-        post_voice_id: string | null;
-        post_voice_audio_url: string | null;
-        post_niche: string | null;
-        post_language: string | null;
-        post_video_aspect: string | null;
-        post_paragraph_number: number | null;
-        post_face_quality: string | null;
         publish_mode: 'scheduled' | 'asap';
-        post_video_layout: string | null;
         threads_account_ids: string[];
         facebook_account_ids: string[];
         pinterest_account_ids: string[];
@@ -766,10 +551,6 @@ export interface Database {
         rumble_account_ids: string[];
         fanvue_account_ids: string[];
         telegram_account_ids: string[];
-        post_cta_type: 'follow' | 'comment' | 'share' | 'save' | 'link' | 'buy' | 'other' | null;
-        post_cta_url: string | null;
-        post_cta_instruction: string | null;
-        post_hook_panel: boolean | null;
         };
         Insert: {
         id?: string;
@@ -790,15 +571,7 @@ export interface Database {
         linkedin_account_ids: string[];
         scheduled_at?: string | null;
         bluesky_account_ids: string[];
-        post_voice_id?: string | null;
-        post_voice_audio_url?: string | null;
-        post_niche?: string | null;
-        post_language?: string | null;
-        post_video_aspect?: string | null;
-        post_paragraph_number?: number | null;
-        post_face_quality?: string | null;
         publish_mode?: 'scheduled' | 'asap';
-        post_video_layout?: string | null;
         threads_account_ids?: string[];
         facebook_account_ids?: string[];
         pinterest_account_ids?: string[];
@@ -807,10 +580,6 @@ export interface Database {
         rumble_account_ids?: string[];
         fanvue_account_ids?: string[];
         telegram_account_ids?: string[];
-        post_cta_type?: 'follow' | 'comment' | 'share' | 'save' | 'link' | 'buy' | 'other' | null;
-        post_cta_url?: string | null;
-        post_cta_instruction?: string | null;
-        post_hook_panel?: boolean | null;
         };
         Update: {
         id?: string;
@@ -831,15 +600,7 @@ export interface Database {
         linkedin_account_ids?: string[];
         scheduled_at?: string | null;
         bluesky_account_ids?: string[];
-        post_voice_id?: string | null;
-        post_voice_audio_url?: string | null;
-        post_niche?: string | null;
-        post_language?: string | null;
-        post_video_aspect?: string | null;
-        post_paragraph_number?: number | null;
-        post_face_quality?: string | null;
         publish_mode?: 'scheduled' | 'asap';
-        post_video_layout?: string | null;
         threads_account_ids?: string[];
         facebook_account_ids?: string[];
         pinterest_account_ids?: string[];
@@ -848,10 +609,6 @@ export interface Database {
         rumble_account_ids?: string[];
         fanvue_account_ids?: string[];
         telegram_account_ids?: string[];
-        post_cta_type?: 'follow' | 'comment' | 'share' | 'save' | 'link' | 'buy' | 'other' | null;
-        post_cta_url?: string | null;
-        post_cta_instruction?: string | null;
-        post_hook_panel?: boolean | null;
         };
         Relationships: [];
       };
@@ -933,24 +690,6 @@ export interface Database {
         };
         Relationships: [];
       };
-      stripe_webhook_events: {
-        Row: {
-        event_id: string;
-        event_type: string;
-        created_at: string;
-        };
-        Insert: {
-        event_id: string;
-        event_type: string;
-        created_at?: string;
-        };
-        Update: {
-        event_id?: string;
-        event_type?: string;
-        created_at?: string;
-        };
-        Relationships: [];
-      };
       test_deploy_supabase: {
         Row: {
         id: string;
@@ -966,54 +705,6 @@ export interface Database {
         id?: string;
         created_at?: string;
         note?: string | null;
-        };
-        Relationships: [];
-      };
-      token_transactions: {
-        Row: {
-        id: string;
-        user_id: string;
-        amount: number;
-        type: string;
-        description: string | null;
-        reference_id: string | null;
-        created_at: string;
-        reason: string | null;
-        stripe_checkout_session_id: string | null;
-        stripe_payment_intent_id: string | null;
-        generation_id: string | null;
-        free_amount: number | null;
-        engine_task_id: string | null;
-        };
-        Insert: {
-        id?: string;
-        user_id: string;
-        amount: number;
-        type: string;
-        description?: string | null;
-        reference_id?: string | null;
-        created_at?: string;
-        reason?: string | null;
-        stripe_checkout_session_id?: string | null;
-        stripe_payment_intent_id?: string | null;
-        generation_id?: string | null;
-        free_amount?: number | null;
-        engine_task_id?: string | null;
-        };
-        Update: {
-        id?: string;
-        user_id?: string;
-        amount?: number;
-        type?: string;
-        description?: string | null;
-        reference_id?: string | null;
-        created_at?: string;
-        reason?: string | null;
-        stripe_checkout_session_id?: string | null;
-        stripe_payment_intent_id?: string | null;
-        generation_id?: string | null;
-        free_amount?: number | null;
-        engine_task_id?: string | null;
         };
         Relationships: [];
       };
@@ -1056,27 +747,21 @@ export interface Database {
       user_profiles: {
         Row: {
         id: string;
-        stripe_customer_id: string | null;
-        tokens_balance: number;
         created_at: string;
         updated_at: string;
-        free_tokens_balance: number;
+        trial_ends_at: string;
         };
         Insert: {
         id: string;
-        stripe_customer_id?: string | null;
-        tokens_balance?: number;
         created_at?: string;
         updated_at?: string;
-        free_tokens_balance?: number;
+        trial_ends_at?: string;
         };
         Update: {
         id?: string;
-        stripe_customer_id?: string | null;
-        tokens_balance?: number;
         created_at?: string;
         updated_at?: string;
-        free_tokens_balance?: number;
+        trial_ends_at?: string;
         };
         Relationships: [];
       };
@@ -1140,66 +825,6 @@ export interface Database {
         stock_sources?: string[];
         encrypted_keys?: string | null;
         updated_at?: string;
-        };
-        Relationships: [];
-      };
-      video_generations: {
-        Row: {
-        id: string;
-        user_id: string;
-        generation_id: string;
-        engine_task_id: string | null;
-        persona_id: string | null;
-        persona_name: string | null;
-        video_subject: string | null;
-        status: string;
-        error_code: string | null;
-        error_message: string | null;
-        tokens_refunded: boolean;
-        created_at: string;
-        updated_at: string;
-        completed_at: string | null;
-        params: Json | null;
-        publish_mode: 'asap' | 'scheduled';
-        scheduled_at: string | null;
-        };
-        Insert: {
-        id?: string;
-        user_id: string;
-        generation_id: string;
-        engine_task_id?: string | null;
-        persona_id?: string | null;
-        persona_name?: string | null;
-        video_subject?: string | null;
-        status?: string;
-        error_code?: string | null;
-        error_message?: string | null;
-        tokens_refunded?: boolean;
-        created_at?: string;
-        updated_at?: string;
-        completed_at?: string | null;
-        params?: Json | null;
-        publish_mode?: 'asap' | 'scheduled';
-        scheduled_at?: string | null;
-        };
-        Update: {
-        id?: string;
-        user_id?: string;
-        generation_id?: string;
-        engine_task_id?: string | null;
-        persona_id?: string | null;
-        persona_name?: string | null;
-        video_subject?: string | null;
-        status?: string;
-        error_code?: string | null;
-        error_message?: string | null;
-        tokens_refunded?: boolean;
-        created_at?: string;
-        updated_at?: string;
-        completed_at?: string | null;
-        params?: Json | null;
-        publish_mode?: 'asap' | 'scheduled';
-        scheduled_at?: string | null;
         };
         Relationships: [];
       };

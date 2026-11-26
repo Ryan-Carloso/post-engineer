@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('@/lib/logger', () => ({
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
@@ -7,140 +7,11 @@ vi.mock('@/lib/logger', () => ({
 
 import { logger } from '@/lib/logger';
 import {
-  downloadEngineTaskVideo,
-  fetchEngineTaskRecord,
   loadReadyVideoUpload,
   storeScheduledImage,
 } from '../media-resolve';
 
-const TASK_ID = '11111111-1111-4111-8111-111111111111';
 const USER_ID = 'user-uuid-1';
-const BASE_URL = 'https://engine.example.com';
-
-function jsonResponse(status: number, body: unknown, headers: Record<string, string> = {}): Response {
-  return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...headers } });
-}
-
-function taskBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  return {
-    status: 'success',
-    message: 'ok',
-    body: {
-      state: 1,
-      videos: ['final-1.mp4'],
-      final_video: `${BASE_URL}/api/v1/download/${TASK_ID}/final-1.mp4`,
-      has_archive: true,
-      ...overrides,
-    },
-  };
-}
-
-beforeEach(() => {
-  vi.stubEnv('MONEYPRINT_API_URL', BASE_URL);
-  vi.stubEnv('MONEYPRINT_API_SECRET', 'secret-1');
-});
-
-afterEach(() => {
-  vi.unstubAllEnvs();
-});
-
-describe('fetchEngineTaskRecord', () => {
-  it('returns the record for a complete task with an archive', async () => {
-    const fetchFn = vi.fn(async () => jsonResponse(200, taskBody()));
-    const record = await fetchEngineTaskRecord(TASK_ID, USER_ID, fetchFn);
-    expect(record).not.toBe(null);
-    expect(record?.state).toBe(1);
-    expect(record?.videos).toEqual(['final-1.mp4']);
-    expect(record?.hasArchive).toBe(true);
-    expect(record?.finalVideo).toBe(`${BASE_URL}/api/v1/download/${TASK_ID}/final-1.mp4`);
-    expect(fetchFn).toHaveBeenCalledWith(
-      `${BASE_URL}/api/v1/tasks/${TASK_ID}`,
-      expect.objectContaining({ headers: expect.objectContaining({ 'x-user-id': USER_ID }) }),
-    );
-  });
-
-  it('returns null on a 404 (unknown task, or another user’s task)', async () => {
-    const fetchFn = vi.fn(async () => jsonResponse(404, { status: 'error', message: 'task not found' }));
-    expect(await fetchEngineTaskRecord(TASK_ID, USER_ID, fetchFn)).toBe(null);
-  });
-
-  it('throws ExistingMediaError on a 500', async () => {
-    const fetchFn = vi.fn(async () => jsonResponse(500, { status: 'error' }));
-    await expect(fetchEngineTaskRecord(TASK_ID, USER_ID, fetchFn)).rejects.toMatchObject({
-      status: 502,
-      code: 'ENGINE_UNAVAILABLE',
-    });
-  });
-
-  it('throws a coded 400 on an unsafe task id without fetching', async () => {
-    const fetchFn = vi.fn(async () => jsonResponse(200, taskBody()));
-    await expect(fetchEngineTaskRecord('../escape', USER_ID, fetchFn)).rejects.toMatchObject({
-      status: 400,
-      code: 'VALIDATION_FAILED',
-      message: 'taskId is invalid.',
-    });
-    expect(fetchFn).not.toHaveBeenCalled();
-  });
-
-  it('throws when the engine URL is not configured', async () => {
-    vi.stubEnv('MONEYPRINT_API_URL', undefined);
-    const fetchFn = vi.fn(async () => jsonResponse(200, taskBody()));
-    await expect(fetchEngineTaskRecord(TASK_ID, USER_ID, fetchFn)).rejects.toThrow('MONEYPRINT_API_URL is not defined');
-  });
-});
-
-describe('downloadEngineTaskVideo', () => {
-  it('downloads the bytes behind final_video', async () => {
-    const bytes = new Uint8Array([1, 2, 3, 4]);
-    const fetchFn = vi.fn(async () => new Response(bytes, { status: 200, headers: { 'content-type': 'video/mp4' } }));
-    const record = { state: 1, videos: ['final-1.mp4'], finalVideo: `${BASE_URL}/api/v1/download/${TASK_ID}/final-1.mp4`, hasArchive: true };
-    const downloaded = await downloadEngineTaskVideo(record, USER_ID, fetchFn);
-    expect(Buffer.from(downloaded.buffer).equals(Buffer.from(bytes))).toBe(true);
-    expect(downloaded.contentType).toBe('video/mp4');
-  });
-
-  it('follows the engine 302 to the signed R2 URL without auth headers', async () => {
-    const calls: Array<{ url: string; headers: Record<string, string> }> = [];
-    const fetchFn = vi.fn(async (url: string, init?: { headers?: Record<string, string> }) => {
-      calls.push({ url, headers: (init?.headers ?? {}) as Record<string, string> });
-      if (url.startsWith(`${BASE_URL}/`)) {
-        return new Response(null, { status: 302, headers: { location: 'https://r2.example.com/signed-video' } });
-      }
-      return new Response(new Uint8Array([9, 9]), { status: 200, headers: { 'content-type': 'video/mp4' } });
-    }) as unknown as typeof fetch;
-    const record = { state: 1, videos: ['final-1.mp4'], finalVideo: `${BASE_URL}/api/v1/download/${TASK_ID}/final-1.mp4`, hasArchive: true };
-    const downloaded = await downloadEngineTaskVideo(record, USER_ID, fetchFn);
-    expect(downloaded.buffer.length).toBe(2);
-    expect(calls).toHaveLength(2);
-    expect(calls[1]?.headers.Authorization).toBeUndefined();
-    expect(calls[1]?.headers['x-user-id']).toBeUndefined();
-  });
-
-  it('throws MEDIA_NOT_FOUND when there is no final video', async () => {
-    const fetchFn = vi.fn(async () => jsonResponse(200, taskBody()));
-    const record = { state: 1, videos: [], finalVideo: null, hasArchive: false };
-    await expect(downloadEngineTaskVideo(record, USER_ID, fetchFn)).rejects.toMatchObject({
-      status: 404,
-      code: 'MEDIA_NOT_FOUND',
-    });
-    expect(fetchFn).not.toHaveBeenCalled();
-  });
-
-  it('throws before buffering when content-length exceeds 2 GB', async () => {
-    const fetchFn = vi.fn(
-      async () =>
-        new Response(new Uint8Array([1]), {
-          status: 200,
-          headers: { 'content-type': 'video/mp4', 'content-length': String(2 * 1024 * 1024 * 1024 + 1) },
-        }),
-    );
-    const record = { state: 1, videos: ['final-1.mp4'], finalVideo: `${BASE_URL}/api/v1/download/${TASK_ID}/final-1.mp4`, hasArchive: true };
-    await expect(downloadEngineTaskVideo(record, USER_ID, fetchFn)).rejects.toMatchObject({
-      status: 413,
-      code: 'MEDIA_TOO_LARGE',
-    });
-  });
-});
 
 describe('loadReadyVideoUpload', () => {
   const UPLOAD_ID = '22222222-2222-4222-8222-222222222222';

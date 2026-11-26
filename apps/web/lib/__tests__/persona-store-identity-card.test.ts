@@ -61,12 +61,12 @@ describe('persona store identity card', () => {
 
 describe('persona store form data with an identity card', () => {
   it('omits identityCard from the create form when the card is blank', () => {
-    expect(usePersonaStore.getState().buildPersonaFormData('en-US').has('identityCard')).toBe(false);
+    expect(usePersonaStore.getState().buildPersonaFormData().has('identityCard')).toBe(false);
   });
 
   it('puts the card JSON in the create form when the user filled it', () => {
     usePersonaStore.getState().setIdentityCardField('face.eyes', ' green ');
-    const raw = usePersonaStore.getState().buildPersonaFormData('en-US').get('identityCard');
+    const raw = usePersonaStore.getState().buildPersonaFormData().get('identityCard');
     expect(JSON.parse(String(raw))).toEqual({ version: 2, identity: { face: { eyes: 'green' } } });
   });
 

@@ -44,9 +44,9 @@ describe('describeImageSource', () => {
 });
 
 describe('isPublicAssetPath', () => {
-  it('recognizes our own asset directories', () => {
+  it('recognizes the stock face directory and nothing else', () => {
     expect(isPublicAssetPath('/caracter-samples/file-1.png')).toBe(true);
-    expect(isPublicAssetPath('/voice-samples/voice-1.mp3')).toBe(true);
+    expect(isPublicAssetPath('/voice-samples/voice-1.mp3')).toBe(false);
   });
 
   it('rejects anything else', () => {
@@ -77,7 +77,7 @@ describe('isPublicAssetPath', () => {
   });
 
   it('accepts a nested asset file', () => {
-    expect(isPublicAssetPath('/voice-samples/en/voice-1.mp3')).toBe(true);
+    expect(isPublicAssetPath('/caracter-samples/en/file-1.png')).toBe(true);
   });
 });
 

@@ -5,13 +5,6 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { isScopedApiKey } from '@/lib/api-keys';
 import { logger } from '@/lib/logger';
 
-import {
-  enrichSlot,
-  type QueuePositions,
-  type SlotEnrichment,
-} from '@/lib/schedule-slot-presentation';
-import { createEngineProbe, type EngineProbe } from '@/lib/engine-reachability';
-import { recordProgressHistory, type ProgressSample } from '@/lib/schedule-progress-history';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 import {
   parseStatusLimit,
@@ -24,63 +17,13 @@ import { postUrlFor } from '@/lib/post-url';
 import { applyRateLimit, CALLER_RATE_LIMITS, profileForCaller } from '@/lib/rate-limit';
 
 const RESULT_SELECT =
-  'id, slot_at, status, title, error, published_at, schedule_id, task_id, publish_outcomes';
+  'id, slot_at, status, title, error, published_at, schedule_id, publish_outcomes';
 
-function buildQueuePositions(rows: unknown): QueuePositions {
-  const idsBySchedule = new Map<string, string[]>();
-  if (Array.isArray(rows)) {
-    for (const row of rows) {
-      if (typeof row !== 'object' || row === null) continue;
-      const record = row as Record<string, unknown>;
-      const scheduleId = record.schedule_id;
-      const id = record.id;
-      if (typeof scheduleId !== 'string' || typeof id !== 'string') continue;
-      const list = idsBySchedule.get(scheduleId) ?? [];
-      list.push(id);
-      idsBySchedule.set(scheduleId, list);
-    }
-  }
-  const positions: QueuePositions = new Map();
-  for (const [scheduleId, ids] of idsBySchedule) {
-    const byId = new Map<string, { position: number; total: number }>();
-    ids.forEach((id, index) => byId.set(id, { position: index + 1, total: ids.length }));
-    positions.set(scheduleId, byId);
-  }
-  return positions;
-}
-
-const ENGINE_LOOKUP_CAP = 25;
-
-async function withSlotPresentation<T extends { status?: unknown; task_id?: unknown }>(
-  slots: T[],
-  userId: string,
-  queuePositions: QueuePositions,
-  engineProbe: EngineProbe,
-): Promise<(T & SlotEnrichment & { postUrl: string | null })[]> {
-  let remaining = ENGINE_LOOKUP_CAP;
-  const plans = slots.map((slot) => {
-    const needsEngine =
-      (slot.status === 'generating' || slot.status === 'failed') &&
-      typeof slot.task_id === 'string';
-    return { slot, needsEngine, allowEngineLookup: !needsEngine || remaining-- > 0 };
-  });
-  const enrich = (plan: (typeof plans)[number]): Promise<SlotEnrichment> =>
-    enrichSlot(plan.slot, userId, queuePositions, {
-      allowEngineLookup: plan.allowEngineLookup,
-      engineProbe,
-    });
-  const firstIndex = plans.findIndex((plan) => plan.needsEngine && plan.allowEngineLookup);
-  const first = firstIndex === -1 ? null : await enrich(plans[firstIndex]);
-  const enrichments = await Promise.all(
-    plans.map((plan, index) =>
-      index === firstIndex && first !== null ? first : enrich(plan),
-    ),
-  );
-  return slots.map((slot, index) => {
-    const id = (slot as { id?: unknown }).id;
-    const postUrl = typeof id === 'string' ? postUrlFor(id) : null;
-    return { ...slot, ...enrichments[index], postUrl };
-  });
+function withPostUrl<T extends { id?: unknown }>(slots: T[]): (T & { postUrl: string | null })[] {
+  return slots.map((slot) => ({
+    ...slot,
+    postUrl: typeof slot.id === 'string' ? postUrlFor(slot.id) : null,
+  }));
 }
 
 async function getHandler(request: Request): Promise<NextResponse> {
@@ -146,12 +89,7 @@ async function getHandler(request: Request): Promise<NextResponse> {
     }
     const rows = data ?? [];
     const truncated = rows.length > RANGE_MAX_SLOTS;
-    const slots = await withSlotPresentation(
-      presentPublishRows(rows.slice(0, RANGE_MAX_SLOTS)),
-      userId,
-      new Map(),
-      createEngineProbe(),
-    );
+    const slots = withPostUrl(presentPublishRows(rows.slice(0, RANGE_MAX_SLOTS)));
     return NextResponse.json({ success: true, slots, truncated });
   }
 
@@ -162,9 +100,9 @@ async function getHandler(request: Request): Promise<NextResponse> {
 
   let upcomingQuery = supabase
     .from('scheduled_posts')
-    .select('id, slot_at, status, title, error, published_at, schedule_id, task_id')
+    .select('id, slot_at, status, title, error, published_at, schedule_id')
     .eq('user_id', userId)
-    .in('status', ['pending', 'generating', 'ready'])
+    .in('status', ['ready'])
     .gte('slot_at', nowIso)
     .order('slot_at', { ascending: true });
   let recentQuery = supabase
@@ -188,26 +126,15 @@ async function getHandler(request: Request): Promise<NextResponse> {
     anyPostQuery = anyPostQuery.in('schedule_id', scheduleIds);
   }
 
-  let queueQuery = supabase
-    .from('scheduled_posts')
-    .select('id, schedule_id, slot_at')
-    .eq('user_id', userId)
-    .in('status', ['pending', 'generating'])
-    .order('slot_at', { ascending: true });
-  if (scheduleIds) {
-    queueQuery = queueQuery.in('schedule_id', scheduleIds);
-  }
-
-  const [upcoming, recent, publishing, queueResult, anyPost] = await Promise.all([
+  const [upcoming, recent, publishing, anyPost] = await Promise.all([
     upcomingQuery.limit(limit),
     recentQuery.limit(limit),
     publishingQuery.limit(limit),
-    queueQuery,
     anyPostQuery.limit(1),
   ]);
 
   if (upcoming.error || recent.error || publishing.error || anyPost.error) {
-    logger.error('[api/schedule/status] query failed', undefined, {
+    logger.error('[api/schedule/status] query failed', upcoming.error ?? recent.error ?? publishing.error ?? anyPost.error, {
       upcoming: upcoming.error,
       recent: recent.error,
       publishing: publishing.error,
@@ -218,29 +145,10 @@ async function getHandler(request: Request): Promise<NextResponse> {
       { status: 500 },
     );
   }
-  if (queueResult.error) {
-    logger.warn('[api/schedule/status] queue lookup failed', { error: queueResult.error });
-  }
-  const queuePositions = buildQueuePositions(queueResult.error ? [] : (queueResult.data ?? []));
-
-  const engineProbe = createEngineProbe();
-  const upcomingEnriched = await withSlotPresentation(
+  const upcomingEnriched = withPostUrl(
     mergeBySlotAt(presentPublishRows(publishing.data), presentPublishRows(upcoming.data), limit),
-    userId,
-    queuePositions,
-    engineProbe,
   );
-  const recentEnriched = await withSlotPresentation(presentPublishRows(recent.data), userId, queuePositions, engineProbe);
-
-  const samples: ProgressSample[] = [...upcomingEnriched, ...recentEnriched]
-    .filter(
-      (slot): slot is typeof slot & { id: string; task_id: string } =>
-        (slot.status === 'generating' || slot.status === 'failed') &&
-        typeof slot.id === 'string' &&
-        typeof slot.task_id === 'string',
-    )
-    .map((slot) => ({ postId: slot.id, progress: slot.progress, stage: slot.stage }));
-  await recordProgressHistory(supabase, userId, samples);
+  const recentEnriched = withPostUrl(presentPublishRows(recent.data));
 
   return NextResponse.json({
     success: true,

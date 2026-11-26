@@ -13,9 +13,6 @@ function slot(overrides: Partial<ScheduleCancelSlot>): ScheduleCancelSlot {
   return {
     id: 'slot-1',
     status: 'ready',
-    chargedTokens: 0,
-    batchId: null,
-    taskId: null,
     mediaKind: null,
     mediaRef: null,
     ...overrides,
@@ -38,7 +35,7 @@ describe('removeCancelledMediaImages', () => {
         slot({ id: 's1', mediaKind: 'image', mediaRef: 'scheduled-media/user-1/a.jpg' }),
         slot({ id: 's2', mediaKind: 'image', mediaRef: 'scheduled-media/user-1/b.png' }),
         slot({ id: 's3', mediaKind: 'upload', mediaRef: 'upload-id-1' }),
-        slot({ id: 's4', taskId: 'task-1' }),
+        slot({ id: 's4' }),
         slot({ id: 's5', mediaKind: 'image', mediaRef: null }),
       ],
       'user-1',
@@ -72,7 +69,7 @@ describe('removeCancelledMediaImages', () => {
   it('touches no storage when no cancelled slot holds an image', async () => {
     const remove = vi.fn(async () => ({ error: null }));
     const client = fakeServiceClient(remove);
-    await removeCancelledMediaImages(client, [slot({ id: 's1', taskId: 'task-1' })], 'user-1');
+    await removeCancelledMediaImages(client, [slot({ id: 's1' })], 'user-1');
     expect(remove).not.toHaveBeenCalled();
     await removeCancelledMediaImages(client, [], 'user-1');
     expect(remove).not.toHaveBeenCalled();

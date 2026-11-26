@@ -1,26 +1,23 @@
 # Post Engineer MCP Server
 
-Public MCP (Model Context Protocol) server for [Post Engineer](https://post-engineer.com/). It lets AI agents (Claude, Cursor, Codex, and OpenCode) create personas, generate videos, check generation status, and schedule posts directly on your Post Engineer account.
+Public MCP (Model Context Protocol) server for [Post Engineer](https://post-engineer.com/). It lets AI agents (Claude, Cursor, Codex, and OpenCode) upload media you made elsewhere, publish it now or schedule it, measure the posts and compare prompts on your Post Engineer account. Post Engineer does not generate video.
 
 Post Engineer is open source under the Apache License, Version 2.0 (see
 [LICENSE](../../LICENSE) in the repo root). You can self-host the whole
 platform on your own VPS (see
 [docs/SELF_HOSTING.md](../../docs/SELF_HOSTING.md)) instead of using the
-hosted platform — lip sync (LongCat) runs on Modal.com, whose Starter plan
-includes $30/month in compute credits (see
-[modal.com/pricing](https://modal.com/pricing)). We are not Modal: this
-free-credit offer is theirs and can end at any time; usage beyond the
-credits is billed by Modal.
+hosted platform.
 
 ## What is https://post-engineer.com/?
 
 [https://post-engineer.com/](https://post-engineer.com/) is the Post Engineer web platform. You use it to:
 
 - Create an account and log in.
-- Create AI personas (avatar, voice, language, niche).
-- Generate videos with those personas.
+- Group publishing accounts into personas (a name, an optional photo and an identity card).
 - Connect YouTube / Instagram / LinkedIn / Threads / Facebook Pages / Bluesky / 3Speak / Rumble / Fanvue / Pinterest / Telegram accounts.
-- Schedule automated posting.
+- Upload finished videos and images, publish them now or schedule them.
+- Measure the posts and compare prompts.
+- Start with a 7-day free trial; after it ends, scheduling and publishing stop (reading stays) until you contact the team.
 - Generate and manage API keys at [https://post-engineer.com/recipes](https://post-engineer.com/recipes).
 
 ## Requirements
@@ -32,14 +29,9 @@ credits is billed by Modal.
 
 With `--http-transport` the same server speaks Streamable HTTP, but it
 never reads files from the host it runs on: `publish_video (action: from_file)` is not registered,
-`media (action: upload)` and `persona_media (action: add_image)` take a public `imageUrl`, and
-`personas (action: create)`, `personas (action: update)` and `voices (action: create_clone)` accept only
-public URLs (`avatarUrl` / `audioUrl`) — no `avatarPath`, `audioPath` or
-library image files. The server downloads a remote `audioUrl` itself, so it
-fetches only `https`, only from a host whose every DNS answer is a public
-address (loopback, private and link-local are refused before connecting),
-pinned to those addresses for the connection, with no redirects and a
-timeout. Local paths stay available on the default stdio
+`publish_video (action: publish_existing)` takes no local `imagePath`, and
+`personas (action: create)` and `personas (action: update)` take no `avatarPath` (the web app sets
+the persona photo). Local paths stay available on the default stdio
 server, where the disk is the agent's own machine. Signed upload
 replaces them on the remote surface: `publish_video (action: create_upload)` mints a
 short-lived signed URL, the caller PUTs the video bytes to it directly,
@@ -54,9 +46,8 @@ The hosted remote endpoint is `https://post-engineer.com/mcp`
 a remote MCP client — including ChatGPT, which requires a public HTTPS
 endpoint, OAuth, and tool annotations — at that URL and sign in; no
 local install or API key is needed. Every tool carries MCP annotations
-(`readOnlyHint` for `video_tasks`/`posts`/`insights`/`billing`/
-`check_script`, `destructiveHint` for `personas`/`persona_media`/`voices`/
-`accounts`/`schedules`/`prompts`/`publish_video`/`cancel_video`, `openWorldHint`
+(`readOnlyHint` for `posts`/`experiments`/`persona_media`, `destructiveHint` for
+`personas`/`accounts`/`schedules`/`insights`/`prompts`/`publish_video`/`tool_config`, `openWorldHint`
 throughout) so annotation-aware clients can auto-approve reads and confirm
 writes. Annotations are per tool, so a tool with a destructive action is
 destructive for all its actions. The stdio package above
@@ -81,8 +72,7 @@ from `apps/mcp/`.
 
 Each request to the post-engineer API includes the calling tool's name and
 the server version, recorded against your account for product analytics.
-A tool call can make several requests (a `video_tasks (action: status)` wait
-checks status every 60 seconds), so each request also carries the call id
+A tool call can make several requests (a name lookup, then the action), so each request also carries the call id
 (`X-MCP-Call-Id`) and its ordinal in the call (`X-MCP-Call-Request`, from 1).
 The web API records one `mcp_tool_called` per call, from the first request,
 and records a later request only when it fails, as `mcp_tool_request_failed`
@@ -92,8 +82,7 @@ contacts any analytics service.
 
 To measure whether agents use the recipes, the requests of the recipe-aware
 tools (`prompts (action: list)`, `prompts (action: get)`, `personas (action: create)`, `personas (action: list)`,
-`accounts (action: list)`, `billing (action: balance)`, `check_script (action: validate)`,
-`generate_video`) also carry:
+`accounts (action: list)`) also carry:
 
 | Header | Value |
 | --- | --- |
@@ -102,8 +91,7 @@ tools (`prompts (action: list)`, `prompts (action: get)`, `personas (action: cre
 | `X-MCP-Nudged-By` | The last tool whose result showed the recipe nudge, or `none` |
 | `X-MCP-Recipes-Known` | `true` once the agent listed or fetched a recipe |
 | `X-MCP-Recipe-Fetched` | The last recipe slug `prompts (action: get)` returned, or `none` |
-| `X-MCP-Script-Rejections` | Scripts the local validator rejected so far in the session |
-| `X-MCP-Recipe` | The recipe slug of this call (`prompts (action: get)`'s slug, `generate_video`'s `recipe`) |
+| `X-MCP-Recipe` | The recipe slug of this call (`prompts (action: get)`'s slug) |
 
 The web API records them as `mcp_tool_called` properties; a slug that is not
 a hub slug is recorded as `unknown`.
@@ -187,43 +175,30 @@ Run it before and after a change to tool schemas and put both outputs in the PR.
 
 ## Tools
 
-The server offers **17 intent tools**, not one tool per API endpoint. A tool is a complete abstraction of an intent: it takes what you would say ("the persona Maria", "my YouTube channel"), resolves the ids inside the call, and returns only what the agent needs for the next step. Most tools take an `action`; the schema is one flat object (a required `action` plus the fields of every action), and each tool's description lists the required fields per action. A field of another action, or a missing required field, is rejected before any request is sent, naming the tool, the action and the field.
+The server offers **10 intent tools**, not one tool per API endpoint. A tool is a complete abstraction of an intent: it takes what you would say ("the persona Maria", "my YouTube channel"), resolves the ids inside the call, and returns only what the agent needs for the next step. Most tools take an `action`; the schema is one flat object (a required `action` plus the fields of every action), and each tool's description lists the required fields per action. A field of another action, or a missing required field, is rejected before any request is sent, naming the tool, the action and the field.
 
 | Tool | Actions | What it is for |
 |---|---|---|
-| `generate_video` | — | Generate and schedule one video, or a batch of 2-12 (every 6 face videos, the cheapest is free). `persona` and `accounts` by name or id; the result echoes what was resolved. `options.hookTitle` adds an on-screen headline (at most 7 words and 60 characters) over the first 3 seconds; captions move below it while it shows. |
-| `video_tasks` | `status`, `list_generations`, `get_generation` | Follow videos: for the final outcome, `status` sets `waitSeconds` above 0 and blocks (up to 12 `taskIds`). `waitSeconds` 0 is only a progress snapshot: wait at least `nextPollInSeconds`. Each task can be polled at most once a minute (the API answers a faster poll with 429 and `Retry-After`); `status` waits out the `Retry-After` instead of failing. |
-| `cancel_video` | — | Cancel a video that is still generating. Separate so a client can allow status without cancel. |
-| `personas` | `list`, `get`, `create`, `update`, `delete` | Personas. `delete` previews first and needs the `confirmToken` of that preview to delete. |
-| `persona_media` | `list_faces`, `list_images`, `add_image`, `update_image`, `remove_image`, `get_card`, `render_prompt` | Stock faces, a persona's image library, and the identity card prompts (see "Identity card"). |
-| `voices` | `list`, `preview`, `list_clones`, `create_clone`, `get_clone`, `preview_clone`, `delete_clone` | House voices and voice clones. |
+| `publish_video` | `from_file`, `create_upload`, `complete_upload`, `publish_upload`, `publish_existing` | Publish media you made elsewhere. `publish_existing` takes a completed upload (`uploadId`) or a local image (`imagePath`, stdio only; over HTTP an image goes through `create_upload` like a video, never as base64), sends it to every network of its `accounts` (names or ids, or the persona's bound accounts) in one call, and needs `mode`: `asap`, or `scheduled` once at `publishAt` (3h-30d ahead). A retry with the same `idempotencyKey` replays the original result in both modes. Images (JPEG/PNG, 8 MB) post to Instagram, Bluesky (1 MB), LinkedIn, Threads, Facebook, Pinterest and Telegram; YouTube and the other networks take video only. |
+| `personas` | `list`, `get`, `create`, `update`, `delete` | Personas: a name, the publishing accounts they group, an optional photo and an identity card. `delete` previews first and needs the `confirmToken` of that preview to delete. |
+| `persona_media` | `get_card`, `render_prompt` | The identity card and the image prompts rendered from it (see "Identity card"). |
 | `accounts` | `list`, `connect`, `disconnect`, `get_persona_publishing`, `set_persona_publishing`, `list_boards` | Social accounts and the accounts each persona publishes to. |
 | `tool_config` | `get`, `save` | The saved research/stock tool configuration: which search tool (Tavily/Exa/own) and stock sources (Pexels/Pixabay/Coverr) the account has keys for. `save` replaces the whole set; keys are stored encrypted and are never returned in full — `get` shows presence and last 4 characters only. |
 | `schedules` | `list`, `cancel`, `get_slot`, `update_slot_title`, `delete_slot` | Future slots. |
 | `posts` | `list`, `get` | Published and scheduled posts. |
 | `insights` | `post_metrics`, `last_day`, `retention_curve`, `share_link_create`, `share_link_list`, `share_link_revoke` | How posts performed, and a public read-only link to the metrics summary and this week's posts. |
-| `experiments` | `results`, `create` | Compares your prompts inside each publishing account: every video generated with a `promptVersionId` records its prompt version. `results` reads the comparison: at least 10 videos each (5 only lift a prompt out of insufficient); the clear/indicative thresholds are corrected for the number of prompts compared. `create` runs the comparison: 2-4 prompt versions, each with its own videos (one script per video, 5-15 each, at most 40 in total, at most 20 when `videoType` is `full_lipsync`), rotated over the posting times of one account; `persona` and `account.accountId` take a name or an id. Call it without `quoteKey` for a quote (nothing is charged), then again with the `quoteKey` and `expiresAt` of that quote to charge the total once, schedule every video and start them; it returns the `scheduleId` (cancel with `schedules` `cancel`). A retry with the same `quoteKey` replays and never charges twice; a changed price or script answers `QUOTE_CHANGED`, an expired quote `QUOTE_EXPIRED`. Segment media must be public URLs. |
-| `media` | `upload`, `check` | Images for video segments. |
-| `billing` | `balance`, `transactions` | Prepaid tokens. |
+| `experiments` | `results` | Compares your prompts inside each publishing account: every post scheduled with a `promptVersionId` records its prompt version. Compare any number of prompts by rotating them round-robin on one account (at least 10 posts each; 5 only lift a prompt out of insufficient); the clear/indicative thresholds are corrected for the number of prompts compared. |
 | `prompts` | `list`, `get`, `create`, `update`, `delete`, `versions`, `restore` | Read and write prompts. `list` (optional `query` words and `source` own or community) and `get` return the account's own prompts (private ones included) and other users' public ones; unverified community prompts carry a notice, verified ones do not. `create`, `update`, `delete` and `restore` write the account's own prompts, private by default; only the owner can change one. `versions` only reads the account's own history: it lists a prompt's saved texts newest first (a short preview each, plus `currentVersion`; pass `version` to read one in full) and is owner-only. `restore` makes an old version the current text by writing it as a new version (pass the `currentVersion` as `expectedCurrentVersion`; the title stays, and experiment results count the new version separately). `visibility` `public` makes a prompt readable by anyone (no review while the product is in beta), `private` keeps it to the account. |
-| `check_script` | `validate`, `score` | Check a script before spending tokens. `validate` also checks an optional `hookTitle` with the same stable `HOOK_TITLE_*` codes `generate_video` returns. |
-| `publish_video` | `from_file`, `create_upload`, `complete_upload`, `publish_upload`, `publish_existing` | Publish media that already exists, with no generation and no charge. `publish_existing` takes a finished video (`taskId`), a completed upload (`uploadId`) or a local image (`imagePath`, stdio only; over HTTP an image goes through `create_upload` like a video, never as base64), sends it to every network of its `accounts` (names or ids, or the persona's bound accounts) in one call, and needs `mode`: `asap`, or `scheduled` once at `publishAt`. A retry with the same `idempotencyKey` replays the original result in both modes. Images (JPEG/PNG, 8 MB) post to Instagram, Bluesky (1 MB), LinkedIn, Threads, Facebook, Pinterest and Telegram; on YouTube an image becomes an 8-second vertical Short with background music (see [YouTube image posts](../../docs/youtube-image-posts.md)). |
 
-Actions that read a file from the disk (`publish_video` `from_file`, and a local `audioPath`/`avatarPath`/`path`) exist only on the stdio server: a path served over HTTP would resolve on the server's host. Over HTTP `persona_media` `add_image` and `media` `upload` take a public https `imageUrl` instead (JPG, PNG or WebP; the server resolves the host, refuses a non-public address, never follows a redirect and checks the real image bytes), and a video goes through the signed upload of `publish_video`.
+Actions that read a file from the disk (`publish_video` `from_file`, a local `imagePath` and a persona `avatarPath`) exist only on the stdio server: a path served over HTTP would resolve on the server's host. Over HTTP a video or an image goes through the signed upload of `publish_video`.
+
+### Free trial
+
+Every account starts with a 7-day free trial. While it runs, every action works. After it ends, the actions that publish or schedule (`publish_video`) fail with `TRIAL_EXPIRED`, and the error names the contact link; reading (posts, insights, experiments, personas, prompts) keeps working.
 
 ### Names instead of ids
 
-`persona` and `accounts` accept a display name or an id. An id wins; otherwise the name must match **exactly** (case-insensitive, trimmed; never a prefix). No match is an error that says how to list the candidates. Several matches is **not** an error and not a guess: the result lists the candidates and says nothing was done, so you call again with the id. In `generate_video` every reference of every video is resolved before the first video is created, and `accounts` omitted means the persona's bound publishing accounts.
-
-```json
-{ "videos": [ { "persona": "Maria", "accounts": ["Maria Cooks"], "title": "...", "description": "...", "segments": [ ... ], "mode": "asap", "options": { "videoType": "full_lipsync", "lipsyncPhotos": [ { "mediaId": "..." }, { "url": "https://..." } ] } } ] }
-```
-
-`full_lipsync` requires `options.lipsyncPhotos`: 2-5 different face photos of the persona (same person, other outfits, places or angles). The narration is cut into windows of at most 12s and each window shows the next photo, so send one photo per 12s of narration (2 for 24s, 4 for 48s, 5 for 60s).
-
-`mode: "scheduled"` (the default) slots a video 3h-30d ahead (`startAt` and `times`); `mode: "asap"` publishes it when generation finishes.
-
-Batch (2-12 videos) needs a `batchKey` and rejects `idempotencyKey`; one video takes an `idempotencyKey` and rejects `batchKey`. A batch is created video by video: if one fails, the earlier videos stay created; call again with the same `batchKey` and the same videos and the created ones replay without a new charge. A key whose schedule was deleted while one of its videos was already delivered is spent: reusing it answers 409 `IDEMPOTENCY_KEY_CONSUMED` and generates nothing, so send a new key. A key whose video was cancelled and fully refunded can be reused and is charged again.
+`persona` and `accounts` accept a display name or an id. An id wins; otherwise the name must match **exactly** (case-insensitive, trimmed; never a prefix). No match is an error that says how to list the candidates. Several matches is **not** an error and not a guess: the result lists the candidates and says nothing was done, so you call again with the id. In `publish_video` (`publish_existing`), `accounts` omitted means the persona's bound publishing accounts.
 
 ### Identity card
 
@@ -232,10 +207,9 @@ A persona can hold one **identity card**: the face and body traits that never ch
 1. `personas` `update` with `identityCard` (`null` removes it). Write cards as version 2: `{ "version": 2, "identity": { "face": { ... }, "body": { ... } }, "defaults": { "style": "business", "outfit": { ... } } }`. A stored version 1 card (no style, fewer leaves) still reads, renders and can be sent back. Fill the face and body once, from the base photo, with as many visible traits as you can and never an invented one: the face takes `shape`, `eyes`, `eye_color`, `eyebrows`, `nose`, `lips`, `teeth`, `smile`, `skin`, `jawline`, `cheekbones`, `chin`, `forehead`, `ears`, `hair` (`color`, `style`, `length`, `texture`, `parting`), `facial_hair`, `marks` and `tattoos`; the body takes `build`, `height`, `shoulders`, `arms`, `hands`, `waist`, `hips`, `legs`, `posture` and `proportions`. `defaults` must name a `style` or an `outfit`: the style is one of `casual`, `business`, `business_casual`, `formal`, `elegant`, `romantic`, `sensual`, `sporty`, `athleisure`, `streetwear`, `boho`, `minimalist`, `vintage`, `glamorous`, `edgy`, `cozy`, `beach`, `party`, `outdoor`. Every level is strict: an unknown key is a 400. Every trait is one line of at most 80 characters, at least one trait is required, and the whole card is at most 4096 bytes once stored (accented and non-Latin text takes more bytes). `personas` `create` takes the same field.
 2. `persona_media` `render_prompt` with a `scene` (`style`, `outfit`, `pose`, `setting`, `lighting`, `framing`, `aspect`). It returns `{ prompt, suggestedDescription, cardVersion }`, where `cardVersion` is the version of the stored card (1 or 2). The scene holds only what changes per photo: an `identity`, `face`, `body` or `version` key is rejected, and so are words about the person (hair, eyes, skin, build, height, beard, tattoo, smile, teeth, arms, legs, hips, waist, posture, jawline, cheekbones, chin, forehead, ears, ...) in `pose`, `setting` and the outfit slots; the harmless phrases `arms crossed`, `legs crossed`, `smiling`, `smile at the camera`, `high waist` and `high-waisted`, `hip bag`, `hip-length`, `hip-hop`, `arm warmers`, `leg warmers`, `ear muffs`, `hairpin`, `hair clip`, `hair tie`, `ear cuff`, `eye mask` (each in singular or plural), `-leg` trousers in one of the listed cuts (wide, straight, flared, tapered, bootcut, cropped, slim, skinny, relaxed, loose, carrot, barrel, balloon, peg, cigarette, baggy, boyfriend, mom, stovepipe), `hip-hugger`, `hip pocket`, `hip seam`, `hip-slung`, `hip yoke` and `hip belt` garments (each in singular or plural), `body of water`, `skintight`, `eyewear`, `eyeglasses` and `eyelet`, and, in `pose` and `setting`, `ginger tea`, `bald eagle`, `sheer curtains`, `transparent glass`, `hairpin turn`, `arm wrestling`, `leg day`, `sweet tooth`, `chair leg`, `leg room`, `table leg`, `bed leg`, `desk leg`, `sofa leg`, `arm day`, `leg press`, `leg curl` (with or without `machine`), `hair dryer`, `tooth fairy`, `eagle eye`, `eye candy`, `arm chair` and `arm rest` are allowed. `skinny` and `skinny-leg` are allowed in the outfit slots only: they are rejected in `pose` and `setting`. To change only the clothing, send a `style` and no outfit slots: the style replaces the card's default outfit for that photo and the prompt carries a safe description of it. A scene outfit without a style merges slot by slot over the default outfit (a one-piece replaces the default top and bottom, and the other way round); a scene outfit with a style stands alone and the style fills the unnamed garments. Never write a style word in `outfit`, `pose` or `setting`. `persona_media` `get_card` reads the stored card.
 3. Make the image with **your own** image tool, using the persona's base photo as the reference and the returned `prompt` as the instruction. Always edit from the original base photo, never from a previous edit.
-4. `persona_media` `add_image` with `description` set to the returned `suggestedDescription`. It is built from the outfit, setting, lighting and framing only, so the per-video image selection keeps matching on the scene.
-5. Use the new photos in `generate_video` `options.lipsyncPhotos` for `full_lipsync` (2-5 photos of the same person).
+4. Use `suggestedDescription` as the caption or alt text of the photo when you publish it. It is built from the outfit, setting, lighting and framing only.
 
-**This is advice, not enforcement.** The server stores the card and renders text. It generates no image, charges no tokens and calls no image model, so nothing stops your image tool from ignoring the prompt, and the word list on the scene is best effort: a paraphrase gets through. The prompt text lives in one place, `apps/web/lib/persona-identity-prompt.ts`; read it there instead of copying it.
+**This is advice, not enforcement.** The server stores the card and renders text. It generates no image and calls no image model, so nothing stops your image tool from ignoring the prompt, and the word list on the scene is best effort: a paraphrase gets through. The prompt text lives in one place, `apps/web/lib/persona-identity-prompt.ts`; read it there instead of copying it.
 
 Content rules:
 
@@ -245,34 +219,38 @@ Content rules:
 
 ### Measuring the size of `tools/list`
 
-See "Measuring the `tools/list` payload" above. The 17 tools weigh about 60 KB on the stdio server (the 56 tools they replace weighed about 102 KB).
+See "Measuring the `tools/list` payload" above. Run it to see the current size of the 10 tools.
+
+### Breaking change: video generation and tokens are gone
+
+Post Engineer no longer generates video and has no tokens. These tools and actions were removed with no replacement: `generate_video`, `video_tasks`, `cancel_video`, `voices`, `media`, `billing`, `check_script`, and the `persona_media` actions `list_faces`, `list_images`, `add_image`, `update_image` and `remove_image`. `publish_video` `publish_existing` no longer takes a `taskId`. Make the media with your own tool and publish it with `publish_video`.
 
 ### Breaking change: the 56 old tool names are gone
 
-There is no alias for the old names. Saved prompts, recipes and agent configuration that call them must be updated:
+There is no alias for the old names. Saved prompts, recipes and agent configuration that call them must be updated ("removed" means there is no replacement):
 
 | Old tool | Now |
 |---|---|
-| `generate_persona_video`, `generate_persona_video_batch` | `generate_video` (`videos` has 1-12 entries) |
-| `get_video_status`, `get_video_task_progress`, `wait_for_video_tasks` | `video_tasks` `status` (`taskIds`, `waitSeconds`) |
-| `list_video_generations`, `get_video_generation` | `video_tasks` `list_generations`, `get_generation` |
-| `cancel_video_task` | `cancel_video` |
+| `generate_persona_video`, `generate_persona_video_batch` | removed |
+| `get_video_status`, `get_video_task_progress`, `wait_for_video_tasks` | removed |
+| `list_video_generations`, `get_video_generation` | removed |
+| `cancel_video_task` | removed |
 | `list_personas`, `create_persona`, `update_persona` | `personas` `list`, `create`, `update` |
 | `get_persona_delete_preview`, `delete_persona` | `personas` `delete` (no token = preview, then the token deletes) |
-| `list_faces`, `list_persona_images`, `add_persona_image`, `update_persona_image`, `remove_persona_image` | `persona_media` `list_faces`, `list_images`, `add_image`, `update_image`, `remove_image` |
-| `list_voices`, `preview_house_voice` | `voices` `list`, `preview` |
-| `list_cloned_voices`, `create_cloned_voice`, `get_cloned_voice`, `preview_cloned_voice`, `delete_cloned_voice` | `voices` `list_clones`, `create_clone`, `get_clone`, `preview_clone`, `delete_clone` |
+| `list_faces`, `list_persona_images`, `add_persona_image`, `update_persona_image`, `remove_persona_image` | removed |
+| `list_voices`, `preview_house_voice` | removed |
+| `list_cloned_voices`, `create_cloned_voice`, `get_cloned_voice`, `preview_cloned_voice`, `delete_cloned_voice` | removed |
 | `list_social_accounts`, `connect_account`, `disconnect_account` | `accounts` `list`, `connect`, `disconnect` |
 | `get_persona_publishing_accounts`, `set_persona_publishing_accounts`, `list_pinterest_boards` | `accounts` `get_persona_publishing`, `set_persona_publishing`, `list_boards` |
 | `list_schedules`, `cancel_schedule`, `get_slot`, `update_slot_title`, `delete_slot` | `schedules` `list`, `cancel`, `get_slot`, `update_slot_title`, `delete_slot` |
 | `list_posts`, `get_post` | `posts` `list`, `get` |
 | `get_post_metrics`, `get_youtube_retention_curve` | `insights` `post_metrics`, `retention_curve` |
 | `get_experiment_results` | `experiments` `results` |
-| `upload_media`, `check_media` | `media` `upload`, `check` |
-| `get_token_balance`, `list_token_transactions` | `billing` `balance`, `transactions` |
+| `upload_media`, `check_media` | removed |
+| `get_token_balance`, `list_token_transactions` | removed |
 | `list_prompts`, `get_prompt` | `prompts` `list`, `get` |
 | `prompt_library` (every action) | `prompts` (same action names: `create`, `update`, `delete`, `versions`, `restore`) |
-| `validate_script`, `score_draft` | `check_script` `validate`, `score` |
+| `validate_script`, `score_draft` | removed |
 | `publish_video_direct`, `create_video_upload`, `complete_video_upload`, `publish_uploaded_video` | `publish_video` `from_file`, `create_upload`, `complete_upload`, `publish_upload` |
 
 ## Prompts (slash commands)
@@ -291,10 +269,8 @@ the same prompts through MCP **tools**: `prompts (action: list)` lists them
 (slug/title/description) and `prompts (action: get)` returns one prompt's full text by
 `slug`. The server's initialize instructions point agents there for
 topic-shaped requests. Until the agent lists or fetches a prompt, the results
-of `personas (action: create)`, `personas (action: list)`, `accounts (action: list)`, and
-`billing (action: balance)` end with a short next-step block pointing at
-`prompts (action: list)`, and a script rejected by `check_script (action: validate)` or
-`generate_video` gets a hint that recipes produce scripts that pass.
+of `personas (action: create)`, `personas (action: list)`, and `accounts (action: list)` end with a short next-step block pointing at
+`prompts (action: list)`.
 
 To add a prompt, create it on https://post-engineer.com/recipes or with
 `prompts (action: create)`, and make it public to share it. The MCP

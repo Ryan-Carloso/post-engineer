@@ -5,16 +5,10 @@ export interface ScheduledSlot {
   id: string;
   scheduleId: string;
   slotAt: string;
-  status: 'awaiting' | 'generating' | 'ready' | 'publishing' | 'published' | 'failed';
+  status: 'ready' | 'publishing' | 'published' | 'failed';
   title: string | null;
   error?: string | null;
   publishedAt?: string | null;
-  taskId?: string | null;
-  progress: number;
-  stage: string | null;
-  queuePosition: number | null;
-  queueTotal: number | null;
-  retryable: boolean | null;
   userNotices?: PublishUserNotice[];
   providerFailures?: PublishProviderFailure[];
 }
@@ -27,12 +21,6 @@ export interface SlotRow {
   title: string | null;
   error?: string | null;
   published_at?: string | null;
-  task_id?: string | null;
-  progress?: number;
-  stage?: string | null;
-  queuePosition?: number | null;
-  queueTotal?: number | null;
-  retryable?: boolean | null;
   userNotices?: PublishUserNotice[];
   providerFailures?: PublishProviderFailure[];
 }
@@ -53,12 +41,6 @@ export function mapSlot(row: SlotRow): ScheduledSlot {
     title: row.title,
     error: row.error,
     publishedAt: row.published_at,
-    taskId: row.task_id ?? null,
-    progress: typeof row.progress === 'number' ? row.progress : 0,
-    stage: typeof row.stage === 'string' ? row.stage : null,
-    queuePosition: typeof row.queuePosition === 'number' ? row.queuePosition : null,
-    queueTotal: typeof row.queueTotal === 'number' ? row.queueTotal : null,
-    retryable: typeof row.retryable === 'boolean' ? row.retryable : null,
     userNotices: row.userNotices,
     providerFailures: row.providerFailures,
   };

@@ -9,10 +9,6 @@ const WEB_ROOT = join(findRepoRoot(import.meta.url), 'apps', 'web');
 
 const GATED_ROUTES = [
   'app/api/upload-content/route.ts',
-  'app/api/media/upload/route.ts',
-  'app/api/persona/cloned-voices/route.ts',
-  'app/api/persona/cloned-voices/denoise-preview/route.ts',
-  'app/api/persona/images/route.ts',
 ];
 
 const UNGATED_FORM_DATA_READERS = [

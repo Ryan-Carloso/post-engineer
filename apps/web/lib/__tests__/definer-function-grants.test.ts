@@ -12,10 +12,7 @@ const DEFINER_TRIGGER_FUNCTIONS = new Set([
   'post_metrics_set_persona',
   'post_metrics_set_prompt_version',
   'user_prompts_record_version',
-  'enforce_persona_image_limit',
 ]);
-
-const AUTHENTICATED_DEFINER_RPCS = new Set(['set_primary_persona_image']);
 
 const SCHEDULER_LEASE_FUNCTIONS = new Set([
   'try_acquire_scheduler_lease',
@@ -134,18 +131,12 @@ describe('definer-function-grants', () => {
         'delete_slot_if_not_last',
         'find_post_metrics_daily_due',
         'find_post_metrics_due',
-        'find_stuck_generations',
-        'find_zombie_schedule_candidates',
         'mark_publish_unknown',
         'record_publish_ledger',
-        'refund_batch_tokens',
         'register_mcp_refresh_token',
         'release_owner_alert',
         'reset_post_metrics_windows',
-        'restore_batch_discount_credit',
         'rotate_mcp_refresh_token',
-        'set_primary_persona_image',
-        'settle_batch_clawback',
         'share_week_posts',
         'touch_publish_ledger',
       ].sort(),
@@ -158,7 +149,6 @@ describe('definer-function-grants', () => {
     const chain = chainText();
     const { definers, finalCreateIndex, recreated } = finalSchema();
     const restricted = new Set([...definers, ...SCHEDULER_LEASE_FUNCTIONS]);
-    for (const name of AUTHENTICATED_DEFINER_RPCS) restricted.delete(name);
     for (const name of restricted) {
       const scope = recreated.has(name) ? chain.slice(finalCreateIndex.get(name) ?? 0) : chain;
       expect(hasRevoke(scope, name, 'anon'), `${name} must revoke EXECUTE from anon`).toBe(true);
@@ -171,41 +161,6 @@ describe('definer-function-grants', () => {
         `${name} must grant EXECUTE to service_role`,
       ).toBe(true);
     }
-  });
-
-  it('keeps set_primary_persona_image callable for the browser and enforces auth.uid() ownership', () => {
-    const chain = chainText();
-    expect(hasRevoke(chain, 'set_primary_persona_image', 'anon')).toBe(true);
-    expect(hasRevoke(chain, 'set_primary_persona_image', 'authenticated')).toBe(false);
-    expect(
-      /grant\s+execute\s+on\s+function\s+public\.set_primary_persona_image\b[^;]*to\s+service_role\b/i.test(chain),
-    ).toBe(true);
-    expect(
-      /grant\s+execute\s+on\s+function\s+public\.set_primary_persona_image\b[^;]*to\s+authenticated\b/i.test(chain),
-    ).toBe(true);
-    const grants065 = readFileSync(join(MIGRATIONS_DIR, '065_definer-function-grants.sql'), 'utf8');
-    const latest = readFileSync(join(MIGRATIONS_DIR, '066_core-tables-rls.sql'), 'utf8');
-    expect(grants065).toContain('coalesce(auth.uid(), p_user_id)');
-    expect(grants065).not.toContain('coalesce(p_user_id, auth.uid())');
-    expect(latest).toContain('coalesce(auth.uid(), p_user_id)');
-    expect(latest).not.toContain('coalesce(p_user_id, auth.uid())');
-    const definition = latest.match(
-      /create\s+(?:or\s+replace\s+)?function\s+public\.set_primary_persona_image[\s\S]*?as\s+\$\$/i,
-    );
-    expect(definition?.[0]).toContain('security definer');
-    expect(definition?.[0]).toContain('set search_path = public');
-    const trigger = latest.match(
-      /create\s+(?:or\s+replace\s+)?function\s+public\.enforce_persona_image_limit[\s\S]*?as\s+\$\$/i,
-    );
-    expect(trigger?.[0]).toContain('security definer');
-    expect(trigger?.[0]).toContain('set search_path = public');
-    expect(trigger?.[0]).toMatch(/returns\s+trigger/i);
-  });
-
-  it('restricts record_persona_image_use to service_role like other infrastructure RPCs', () => {
-    const chain = chainText();
-    expect(hasRevoke(chain, 'record_persona_image_use', 'anon')).toBe(true);
-    expect(hasRevoke(chain, 'record_persona_image_use', 'authenticated')).toBe(true);
   });
 
   it('pins search_path on the slot-delete guard so a definer body cannot be hijacked', () => {
@@ -226,16 +181,7 @@ describe('definer-function-grants', () => {
     expect(snapshot.tables['mcp_oauth_clients']?.rls).toBe(true);
   });
 
-  it('calls the service-only refund and slot-delete RPCs with the service client, never the cookie client', () => {
-    const scheduleRoute = readFileSync(
-      join(root, 'apps', 'web', 'app', 'api', 'schedule', 'route.ts'),
-      'utf8',
-    );
-    expect(scheduleRoute).toContain('refundsAfterClawback(createSupabaseServiceClient()');
-    const refundIndex = scheduleRoute.indexOf('refundSlotTokens({');
-    expect(refundIndex).toBeGreaterThan(-1);
-    expect(scheduleRoute.slice(refundIndex, refundIndex + 400)).toContain('createSupabaseServiceClient()');
-
+  it('calls the service-only slot-delete RPC with the service client, never the cookie client', () => {
     const slotsRoute = readFileSync(
       join(root, 'apps', 'web', 'app', 'api', 'schedule', 'slots', '[slotId]', 'route.ts'),
       'utf8',

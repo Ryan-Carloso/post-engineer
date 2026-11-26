@@ -9,11 +9,12 @@ const root = findRepoRoot(import.meta.url);
 const read = (...parts: string[]): string => readFileSync(join(root, ...parts), 'utf8');
 
 const migration = read('supabase', 'migrations', '080_share-links.sql');
+const latestShareWeekPosts = read('supabase', 'migrations', '087_remove-generation-and-tokens.sql');
 
-function functionBody(name: string): string {
-  const start = migration.indexOf(`create or replace function public.${name}(`);
-  const end = migration.indexOf('$$;', migration.indexOf('as $$', start));
-  return migration.slice(start, end);
+function functionBody(name: string, source = migration): string {
+  const start = source.indexOf(`create or replace function public.${name}(`);
+  const end = source.indexOf('$$;', source.indexOf('as $$', start));
+  return source.slice(start, end);
 }
 
 function paramNames(name: string): string[] {
@@ -23,8 +24,8 @@ function paramNames(name: string): string[] {
 }
 
 describe('080_share-links migration', () => {
-  it('lists in share_week_posts exactly the statuses the schedule contract treats as listable', () => {
-    const match = /sp\.status in \(([^)]*)\)/.exec(functionBody('share_week_posts'));
+  it('lists in the latest share_week_posts exactly the statuses the schedule contract treats as listable', () => {
+    const match = /sp\.status in \(([^)]*)\)/.exec(functionBody('share_week_posts', latestShareWeekPosts));
     const statuses = [...(match?.[1] ?? '').matchAll(/'([a-z]+)'/g)].map((item) => item[1]);
     expect(statuses).toEqual([...RANGE_STATUSES]);
   });

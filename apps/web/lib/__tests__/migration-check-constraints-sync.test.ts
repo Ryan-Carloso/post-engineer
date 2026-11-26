@@ -3,15 +3,12 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
 import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
-import { GENERATION_PUBLISH_MODES } from '@/lib/generation/video-generation';
+import { ScheduleRowSchema } from '@/lib/contracts/schedule';
 import { PUBLISH_LEDGER_STATUSES } from '@/lib/upload/publish-ledger';
 import { ANALYTICS_STATUSES, METRICS_WINDOWS } from '@/lib/metrics/metrics-query';
-import { VIDEO_LAYOUTS } from '@/lib/persona-schema';
-import { VIDEO_TYPES } from '@/lib/tokens';
 import { VIDEO_UPLOAD_STATUSES } from '@/lib/videos/signed-upload';
 import { UPLOAD_CONTENT_TYPES } from '@/lib/contracts/videos';
 import { SCHEDULED_MEDIA_KINDS } from '@/app/api/media/publish-existing/schema';
-import { PERSONA_CTA_TYPES } from '@/lib/contracts/personas';
 import { PROMPT_VISIBILITIES } from '@/lib/contracts/prompts';
 import { PROMPT_VERSION_SOURCES } from '@/lib/contracts/experiments';
 import { TOOL_CONFIG_SEARCH_TOOLS, TOOL_CONFIG_STOCK_SOURCES } from '@/lib/tool-config';
@@ -63,22 +60,15 @@ const EXPECTED: Record<string, readonly string[]> = {
   social_accounts_provider_check: SOCIAL_PROVIDERS,
   post_metrics_provider_check: SOCIAL_PROVIDERS,
   post_metrics_daily_provider_check: SOCIAL_PROVIDERS,
-  schedules_publish_mode_check: GENERATION_PUBLISH_MODES,
-  video_generations_publish_mode_check: GENERATION_PUBLISH_MODES,
-  personas_video_layout_check: VIDEO_LAYOUTS,
-  scheduled_posts_voiceover_material_check: ['images'],
-  scheduled_posts_video_type_check: VIDEO_TYPES,
+  schedules_publish_mode_check: ScheduleRowSchema.shape.publish_mode.options,
   post_metrics_metrics_window_check: METRICS_WINDOWS,
   post_metrics_done_metrics_window_check: METRICS_WINDOWS,
   post_metrics_analytics_status_check: ANALYTICS_STATUSES,
-  cloned_voices_status_check: ['pending', 'ready', 'failed'],
   publish_ledger_status_check: PUBLISH_LEDGER_STATUSES,
   video_uploads_status_check: VIDEO_UPLOAD_STATUSES,
   video_uploads_declared_content_type_check: UPLOAD_CONTENT_TYPES,
   video_uploads_detected_content_type_check: UPLOAD_CONTENT_TYPES,
   scheduled_posts_media_kind_check: SCHEDULED_MEDIA_KINDS,
-  personas_cta_type_check: PERSONA_CTA_TYPES,
-  schedules_post_cta_type_check: PERSONA_CTA_TYPES,
   user_tool_configs_search_tool_check: TOOL_CONFIG_SEARCH_TOOLS,
   user_tool_configs_stock_sources_check: TOOL_CONFIG_STOCK_SOURCES,
   user_prompts_visibility_check: PROMPT_VISIBILITIES,

@@ -85,7 +85,7 @@ beforeEach(() => {
   signOutMock.mockResolvedValue({ error: null });
   mockFetch.mockResolvedValue({
     ok: true,
-    json: async () => ({ success: true, balance: 45, free: 0 }),
+    json: async () => ({}),
   });
   vi.mocked(useSessionQuery).mockReturnValue({
     data: SESSION_USER,
@@ -129,18 +129,11 @@ describe('AccountPanel', () => {
     expect(screen.getByTestId('mobile-profile-link')).toHaveAttribute('data-ui-diff-mask');
   });
 
-  it('renders the token balance fetched from the API', async () => {
-    render(<AccountPanel />, { wrapper: createWrapper() });
-    await waitFor(() => {
-      expect(screen.getByTestId('token-balance')).toHaveTextContent('45');
-    });
-  });
-
   it('renders the version badge when showVersionBadge is set', async () => {
     mockFetch.mockImplementation(async (url: string) =>
       url === '/api/version'
         ? { ok: true, json: async () => ({ version: '1.8.0', build: 502, commit: 'abc123' }) }
-        : { ok: true, json: async () => ({ success: true, balance: 45, free: 0 }) },
+        : { ok: false, status: 404, json: async () => ({}) },
     );
     render(<AccountPanel showVersionBadge />, { wrapper: createWrapper() });
     await waitFor(() => {
@@ -167,12 +160,10 @@ describe('AccountPanel', () => {
     expect(within(link).getByTestId('icon-key')).toBeInTheDocument();
   });
 
-  it('renders the Billing row linking to /billing', () => {
+  it('renders no token balance and no billing row', () => {
     render(<AccountPanel />, { wrapper: createWrapper() });
-    const link = screen.getByTestId('profile-billing-link');
-    expect(link).toHaveAttribute('href', '/billing');
-    expect(link).toHaveTextContent('account.billingLink');
-    expect(within(link).getByTestId('icon-coins')).toBeInTheDocument();
+    expect(screen.queryByTestId('token-balance')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('profile-billing-link')).not.toBeInTheDocument();
   });
 
   it('signs out and routes to /login when the sign-out button is clicked', async () => {
@@ -332,7 +323,6 @@ describe('AccountPanel', () => {
     render(<AccountPanel />, { wrapper: createWrapper() });
     expect(screen.queryByTestId('profile-user-link')).not.toBeInTheDocument();
     expect(screen.queryByTitle('nav.signOut')).not.toBeInTheDocument();
-    expect(screen.getByTestId('token-balance')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'PT' })).toBeInTheDocument();
   });
 });

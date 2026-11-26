@@ -1,9 +1,5 @@
 {
     "enums": {
-        "face_quality": [
-            "ok",
-            "very_good"
-        ]
     },
     "tables": {
         "personas": {
@@ -40,93 +36,9 @@
                     "notNull": false
                 },
                 {
-                    "name": "voice_id",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "voice_audio_path",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
                     "name": "created_at",
                     "type": "timestamp with time zone",
                     "default": "now()",
-                    "notNull": true
-                },
-                {
-                    "name": "language",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "video_aspect",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "script_prompt",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "paragraph_number",
-                    "type": "integer",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "niche",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "face_quality",
-                    "type": "face_quality",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "recent_image_ids",
-                    "type": "uuid[]",
-                    "default": "'{}'::uuid[]",
-                    "notNull": true
-                },
-                {
-                    "name": "video_layout",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "cta_type",
-                    "type": "text",
-                    "default": "'follow'::text",
-                    "notNull": true
-                },
-                {
-                    "name": "cta_url",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "cta_instruction",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "hook_panel",
-                    "type": "boolean",
-                    "default": "true",
                     "notNull": true
                 },
                 {
@@ -151,12 +63,8 @@
             },
             "constraints": {
                 "personas_pkey": "PRIMARY KEY (id)",
-                "personas_cta_type_check": "CHECK ((cta_type = ANY (ARRAY['follow'::text, 'comment'::text, 'share'::text, 'save'::text, 'link'::text, 'buy'::text, 'other'::text])))",
-                "personas_video_layout_check": "CHECK (((video_layout IS NULL) OR (video_layout = ANY (ARRAY['standard'::text, 'react'::text]))))",
-                "personas_cta_url_length_check": "CHECK (((cta_url IS NULL) OR (char_length(cta_url) <= 2048)))",
                 "personas_visual_identity_check": "CHECK (((photo_path IS NULL) OR (avatar_url IS NULL))) NOT VALID",
-                "personas_identity_card_object_check": "CHECK (((identity_card IS NULL) OR (jsonb_typeof(identity_card) = 'object'::text)))",
-                "personas_cta_instruction_length_check": "CHECK (((cta_instruction IS NULL) OR (char_length(cta_instruction) <= 500)))"
+                "personas_identity_card_object_check": "CHECK (((identity_card IS NULL) OR (jsonb_typeof(identity_card) = 'object'::text)))"
             }
         },
         "schedules": {
@@ -271,58 +179,10 @@
                     "notNull": true
                 },
                 {
-                    "name": "post_voice_id",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "post_voice_audio_url",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "post_niche",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "post_language",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "post_video_aspect",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "post_paragraph_number",
-                    "type": "integer",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "post_face_quality",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
                     "name": "publish_mode",
                     "type": "text",
                     "default": "'scheduled'::text",
                     "notNull": true
-                },
-                {
-                    "name": "post_video_layout",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
                 },
                 {
                     "name": "threads_account_ids",
@@ -371,30 +231,6 @@
                     "type": "text[]",
                     "default": "'{}'::text[]",
                     "notNull": true
-                },
-                {
-                    "name": "post_cta_type",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "post_cta_url",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "post_cta_instruction",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "post_hook_panel",
-                    "type": "boolean",
-                    "default": null,
-                    "notNull": false
                 }
             ],
             "policies": {
@@ -406,10 +242,7 @@
             },
             "constraints": {
                 "schedules_pkey": "PRIMARY KEY (id)",
-                "schedules_publish_mode_check": "CHECK ((publish_mode = ANY (ARRAY['scheduled'::text, 'asap'::text])))",
-                "schedules_post_cta_type_check": "CHECK ((post_cta_type = ANY (ARRAY['follow'::text, 'comment'::text, 'share'::text, 'save'::text, 'link'::text, 'buy'::text, 'other'::text])))",
-                "schedules_post_cta_url_length_check": "CHECK (((post_cta_url IS NULL) OR (char_length(post_cta_url) <= 2048)))",
-                "schedules_post_cta_instruction_length_check": "CHECK (((post_cta_instruction IS NULL) OR (char_length(post_cta_instruction) <= 500)))"
+                "schedules_publish_mode_check": "CHECK ((publish_mode = ANY (ARRAY['scheduled'::text, 'asap'::text])))"
             }
         },
         "share_links": {
@@ -621,12 +454,6 @@
                     "notNull": false
                 },
                 {
-                    "name": "script_angle",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
                     "name": "analytics_views",
                     "type": "bigint",
                     "default": null,
@@ -773,83 +600,6 @@
                 "user_prompts_owner_slug_unique": "UNIQUE (owner_id, slug)"
             }
         },
-        "cloned_voices": {
-            "rls": true,
-            "columns": [
-                {
-                    "name": "id",
-                    "type": "uuid",
-                    "default": "gen_random_uuid()",
-                    "notNull": true
-                },
-                {
-                    "name": "user_id",
-                    "type": "uuid",
-                    "default": null,
-                    "notNull": true
-                },
-                {
-                    "name": "status",
-                    "type": "text",
-                    "default": "'pending'::text",
-                    "notNull": true
-                },
-                {
-                    "name": "consent_at",
-                    "type": "timestamp with time zone",
-                    "default": null,
-                    "notNull": true
-                },
-                {
-                    "name": "storage_path",
-                    "type": "text",
-                    "default": null,
-                    "notNull": true
-                },
-                {
-                    "name": "engine_voice_key",
-                    "type": "text",
-                    "default": null,
-                    "notNull": true
-                },
-                {
-                    "name": "language",
-                    "type": "text",
-                    "default": null,
-                    "notNull": true
-                },
-                {
-                    "name": "error_code",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "created_at",
-                    "type": "timestamp with time zone",
-                    "default": "now()",
-                    "notNull": true
-                },
-                {
-                    "name": "updated_at",
-                    "type": "timestamp with time zone",
-                    "default": "now()",
-                    "notNull": true
-                }
-            ],
-            "policies": {
-                "cloned_voices_owner_all": {
-                    "cmd": "*",
-                    "qual": "(user_id = auth.uid())",
-                    "withCheck": "(user_id = auth.uid())"
-                }
-            },
-            "constraints": {
-                "cloned_voices_pkey": "PRIMARY KEY (id)",
-                "cloned_voices_status_check": "CHECK ((status = ANY (ARRAY['pending'::text, 'ready'::text, 'failed'::text])))",
-                "cloned_voices_user_voice_key_unique": "UNIQUE (user_id, engine_voice_key)"
-            }
-        },
         "user_api_keys": {
             "rls": true,
             "columns": [
@@ -924,18 +674,6 @@
                     "notNull": true
                 },
                 {
-                    "name": "stripe_customer_id",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "tokens_balance",
-                    "type": "numeric",
-                    "default": "0",
-                    "notNull": true
-                },
-                {
                     "name": "created_at",
                     "type": "timestamp with time zone",
                     "default": "now()",
@@ -948,9 +686,9 @@
                     "notNull": true
                 },
                 {
-                    "name": "free_tokens_balance",
-                    "type": "numeric",
-                    "default": "0",
+                    "name": "trial_ends_at",
+                    "type": "timestamp with time zone",
+                    "default": "(now() + '7 days'::interval)",
                     "notNull": true
                 }
             ],
@@ -1043,70 +781,6 @@
                 "video_uploads_storage_path_key": "UNIQUE (storage_path)",
                 "video_uploads_declared_content_type_check": "CHECK (((declared_content_type IS NULL) OR (declared_content_type = ANY (ARRAY['video/mp4'::text, 'video/quicktime'::text, 'image/jpeg'::text, 'image/png'::text]))))",
                 "video_uploads_detected_content_type_check": "CHECK (((detected_content_type IS NULL) OR (detected_content_type = ANY (ARRAY['video/mp4'::text, 'video/quicktime'::text, 'image/jpeg'::text, 'image/png'::text]))))"
-            }
-        },
-        "persona_images": {
-            "rls": true,
-            "columns": [
-                {
-                    "name": "id",
-                    "type": "uuid",
-                    "default": "gen_random_uuid()",
-                    "notNull": true
-                },
-                {
-                    "name": "persona_id",
-                    "type": "uuid",
-                    "default": null,
-                    "notNull": true
-                },
-                {
-                    "name": "user_id",
-                    "type": "uuid",
-                    "default": null,
-                    "notNull": true
-                },
-                {
-                    "name": "image_path",
-                    "type": "text",
-                    "default": null,
-                    "notNull": true
-                },
-                {
-                    "name": "tag",
-                    "type": "text",
-                    "default": "''::text",
-                    "notNull": true
-                },
-                {
-                    "name": "description",
-                    "type": "text",
-                    "default": "''::text",
-                    "notNull": true
-                },
-                {
-                    "name": "is_primary",
-                    "type": "boolean",
-                    "default": "false",
-                    "notNull": true
-                },
-                {
-                    "name": "created_at",
-                    "type": "timestamp with time zone",
-                    "default": "now()",
-                    "notNull": true
-                }
-            ],
-            "policies": {
-                "persona_images_owner_all": {
-                    "cmd": "*",
-                    "qual": "((auth.uid() = user_id) AND (EXISTS ( SELECT 1\n   FROM personas p\n  WHERE ((p.id = persona_images.persona_id) AND (p.user_id = auth.uid())))))",
-                    "withCheck": "((auth.uid() = user_id) AND (EXISTS ( SELECT 1\n   FROM personas p\n  WHERE ((p.id = persona_images.persona_id) AND (p.user_id = auth.uid())))))"
-                }
-            },
-            "constraints": {
-                "persona_images_pkey": "PRIMARY KEY (id)",
-                "fk_persona_images_persona": "FOREIGN KEY (persona_id) REFERENCES personas(id) ON DELETE CASCADE"
             }
         },
         "publish_ledger": {
@@ -1305,12 +979,6 @@
                     "notNull": true
                 },
                 {
-                    "name": "task_id",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
                     "name": "error",
                     "type": "text",
                     "default": null,
@@ -1335,12 +1003,6 @@
                     "notNull": true
                 },
                 {
-                    "name": "voiceover",
-                    "type": "boolean",
-                    "default": "false",
-                    "notNull": true
-                },
-                {
                     "name": "publish_attempts",
                     "type": "integer",
                     "default": "0",
@@ -1353,49 +1015,7 @@
                     "notNull": false
                 },
                 {
-                    "name": "voiceover_material",
-                    "type": "text",
-                    "default": "'images'::text",
-                    "notNull": true
-                },
-                {
-                    "name": "segments",
-                    "type": "jsonb",
-                    "default": null,
-                    "notNull": false
-                },
-                {
                     "name": "title",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "full_lipsync",
-                    "type": "boolean",
-                    "default": "false",
-                    "notNull": true
-                },
-                {
-                    "name": "charged_tokens",
-                    "type": "integer",
-                    "default": null,
-                    "notNull": true
-                },
-                {
-                    "name": "batch_id",
-                    "type": "uuid",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "discount_tokens",
-                    "type": "integer",
-                    "default": "0",
-                    "notNull": true
-                },
-                {
-                    "name": "music_mood",
                     "type": "text",
                     "default": null,
                     "notNull": false
@@ -1411,12 +1031,6 @@
                     "type": "text",
                     "default": null,
                     "notNull": false
-                },
-                {
-                    "name": "video_type",
-                    "type": "text",
-                    "default": "'hook_lipsync'::text",
-                    "notNull": true
                 },
                 {
                     "name": "media_kind",
@@ -1447,18 +1061,6 @@
                     "type": "uuid",
                     "default": null,
                     "notNull": false
-                },
-                {
-                    "name": "lipsync_photos",
-                    "type": "jsonb",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "hook_title",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
                 }
             ],
             "policies": {
@@ -1472,12 +1074,7 @@
                 "scheduled_posts_pkey": "PRIMARY KEY (id)",
                 "scheduled_posts_media_ref_check": "CHECK (((media_kind IS NULL) OR (media_ref IS NOT NULL)))",
                 "scheduled_posts_media_kind_check": "CHECK (((media_kind IS NULL) OR (media_kind = ANY (ARRAY['upload'::text, 'image'::text]))))",
-                "scheduled_posts_video_type_check": "CHECK ((video_type = ANY (ARRAY['full_lipsync'::text, 'hook_lipsync'::text, 'voiceover'::text])))",
-                "scheduled_posts_charged_tokens_check": "CHECK ((charged_tokens >= 0))",
-                "scheduled_posts_discount_tokens_check": "CHECK ((discount_tokens >= 0))",
-                "scheduled_posts_prompt_version_id_fkey": "FOREIGN KEY (prompt_version_id) REFERENCES prompt_versions(id) ON DELETE SET NULL",
-                "scheduled_posts_hook_title_length_check": "CHECK (((hook_title IS NULL) OR ((char_length(hook_title) >= 1) AND (char_length(hook_title) <= 60))))",
-                "scheduled_posts_voiceover_material_check": "CHECK ((voiceover_material = 'images'::text))"
+                "scheduled_posts_prompt_version_id_fkey": "FOREIGN KEY (prompt_version_id) REFERENCES prompt_versions(id) ON DELETE SET NULL"
             }
         },
         "social_accounts": {
@@ -1656,52 +1253,6 @@
                 "scheduler_leases_pkey": "PRIMARY KEY (job)"
             }
         },
-        "engine_task_state": {
-            "rls": true,
-            "columns": [
-                {
-                    "name": "task_id",
-                    "type": "text",
-                    "default": null,
-                    "notNull": true
-                },
-                {
-                    "name": "user_id",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "state",
-                    "type": "integer",
-                    "default": "0",
-                    "notNull": true
-                },
-                {
-                    "name": "progress",
-                    "type": "integer",
-                    "default": "0",
-                    "notNull": true
-                },
-                {
-                    "name": "data",
-                    "type": "jsonb",
-                    "default": "'{}'::jsonb",
-                    "notNull": true
-                },
-                {
-                    "name": "updated_at",
-                    "type": "timestamp with time zone",
-                    "default": "now()",
-                    "notNull": true
-                }
-            ],
-            "policies": {
-            },
-            "constraints": {
-                "engine_task_state_pkey": "PRIMARY KEY (task_id)"
-            }
-        },
         "mcp_oauth_clients": {
             "rls": true,
             "columns": [
@@ -1808,124 +1359,6 @@
                 "user_tool_configs_stock_sources_check": "CHECK ((stock_sources <@ ARRAY['pexels'::text, 'pixabay'::text, 'coverr'::text]))"
             }
         },
-        "video_generations": {
-            "rls": true,
-            "columns": [
-                {
-                    "name": "id",
-                    "type": "uuid",
-                    "default": "gen_random_uuid()",
-                    "notNull": true
-                },
-                {
-                    "name": "user_id",
-                    "type": "uuid",
-                    "default": null,
-                    "notNull": true
-                },
-                {
-                    "name": "generation_id",
-                    "type": "text",
-                    "default": null,
-                    "notNull": true
-                },
-                {
-                    "name": "engine_task_id",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "persona_id",
-                    "type": "uuid",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "persona_name",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "video_subject",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "status",
-                    "type": "text",
-                    "default": "'pending'::text",
-                    "notNull": true
-                },
-                {
-                    "name": "error_code",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "error_message",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "tokens_refunded",
-                    "type": "boolean",
-                    "default": "false",
-                    "notNull": true
-                },
-                {
-                    "name": "created_at",
-                    "type": "timestamp with time zone",
-                    "default": "now()",
-                    "notNull": true
-                },
-                {
-                    "name": "updated_at",
-                    "type": "timestamp with time zone",
-                    "default": "now()",
-                    "notNull": true
-                },
-                {
-                    "name": "completed_at",
-                    "type": "timestamp with time zone",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "params",
-                    "type": "jsonb",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "publish_mode",
-                    "type": "text",
-                    "default": "'asap'::text",
-                    "notNull": true
-                },
-                {
-                    "name": "scheduled_at",
-                    "type": "timestamp with time zone",
-                    "default": null,
-                    "notNull": false
-                }
-            ],
-            "policies": {
-                "video_generations_select_own": {
-                    "cmd": "r",
-                    "qual": "(auth.uid() = user_id)",
-                    "withCheck": null
-                }
-            },
-            "constraints": {
-                "video_generations_pkey": "PRIMARY KEY (id)",
-                "video_generations_publish_mode_check": "CHECK ((publish_mode = ANY (ARRAY['asap'::text, 'scheduled'::text])))"
-            }
-        },
         "post_metrics_daily": {
             "rls": true,
             "columns": [
@@ -2010,99 +1443,6 @@
                 "post_metrics_daily_post_id_provider_external_id_snapshot_da_key": "UNIQUE (post_id, provider, external_id, snapshot_date)"
             }
         },
-        "token_transactions": {
-            "rls": true,
-            "columns": [
-                {
-                    "name": "id",
-                    "type": "uuid",
-                    "default": "gen_random_uuid()",
-                    "notNull": true
-                },
-                {
-                    "name": "user_id",
-                    "type": "uuid",
-                    "default": null,
-                    "notNull": true
-                },
-                {
-                    "name": "amount",
-                    "type": "numeric",
-                    "default": null,
-                    "notNull": true
-                },
-                {
-                    "name": "type",
-                    "type": "text",
-                    "default": null,
-                    "notNull": true
-                },
-                {
-                    "name": "description",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "reference_id",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "created_at",
-                    "type": "timestamp with time zone",
-                    "default": "now()",
-                    "notNull": true
-                },
-                {
-                    "name": "reason",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "stripe_checkout_session_id",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "stripe_payment_intent_id",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "generation_id",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "free_amount",
-                    "type": "numeric",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "engine_task_id",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                }
-            ],
-            "policies": {
-                "token_transactions_select_own": {
-                    "cmd": "r",
-                    "qual": "(auth.uid() = user_id)",
-                    "withCheck": null
-                }
-            },
-            "constraints": {
-                "token_transactions_pkey": "PRIMARY KEY (id)"
-            }
-        },
         "owner_alert_notices": {
             "rls": true,
             "columns": [
@@ -2157,34 +1497,6 @@
             },
             "constraints": {
                 "test_deploy_supabase_pkey": "PRIMARY KEY (id)"
-            }
-        },
-        "stripe_webhook_events": {
-            "rls": true,
-            "columns": [
-                {
-                    "name": "event_id",
-                    "type": "text",
-                    "default": null,
-                    "notNull": true
-                },
-                {
-                    "name": "event_type",
-                    "type": "text",
-                    "default": null,
-                    "notNull": true
-                },
-                {
-                    "name": "created_at",
-                    "type": "timestamp with time zone",
-                    "default": "now()",
-                    "notNull": true
-                }
-            ],
-            "policies": {
-            },
-            "constraints": {
-                "stripe_webhook_events_pkey": "PRIMARY KEY (event_id)"
             }
         },
         "mcp_oauth_refresh_tokens": {
@@ -2312,58 +1624,6 @@
             "constraints": {
                 "post_metrics_daily_attempts_pkey": "PRIMARY KEY (post_id, snapshot_date)",
                 "post_metrics_daily_attempts_post_id_fkey": "FOREIGN KEY (post_id) REFERENCES scheduled_posts(id) ON DELETE CASCADE"
-            }
-        },
-        "scheduled_post_progress_history": {
-            "rls": true,
-            "columns": [
-                {
-                    "name": "id",
-                    "type": "uuid",
-                    "default": "gen_random_uuid()",
-                    "notNull": true
-                },
-                {
-                    "name": "post_id",
-                    "type": "uuid",
-                    "default": null,
-                    "notNull": true
-                },
-                {
-                    "name": "user_id",
-                    "type": "uuid",
-                    "default": null,
-                    "notNull": true
-                },
-                {
-                    "name": "progress",
-                    "type": "integer",
-                    "default": null,
-                    "notNull": true
-                },
-                {
-                    "name": "stage",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "recorded_at",
-                    "type": "timestamp with time zone",
-                    "default": "now()",
-                    "notNull": true
-                }
-            ],
-            "policies": {
-                "progress_history_owner_all": {
-                    "cmd": "*",
-                    "qual": "((auth.uid() = user_id) AND (EXISTS ( SELECT 1\n   FROM scheduled_posts p\n  WHERE ((p.id = scheduled_post_progress_history.post_id) AND (p.user_id = auth.uid())))))",
-                    "withCheck": "((auth.uid() = user_id) AND (EXISTS ( SELECT 1\n   FROM scheduled_posts p\n  WHERE ((p.id = scheduled_post_progress_history.post_id) AND (p.user_id = auth.uid())))))"
-                }
-            },
-            "constraints": {
-                "fk_progress_history_post": "FOREIGN KEY (post_id) REFERENCES scheduled_posts(id) ON DELETE CASCADE",
-                "scheduled_post_progress_history_pkey": "PRIMARY KEY (id)"
             }
         }
     }

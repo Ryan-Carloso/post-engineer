@@ -33,10 +33,6 @@ function interceptShellData(): void {
     body: { authenticated: true, accounts: [], message: 'ok' },
   }).as('getAccounts');
 
-  cy.intercept('GET', '/api/billing/tokens', {
-    statusCode: 200,
-    body: { success: true, balance: 100 },
-  }).as('getTokens');
 
   cy.intercept('GET', '/api/schedule', {
     statusCode: 200,
@@ -48,10 +44,6 @@ function interceptShellData(): void {
     body: { success: true, upcoming: [], recent: [] },
   }).as('getScheduleStatus');
 
-  cy.intercept('GET', '/api/persona/video-generations**', {
-    statusCode: 200,
-    body: { success: true, generations: [] },
-  }).as('getGenerations');
 }
 
 const MOBILE_VIEWPORT: [number, number] = [390, 844];
@@ -126,38 +118,6 @@ describe('Account area — /account page', () => {
     cy.loginE2EUser();
     seedUserMetadata({ name: 'Cypress' });
     interceptShellData();
-  });
-
-  it('renders user, token balance, version, locale switcher and sign out', () => {
-    cy.visit('/account');
-
-    cy.get('[data-testid=account-page]').as('page');
-
-    cy.get('@page').contains('h1', 'Perfil').should('be.visible');
-
-    cy.get('@page')
-      .find('[data-testid=profile-user-link]')
-      .should('be.visible')
-      .and('have.attr', 'href', '/account')
-      .and('contain', 'Cypress');
-
-    cy.wait('@getTokens');
-    cy.get('@page').find('[data-testid=token-balance]').should('contain', '100');
-
-    cy.get('@page')
-      .find('[data-testid=version-badge]')
-      .should('have.length', 1)
-      .and('contain', 'BETA');
-
-    cy.get('@page').contains('button', 'PT').should('be.visible');
-    cy.get('@page').contains('button', 'EN').should('be.visible');
-
-    cy.get('@page').find('button[title="Sair"]').should('be.visible');
-
-    cy.get('@page')
-      .find('[data-testid=profile-api-keys-link]')
-      .should('be.visible')
-      .and('have.attr', 'href', '/recipes');
   });
 
   it('navigates to the prompts hub from the profile API Keys row', () => {

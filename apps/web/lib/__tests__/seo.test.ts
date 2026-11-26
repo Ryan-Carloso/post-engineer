@@ -31,8 +31,6 @@ describe('lib/seo — public search metadata', () => {
       '/en/help',
       '/help/primeiros-passos',
       '/en/help/primeiros-passos',
-      '/help/tokens',
-      '/en/help/tokens',
       '/help/conectar-contas',
       '/en/help/conectar-contas',
     ]);
@@ -50,8 +48,6 @@ describe('lib/seo — public search metadata', () => {
       'https://post-engineer.com/en/help',
       'https://post-engineer.com/help/primeiros-passos',
       'https://post-engineer.com/en/help/primeiros-passos',
-      'https://post-engineer.com/help/tokens',
-      'https://post-engineer.com/en/help/tokens',
       'https://post-engineer.com/help/conectar-contas',
       'https://post-engineer.com/en/help/conectar-contas',
     ]);

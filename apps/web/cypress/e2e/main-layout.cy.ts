@@ -13,10 +13,6 @@ function interceptShellData(): void {
     body: { authenticated: true, accounts: [], message: 'ok' },
   }).as('getAccounts');
 
-  cy.intercept('GET', '/api/billing/tokens', {
-    statusCode: 200,
-    body: { success: true, balance: 100 },
-  }).as('getTokens');
 
   cy.intercept('GET', '/api/schedule', {
     statusCode: 200,
@@ -28,10 +24,6 @@ function interceptShellData(): void {
     body: { success: true, upcoming: [], recent: [] },
   }).as('getScheduleStatus');
 
-  cy.intercept('GET', '/api/persona/video-generations**', {
-    statusCode: 200,
-    body: { success: true, generations: [] },
-  }).as('getGenerations');
 }
 
 function seedUserMetadata(userMetadata: Record<string, unknown>): void {
@@ -69,26 +61,6 @@ describe('Main Layout — Sidebar', () => {
     cy.viewport(...TALL_VIEWPORT);
     cy.loginE2EUser();
     interceptShellData();
-  });
-
-  it('renders brand, subtitle and nav tabs, without a Home tab', () => {
-    visitHomeAsReturningUser();
-
-    cy.get('[data-testid=nav-brand]').should('be.visible');
-    cy.contains('Post Engineer').should('be.visible');
-    cy.contains('Vídeos com IA para redes').should('be.visible');
-
-    cy.contains('a', 'Início').should('not.exist');
-    cy.contains('a', 'Publicações').should('be.visible');
-    cy.contains('a', 'Histórico').should('be.visible');
-    cy.contains('a', 'Contas').should('be.visible');
-    cy.contains('a', 'Personas').should('be.visible');
-    cy.contains('a', 'Métricas').should('be.visible');
-    cy.contains('a', 'Chave de API e MCP').should('be.visible');
-    cy.contains('a', 'Tokens').should('not.exist');
-    cy.get('[data-testid=profile-api-keys-link]').should('not.exist');
-    cy.contains('a', 'Chave de API e MCP').should('have.attr', 'href', '/recipes');
-    cy.get('[data-testid=profile-billing-link]').should('be.visible');
   });
 
   it('navega entre as páginas clicando nas abas da sidebar', () => {

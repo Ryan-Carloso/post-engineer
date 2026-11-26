@@ -11,12 +11,6 @@
       "action": "list"
     }
   ],
-  "GET /api/billing/tokens": [
-    {
-      "tool": "billing",
-      "action": "balance"
-    }
-  ],
   "POST /api/bluesky-connect": [
     {
       "tool": "accounts",
@@ -39,36 +33,6 @@
     {
       "tool": "accounts",
       "action": "connect"
-    }
-  ],
-  "GET /api/persona/faces": [
-    {
-      "tool": "persona_media",
-      "action": "list_faces"
-    }
-  ],
-  "GET /api/persona/images": [
-    {
-      "tool": "persona_media",
-      "action": "list_images"
-    }
-  ],
-  "POST /api/persona/images": [
-    {
-      "tool": "persona_media",
-      "action": "add_image"
-    }
-  ],
-  "DELETE /api/persona/images": [
-    {
-      "tool": "persona_media",
-      "action": "remove_image"
-    }
-  ],
-  "PATCH /api/persona/images": [
-    {
-      "tool": "persona_media",
-      "action": "update_image"
     }
   ],
   "GET /api/persona/identity-card": [
@@ -105,18 +69,6 @@
     {
       "tool": "publish_video",
       "action": "publish_existing"
-    }
-  ],
-  "POST /api/media/upload": [
-    {
-      "tool": "media",
-      "action": "upload"
-    }
-  ],
-  "POST /api/media/check": [
-    {
-      "tool": "media",
-      "action": "check"
     }
   ],
   "GET /api/metrics": [
@@ -165,54 +117,6 @@
     {
       "tool": "posts",
       "action": "get"
-    }
-  ],
-  "GET /api/persona/video-status/[taskId]": [
-    {
-      "tool": "video_tasks",
-      "action": "status"
-    }
-  ],
-  "GET /api/persona/voices": [
-    {
-      "tool": "voices",
-      "action": "list"
-    }
-  ],
-  "POST /api/persona/voices/[voiceId]/preview": [
-    {
-      "tool": "voices",
-      "action": "preview"
-    }
-  ],
-  "GET /api/persona/cloned-voices": [
-    {
-      "tool": "voices",
-      "action": "list_clones"
-    }
-  ],
-  "POST /api/persona/cloned-voices": [
-    {
-      "tool": "voices",
-      "action": "create_clone"
-    }
-  ],
-  "GET /api/persona/cloned-voices/[cloneId]": [
-    {
-      "tool": "voices",
-      "action": "get_clone"
-    }
-  ],
-  "DELETE /api/persona/cloned-voices/[cloneId]": [
-    {
-      "tool": "voices",
-      "action": "delete_clone"
-    }
-  ],
-  "POST /api/persona/cloned-voices/[cloneId]/preview": [
-    {
-      "tool": "voices",
-      "action": "preview_clone"
     }
   ],
   "GET /api/schedule": [
@@ -293,29 +197,6 @@
       "action": "disconnect"
     }
   ],
-  "GET /api/persona/video-generations": [
-    {
-      "tool": "video_tasks",
-      "action": "list_generations"
-    }
-  ],
-  "GET /api/persona/video-generations/[generationId]": [
-    {
-      "tool": "video_tasks",
-      "action": "get_generation"
-    }
-  ],
-  "DELETE /api/persona/video-task/[taskId]": [
-    {
-      "tool": "cancel_video"
-    }
-  ],
-  "GET /api/billing/transactions": [
-    {
-      "tool": "billing",
-      "action": "transactions"
-    }
-  ],
   "POST /api/upload-content": [
     {
       "tool": "publish_video",
@@ -338,28 +219,6 @@
     {
       "tool": "publish_video",
       "action": "publish_upload"
-    }
-  ],
-  "POST /api/videos/generate-and-schedule": [
-    {
-      "tool": "generate_video"
-    }
-  ],
-  "POST /api/videos/batch-discount": [
-    {
-      "tool": "generate_video"
-    }
-  ],
-  "POST /api/videos/validate-script": [
-    {
-      "tool": "check_script",
-      "action": "validate"
-    }
-  ],
-  "POST /api/videos/score-draft": [
-    {
-      "tool": "check_script",
-      "action": "score"
     }
   ],
   "GET /api/prompts": [
@@ -414,12 +273,6 @@
     {
       "tool": "experiments",
       "action": "results"
-    }
-  ],
-  "POST /api/experiments": [
-    {
-      "tool": "experiments",
-      "action": "create"
     }
   ]
 }

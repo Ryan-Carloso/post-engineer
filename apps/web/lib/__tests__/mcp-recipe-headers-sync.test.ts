@@ -23,7 +23,7 @@ function mcpNudgeSurfaces(): string[] {
 describe('MCP recipe-adoption headers stay in sync with the web telemetry', () => {
   it('records every X-MCP-* recipe header the MCP sends', () => {
     const names = mcpHeaderNames();
-    expect(names).toHaveLength(7);
+    expect(names).toHaveLength(6);
     for (const name of names) {
       expect(webSource).toContain(`'${name.toLowerCase()}'`);
     }

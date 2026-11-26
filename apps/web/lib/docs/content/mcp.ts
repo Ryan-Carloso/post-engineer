@@ -9,12 +9,12 @@ export const mcpGuide: DocPage = {
     en: 'Connect Claude and other agents to Post Engineer with the MCP server, locally or remotely.',
   },
   updatedAt: '2026-11-26',
-  contentHash: 'b75a3c447604110209f1c1fece489c9761e432c500f75620772f8e4fa30c65b5',
+  contentHash: 'cb76be9869254a52758871e023cc7efd4dc3fa5d102f7b75dbc42c2192801bdd',
   blocks: [
     {
       kind: 'paragraph',
       text: {
-        en: 'The MCP server lets an agent create personas, generate videos and schedule posts through Post Engineer. It speaks the Model Context Protocol over stdio locally or over HTTPS remotely.',
+        en: 'The MCP server lets an agent create personas, publish videos and images made elsewhere and schedule posts through Post Engineer. It speaks the Model Context Protocol over stdio locally or over HTTPS remotely.',
       },
     },
     { kind: 'heading', level: 2, text: { en: 'Local setup' } },
@@ -41,15 +41,15 @@ export const mcpGuide: DocPage = {
     {
       kind: 'paragraph',
       text: {
-        en: 'Every tool below is registered by the MCP server. Each takes an action, except `generate_video` and `cancel_video`.',
+        en: 'Every tool below is registered by the MCP server. Each takes an action.',
       },
     },
     { kind: 'toolList' },
-    { kind: 'heading', level: 2, text: { en: 'Publish videos via MCP' } },
+    { kind: 'heading', level: 2, text: { en: 'Publish media via MCP' } },
     {
       kind: 'paragraph',
       text: {
-        en: 'Call `generate_video` with segments: the hook first, then the content takes in order. Generation is always tied to publishing, so every video is scheduled and auto-published.',
+        en: 'Call `publish_video` with the finished file you made elsewhere: publish it now or schedule it, and it goes out to the persona\'s accounts at the chosen time.',
       },
     },
   ],

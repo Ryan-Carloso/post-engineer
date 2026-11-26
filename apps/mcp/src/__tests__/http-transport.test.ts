@@ -20,34 +20,9 @@ vi.mock('../analytics.js', () => ({
   },
 }));
 
-const hook =
-  'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.';
-const content =
-  'Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.';
-const ctaTake = 'Save this video before your next trip to Porto.';
-function photos(count: number, prefix: string): Array<{ url: string }> {
-  return Array.from({ length: count }, (_, i) => ({ url: `https://example.com/${prefix}-${i + 1}.jpg` }));
-}
-
-const segments = [
-  { kind: 'hook' as const, text: hook, media: photos(5, 'hook') },
-  { kind: 'content' as const, text: content, media: photos(8, 'content') },
-  { kind: 'content' as const, text: ctaTake, media: photos(2, 'ctaTake') },
-];
-
 function mockClient() {
   return {
-    validateScript: vi.fn().mockResolvedValue({
-      success: true,
-      segmentCount: 3,
-      totalWords: 76,
-      hookWords: 25,
-      contentWords: 51,
-      hookWindowSeconds: { min: 8, max: 12 },
-      measuredDurationSeconds: null,
-      measured: 'pending',
-      measuredReason: 'No hook-only TTS endpoint exists yet.',
-    }),
+    listPersonas: vi.fn().mockResolvedValue({ authenticated: true, personas: [] }),
   } as unknown as PostEngineerClient;
 }
 
@@ -149,7 +124,7 @@ async function listedNames(client: PostEngineerClient, transport: 'stdio' | 'htt
 }
 
 describe('serveHttpTransport', () => {
-  it('serves the remote JSON tools over Streamable HTTP and answers validate_script without tokens', async () => {
+  it('serves the remote JSON tools over Streamable HTTP and answers a tool call', async () => {
     const client = mockClient();
     const handle = await serveHttpTransport(() => createPostEngineerMcpServer(client, 'http'), {
       host: '127.0.0.1',
@@ -169,25 +144,24 @@ describe('serveHttpTransport', () => {
 
       expect(httpNames).toEqual(memoryNames);
       expect(stdioNames).toEqual(httpNames);
-      expect(httpNames).toHaveLength(17);
+      expect(httpNames).toHaveLength(10);
       expect(httpNames).toContain('prompts');
-      expect(httpNames).toContain('check_script');
-      const actionsOf = (tools: typeof httpTools.tools, name: string): string[] =>
-        (tools.find((tool) => tool.name === name)?.inputSchema.properties as { action?: { enum?: string[] } } | undefined)?.action?.enum ?? [];
+      expect(httpNames).toContain('publish_video');
+      const actionsOf = (name: string): string[] =>
+        (httpTools.tools.find((tool) => tool.name === name)?.inputSchema.properties as { action?: { enum?: string[] } } | undefined)?.action?.enum ?? [];
       for (const [tool, action] of FILE_ONLY_ACTIONS) {
-        expect(actionsOf(httpTools.tools, tool)).not.toContain(action);
+        expect(actionsOf(tool)).not.toContain(action);
       }
 
-      const result = await mcpClient.callTool({ name: 'check_script', arguments: { action: 'validate', segments } });
-      expect(result.isError).toBeUndefined();
+      const result = await mcpClient.callTool({ name: 'personas', arguments: { action: 'list' } });
+      expect(result.isError, JSON.stringify(result.content)).toBeUndefined();
       const content = result.content as Array<{ type?: unknown; text?: unknown }> | undefined;
       const block = content?.[0];
       if (block === undefined || block.type !== 'text' || typeof block.text !== 'string') {
         throw new Error('expected a text content block');
       }
-      expect(block.text).toContain('Script valid');
-      expect(block.text).toContain('3 segment(s)');
-      expect(vi.mocked(client.validateScript)).toHaveBeenCalledTimes(1);
+      expect(block.text).toContain('"personas": []');
+      expect(vi.mocked(client.listPersonas)).toHaveBeenCalledTimes(1);
     } finally {
       await mcpClient.close();
     }

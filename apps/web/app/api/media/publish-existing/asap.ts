@@ -23,9 +23,9 @@ import {
   createSupabaseVideoUploadStorage,
   createSupabaseVideoUploadStore,
 } from '@/lib/videos/signed-upload';
-import type { Provider } from '../../videos/generate-and-schedule/providers-validation';
+import type { Provider } from './providers-validation';
 import { fieldsFor, type PublishExistingContext } from './context';
-import { ExistingMediaError, downloadEngineTaskVideo } from './media-resolve';
+import { ExistingMediaError } from './media-resolve';
 import { buildExistingMediaForm } from './publish-form';
 import type { PublishExistingRequest } from './schema';
 
@@ -174,8 +174,6 @@ export async function publishExistingMediaAsap(ctx: PublishExistingContext, ledg
   try {
     if (ctx.image !== null) {
       media = ctx.image;
-    } else if (ctx.taskRecord !== null) {
-      media = await downloadEngineTaskVideo(ctx.taskRecord, userId);
     } else {
       throw new Error('publish-existing reached the ASAP branch without verified media');
     }

@@ -41,7 +41,7 @@ describe('NotFoundView', () => {
       '/landing',
     );
     expect(linkHrefs()).toEqual(['/login', '/api-documentation.txt', '/landing']);
-    expect(screen.getByText(/Crie uma conta para começar a publicar/)).toBeInTheDocument();
+    expect(screen.getByText(/Crie uma conta para começar a agendar seus posts/)).toBeInTheDocument();
   });
 
   it('offers the dashboard instead of sign-up when signed in', () => {

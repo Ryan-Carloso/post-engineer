@@ -18,7 +18,6 @@ function row(overrides: Partial<MetricsRowView> = {}): MetricsRowView {
     provider: 'youtube',
     accountId: 'UC1',
     externalId: 'v1',
-    scriptAngle: null,
     publishedAt: new Date(Date.now() - 86400000).toISOString(),
     views: 100,
     likes: 10,
@@ -164,13 +163,13 @@ describe('breakdownBy', () => {
     ]);
   });
 
-  it('totals views per persona with voiceover under one key', () => {
+  it('totals views per persona with persona-less posts under one key', () => {
     const groups = breakdownBy([
       row({ postId: 'a', personaId: 'p1', views: 10 }),
       row({ postId: 'b', personaId: null, views: 20 }),
     ], 'persona');
     expect(groups).toEqual([
-      { key: 'voiceover', value: 20 },
+      { key: 'no-persona', value: 20 },
       { key: 'p1', value: 10 },
     ]);
   });

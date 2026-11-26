@@ -7,16 +7,15 @@ import { Ellipsis } from 'lucide-react';
 import { useI18n } from '@/lib/i18n/provider';
 import { AccountPanel, MobileProfileLink } from '@/components/ui/account-panel';
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
-import { InsufficientTokensDialog } from '@/components/ui/insufficient-tokens-dialog';
 import { SUPPORT_EMAIL } from '@/components/ui/pricing-contact';
 import VersionBadge from '@/components/ui/version-badge';
 import AppLogo from '@/components/ui/app-logo';
+import { TrialNotice } from '@/components/trial-notice';
 import {
   AccountsIcon,
   BoltIcon,
   CalendarIcon,
   ChartIcon,
-  CoinsIcon,
   HistoryIcon,
   KeyIcon,
   SparklesIcon,
@@ -24,7 +23,7 @@ import {
 
 interface NavItem {
   href: string;
-  labelKey: 'nav.accounts' | 'nav.persona' | 'nav.posts' | 'nav.history' | 'nav.metrics' | 'nav.experiments' | 'nav.prompts' | 'nav.billing';
+  labelKey: 'nav.accounts' | 'nav.persona' | 'nav.posts' | 'nav.history' | 'nav.metrics' | 'nav.experiments' | 'nav.prompts';
   hintKey: 'nav.accountsHint' | 'nav.personaHint' | 'nav.postsHint' | 'nav.historyHint' | 'nav.metricsHint' | 'nav.experimentsHint' | 'nav.promptsHint';
   icon: () => React.JSX.Element;
 }
@@ -41,7 +40,7 @@ function isNavActive(href: string, pathname: string): boolean {
   return onRoute(href, pathname);
 }
 
-const MORE_ROUTES = [HISTORY_HREF, '/metrics', '/experiments', '/billing'];
+const MORE_ROUTES = [HISTORY_HREF, '/metrics', '/experiments'];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
@@ -49,10 +48,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <MainSidebar />
       <main className="min-w-0 flex-1 overflow-y-auto bg-surface">
         <MobileHeader />
-        <div className="w-full px-4 pt-4 pb-20 sm:px-6 md:px-8 md:pt-8 md:pb-10 lg:px-10">{children}</div>
+        <div className="w-full px-4 pt-4 pb-20 sm:px-6 md:px-8 md:pt-8 md:pb-10 lg:px-10">
+          <TrialNotice />
+          {children}
+        </div>
       </main>
       <MobileNavigation />
-      <InsufficientTokensDialog />
     </div>
   );
 }
@@ -159,7 +160,6 @@ const MobileNavigation = () => {
     { href: HISTORY_HREF, labelKey: 'nav.history', icon: HistoryIcon },
     { href: '/metrics', labelKey: 'nav.metrics', icon: ChartIcon },
     { href: '/experiments', labelKey: 'nav.experiments', icon: BoltIcon },
-    { href: '/billing', labelKey: 'nav.billing', icon: CoinsIcon },
   ];
   const moreActive = MORE_ROUTES.some((route) => onRoute(route, pathname));
 

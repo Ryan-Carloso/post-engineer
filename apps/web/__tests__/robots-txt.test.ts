@@ -173,7 +173,7 @@ describe('robots.txt', () => {
     'allows /docs and /help paths for %s and still blocks /api and /admin',
     (agent) => {
       const group = resolveGroup(agent);
-      for (const path of ['/docs', '/docs/', '/docs/mcp', '/help', '/help/tokens']) {
+      for (const path of ['/docs', '/docs/', '/docs/mcp', '/help', '/help/primeiros-passos']) {
         expect(isAllowed(group, path), path).toBe(true);
       }
       for (const path of ['/api/x', '/admin/x']) {

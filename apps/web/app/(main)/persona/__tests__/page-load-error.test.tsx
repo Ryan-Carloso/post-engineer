@@ -5,14 +5,6 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
-vi.mock('embla-carousel-autoplay', () => ({
-  default: vi.fn(() => ({ stop: vi.fn() })),
-}));
-
-vi.mock('embla-carousel-react', () => ({
-  default: vi.fn(() => [vi.fn(), undefined]),
-}));
-
 vi.mock('next/image', () => ({
   default: ({ alt, ...props }: React.ComponentProps<'img'>) => <img alt={alt} {...props} />,
 }));
@@ -34,9 +26,6 @@ vi.mock('@/lib/ui', () => ({
   UploadIcon: () => <span data-testid="icon-upload" />,
   SpinnerIcon: () => <span data-testid="icon-spinner" />,
   SparklesIcon: () => <span data-testid="icon-sparkles" />,
-  MicIcon: () => <span data-testid="icon-mic" />,
-  PlayIcon: () => <span data-testid="icon-play" />,
-  FilmIcon: () => <span data-testid="icon-film" />,
   SECTION_LABEL_CLASS: '',
   INPUT_CLASS: '',
   formatFileSize: (v: number) => `${v} B`,
@@ -70,18 +59,15 @@ function createWrapper() {
   return Wrapper;
 }
 
-function voicesCalls(): number {
-  return fetchMock.mock.calls.filter((call) => call[0] === '/api/persona/voices').length;
+function listCalls(): number {
+  return fetchMock.mock.calls.filter((call) => call[0] === '/api/persona/list').length;
 }
 
 describe('persona page load error (real queries)', () => {
   beforeEach(() => {
     fetchMock = vi.fn(async (url: string) => {
-      if (url === '/api/persona/voices') {
-        return new Response(JSON.stringify({ error: 'voices down' }), { status: 500 });
-      }
       if (url === '/api/persona/list') {
-        return new Response(JSON.stringify({ authenticated: true, personas: [] }), { status: 200 });
+        return new Response(JSON.stringify({ error: 'list down' }), { status: 500 });
       }
       return new Response(JSON.stringify({}), { status: 200 });
     });
@@ -98,10 +84,10 @@ describe('persona page load error (real queries)', () => {
       expect(screen.getByRole('heading', { name: 'persona.loadError' })).toBeInTheDocument();
     });
     await new Promise((resolve) => setTimeout(resolve, 500));
-    expect(voicesCalls()).toBe(1);
+    expect(listCalls()).toBe(1);
   });
 
-  it('retry refetches the failed voices query once and shows the error again', async () => {
+  it('retry refetches the failed persona list once and shows the error again', async () => {
     const user = userEvent.setup();
     render(<PersonaPage />, { wrapper: createWrapper() });
     await waitFor(() => {
@@ -109,12 +95,12 @@ describe('persona page load error (real queries)', () => {
     });
     await user.click(screen.getByRole('button', { name: 'persona.tryAgain' }));
     await waitFor(() => {
-      expect(voicesCalls()).toBe(2);
+      expect(listCalls()).toBe(2);
     });
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'persona.loadError' })).toBeInTheDocument();
     });
     await new Promise((resolve) => setTimeout(resolve, 500));
-    expect(voicesCalls()).toBe(2);
+    expect(listCalls()).toBe(2);
   });
 });

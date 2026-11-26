@@ -1,4 +1,3 @@
-import { houseVoice } from '../support/voices';
 
 const PERSONA_ID = '11111111-1111-4111-8111-111111111111';
 const PATH = `/persona?edit=${PERSONA_ID}`;
@@ -14,12 +13,6 @@ interface StoredCard {
 }
 
 function mockEditPage(state: { stored: StoredCard | null; patches: number }): void {
-  cy.intercept('GET', '/api/persona/voices', {
-    statusCode: 200,
-    body: { voices: [houseVoice('en_us_male_01', 'male')] },
-  });
-  cy.intercept('GET', '/api/persona/cloned-voices', { statusCode: 200, body: { success: true, voices: [] } });
-  cy.intercept('GET', '/api/persona/images*', { statusCode: 200, body: { success: true, images: [] } });
   cy.intercept('GET', '/api/persona/list', {
     statusCode: 200,
     body: {
@@ -30,13 +23,6 @@ function mockEditPage(state: { stored: StoredCard | null; patches: number }): vo
           name: 'Maya Card',
           createdAt: new Date().toISOString(),
           avatarUrl: '/caracter-samples/file-3.png',
-          voiceId: 'chatterbox:en_us_male_01',
-          videoAspect: '9:16',
-          scriptPrompt: '',
-          niche: '',
-          language: 'en-US',
-          hookPanel: true,
-          aiLabel: false,
         },
       ],
     },

@@ -85,17 +85,7 @@ export interface CreatePersonaResult {
   success: boolean;
   personaId?: string;
   error?: string;
-  imageIds?: string[];
-  warnings?: string[];
 }
-
-export interface GeneratePersonaAvatarResult {
-  success: boolean;
-  imageUrl?: string;
-  error?: string;
-}
-
-export type { VoiceOption } from './voice-catalog';
 
 import { SOCIAL_PROVIDERS, type SocialProvider } from '@/lib/providers/registry';
 

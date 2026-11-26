@@ -33,7 +33,6 @@ function post(overrides: Partial<CoveragePostInput> = {}): CoveragePostInput {
     personaId: PERSONA,
     publishedAt: '2026-10-21T12:00:00.000Z',
     outcomes: [YT_OUTCOME],
-    voiceover: false,
     ...overrides,
   };
 }
@@ -43,7 +42,7 @@ const PUBLISHED_AT = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(
 function row(overrides: Partial<MetricsRowView> = {}): MetricsRowView {
   return {
     postId: 'post-1', personaId: PERSONA, provider: 'youtube', accountId: 'yt', externalId: 'abc123',
-    scriptAngle: 'myth', publishedAt: PUBLISHED_AT, views: 100, likes: null, comments: null, saves: null, collectedAt: '2026-10-21T12:00:00.000Z',
+    publishedAt: PUBLISHED_AT, views: 100, likes: null, comments: null, saves: null, collectedAt: '2026-10-21T12:00:00.000Z',
     analyticsViews: null, engagedViews: null, stayedToWatchPct: null, averageViewDurationSeconds: null,
     averageViewPercentage: null, contentType: null, analyticsStatus: null, provisional: false,
     ...overrides,
@@ -51,7 +50,7 @@ function row(overrides: Partial<MetricsRowView> = {}): MetricsRowView {
 }
 
 function query(overrides: Partial<MetricsQuery> = {}): MetricsQuery {
-  return { window: '24h', personaId: null, accountId: null, provider: null, angle: null, ...overrides };
+  return { window: '24h', personaId: null, accountId: null, provider: null, ...overrides };
 }
 
 function compute(
@@ -98,6 +97,7 @@ describe('metrics window hours (migrations 025/039)', () => {
 });
 
 describe('computeCoverage', () => {
+
   it('lists a missing target as retrying while its window is open', () => {
     const { items, truncated, unknownProviders } = compute();
     expect(truncated).toBe(false);
@@ -108,7 +108,6 @@ describe('computeCoverage', () => {
       provider: 'youtube',
       accountId: 'yt',
       externalId: 'abc123',
-      scriptAngle: null,
       reason: 'retrying',
       publishedAt: '2026-10-21T12:00:00.000Z',
       windowOpensAt: '2026-10-22T12:00:00.000Z',
@@ -163,37 +162,27 @@ describe('computeCoverage', () => {
     expect(twoPosts).toHaveLength(2);
   });
 
-  it('drops out-of-scope personas for a scoped caller, keeps its own and persona-less posts', () => {
+  it('keeps only its own personas for a scoped caller and hides persona-less posts', () => {
     const posts = [
       post({ id: 'post-own', personaId: PERSONA }),
       post({ id: 'post-other', personaId: 'other-persona' }),
-      post({ id: 'post-voiceover', personaId: null, voiceover: true }),
+      post({ id: 'post-orphan', personaId: null }),
     ];
     const { items } = compute({ posts, personaIds: [PERSONA] });
-    expect(items.map((item) => item.postId).sort()).toEqual(['post-own', 'post-voiceover']);
+    expect(items.map((item) => item.postId)).toEqual(['post-own']);
   });
 
-  it('keeps only persona-less posts when the scope is empty', () => {
+  it('shows nothing when the scope is empty', () => {
     const posts = [
       post({ id: 'post-own', personaId: PERSONA }),
-      post({ id: 'post-voiceover', personaId: null, voiceover: true }),
+      post({ id: 'post-orphan', personaId: null }),
     ];
     const { items } = compute({ posts, personaIds: [] });
-    expect(items.map((item) => item.postId)).toEqual(['post-voiceover']);
+    expect(items).toEqual([]);
   });
 
-  it('hides an orphaned post (deleted schedule, not voiceover) from a scoped caller', () => {
-    const posts = [
-      post({ id: 'post-own', personaId: PERSONA }),
-      post({ id: 'post-orphan', personaId: null, voiceover: false }),
-      post({ id: 'post-voiceover', personaId: null, voiceover: true }),
-    ];
-    const { items } = compute({ posts, personaIds: [PERSONA] });
-    expect(items.map((item) => item.postId).sort()).toEqual(['post-own', 'post-voiceover']);
-  });
-
-  it('keeps an orphaned post for an unrestricted caller', () => {
-    const posts = [post({ id: 'post-orphan', personaId: null, voiceover: false })];
+  it('keeps a persona-less post for an unrestricted caller', () => {
+    const posts = [post({ id: 'post-orphan', personaId: null })];
     expect(compute({ posts }).items.map((item) => item.postId)).toEqual(['post-orphan']);
   });
 
@@ -210,46 +199,13 @@ describe('computeCoverage', () => {
     expect(items).toEqual([]);
   });
 
-  it('takes a null angle from a row and shows the item with no angle', () => {
-    const { items } = compute({
-      posts: [post({ outcomes: [YT_OUTCOME, IG_OUTCOME] })],
-      rows: [row({ scriptAngle: null })],
-    });
-    expect(items).toHaveLength(1);
-    expect(items[0]).toMatchObject({ provider: 'instagram', scriptAngle: null });
-  });
-
-  it('keeps the first angle when a later row has none', () => {
-    const { items } = compute({
-      posts: [post({ outcomes: [YT_OUTCOME, IG_OUTCOME] })],
-      rows: [row(), row({ scriptAngle: null })],
-    });
-    expect(items).toHaveLength(1);
-    expect(items[0]).toMatchObject({ provider: 'instagram', scriptAngle: 'myth' });
-  });
-
   it('shows persona-less posts under the none persona filter, hides persona posts', () => {
     const posts = [
       post({ id: 'post-own', personaId: PERSONA }),
-      post({ id: 'post-voiceover', personaId: null }),
+      post({ id: 'post-none', personaId: null }),
     ];
     const { items } = compute({ posts, query: query({ personaId: METRICS_NONE }) });
-    expect(items.map((item) => item.postId)).toEqual(['post-voiceover']);
-  });
-
-  it('hides angled posts under the none angle filter, shows angle-less ones', () => {
-    expect(compute({
-      posts: [post({ outcomes: [YT_OUTCOME, IG_OUTCOME] })],
-      rows: [row()],
-      query: query({ angle: METRICS_NONE }),
-    }).items).toEqual([]);
-    const shown = compute({
-      posts: [post({ outcomes: [YT_OUTCOME, IG_OUTCOME] })],
-      rows: [row({ scriptAngle: null })],
-      query: query({ angle: METRICS_NONE }),
-    });
-    expect(shown.items).toHaveLength(1);
-    expect(shown.items[0]).toMatchObject({ provider: 'instagram', scriptAngle: null });
+    expect(items.map((item) => item.postId)).toEqual(['post-none']);
   });
 
   it('skips non-object entries and failed entries with unknown providers or no account', () => {
@@ -277,25 +233,6 @@ describe('computeCoverage', () => {
   it('skips targets that already have a snapshot row', () => {
     const { items } = compute({ rows: [row()] });
     expect(items).toEqual([]);
-  });
-
-  it('takes the post angle from its rows, and skips unknown-angle posts under an angle filter', () => {
-    const withAngle = compute({
-      posts: [post({ outcomes: [YT_OUTCOME, IG_OUTCOME] })],
-      rows: [row()],
-      query: query({ angle: 'myth' }),
-    });
-    expect(withAngle.items).toHaveLength(1);
-    expect(withAngle.items[0]).toMatchObject({ provider: 'instagram', scriptAngle: 'myth' });
-
-    expect(compute({
-      posts: [post({ outcomes: [YT_OUTCOME, IG_OUTCOME] })],
-      rows: [row()],
-      query: query({ angle: 'tutorial' }),
-    }).items).toEqual([]);
-
-    expect(compute({ query: query({ angle: 'myth' }) }).items).toEqual([]);
-    expect(compute().items).toHaveLength(1);
   });
 
   it('respects the persona, provider and account filters', () => {
@@ -434,21 +371,17 @@ describe('fetchCoverage', () => {
     expect(items.map((item) => item.postId)).toEqual(['post-own']);
   });
 
-  it('hides an orphaned post from a scoped caller but keeps a voiceover one', async () => {
+  it('hides a persona-less post (deleted schedule) from a scoped caller', async () => {
     const { client } = fakeClient({
       scheduled_posts: {
         data: [
           {
             id: 'post-own', schedule_id: 'sched-own', user_id: 'user-1', status: 'published',
-            published_at: '2026-10-21T12:00:00.000Z', publish_outcomes: [YT_OUTCOME], voiceover: false,
+            published_at: '2026-10-21T12:00:00.000Z', publish_outcomes: [YT_OUTCOME],
           },
           {
             id: 'post-orphan', schedule_id: 'sched-gone', user_id: 'user-1', status: 'published',
-            published_at: '2026-10-21T12:00:00.000Z', publish_outcomes: [YT_OUTCOME], voiceover: false,
-          },
-          {
-            id: 'post-voiceover', schedule_id: 'sched-gone', user_id: 'user-1', status: 'published',
-            published_at: '2026-10-21T12:00:00.000Z', publish_outcomes: [YT_OUTCOME], voiceover: true,
+            published_at: '2026-10-21T12:00:00.000Z', publish_outcomes: [YT_OUTCOME],
           },
         ],
         error: null,
@@ -458,7 +391,7 @@ describe('fetchCoverage', () => {
       post_metrics: { data: [], error: null },
     });
     const { items } = await fetchCoverage(client, 'user-1', query(), NOW, { personaIds: [PERSONA] });
-    expect(items.map((item) => item.postId).sort()).toEqual(['post-own', 'post-voiceover']);
+    expect(items.map((item) => item.postId)).toEqual(['post-own']);
   });
 
   it('reads only the schedules the posts reference, so a scoped key cannot leak a post past a cap', async () => {
@@ -649,9 +582,9 @@ describe('fetchCoverage', () => {
       post_metrics_done: { data: [], error: null },
       post_metrics: {
         data: [
-          { post_id: 'post-1', provider: 'tiktok', external_id: 't1', script_angle: 'myth' },
-          { post_id: 'post-1', provider: 'youtube', external_id: null, script_angle: 'myth' },
-          { post_id: 'post-1', provider: 'youtube', external_id: 'abc123', script_angle: 'myth' },
+          { post_id: 'post-1', provider: 'tiktok', external_id: 't1' },
+          { post_id: 'post-1', provider: 'youtube', external_id: null },
+          { post_id: 'post-1', provider: 'youtube', external_id: 'abc123' },
         ],
         error: null,
       },
@@ -664,21 +597,9 @@ describe('fetchCoverage', () => {
     );
   });
 
-  it('reads a null script angle from a collected row', async () => {
-    const { client } = fakeClient({
-      scheduled_posts: { data: [postRecord({ publish_outcomes: [YT_OUTCOME, IG_OUTCOME] })], error: null },
-      schedules: { data: [{ id: 'sched-1', persona_id: PERSONA }], error: null },
-      post_metrics_done: { data: [], error: null },
-      post_metrics: { data: [{ post_id: 'post-1', provider: 'youtube', external_id: 'abc123', script_angle: null }], error: null },
-    });
-    const { items } = await fetchCoverage(client, 'user-1', query(), NOW);
-    expect(items).toHaveLength(1);
-    expect(items[0]).toMatchObject({ provider: 'instagram', scriptAngle: null });
-  });
-
   it('warns when the rows read hits its cap', async () => {
     const rows = Array.from({ length: 5000 }, (_, i) => ({
-      post_id: 'post-1', provider: 'youtube', external_id: `v${i}`, script_angle: 'myth',
+      post_id: 'post-1', provider: 'youtube', external_id: `v${i}`,
     }));
     const { client } = fakeClient({
       scheduled_posts: { data: [postRecord()], error: null },

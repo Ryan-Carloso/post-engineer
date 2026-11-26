@@ -50,7 +50,7 @@ describe('PersonaAvatar', () => {
   });
 
   it('shows the skeleton again while the next candidate loads after a failure', () => {
-    render(<PersonaAvatar photoUrl="https://x.test/p.png" libraryUrl="https://x.test/l.png" name="Viva Leve" />);
+    render(<PersonaAvatar avatarUrl="https://x.test/a.png" photoUrl="https://x.test/l.png" name="Viva Leve" />);
 
     fireEvent.load(screen.getByAltText('Viva Leve'));
     expect(screen.queryByTestId('persona-avatar-skeleton')).not.toBeInTheDocument();
@@ -74,35 +74,13 @@ describe('PersonaAvatar', () => {
     expect(screen.getByAltText('Viva Leve')).toHaveAttribute('src', 'https://x.test/p.png');
   });
 
-  it('prefers the photo over the library when there is no avatar', () => {
-    render(
-      <PersonaAvatar photoUrl="https://x.test/p.png" libraryUrl="https://x.test/l.png" name="Viva Leve" />,
-    );
-
+  it('skips an empty avatar URL and uses the photo', () => {
+    render(<PersonaAvatar avatarUrl="" photoUrl="https://x.test/p.png" name="Viva Leve" />);
     expect(screen.getByAltText('Viva Leve')).toHaveAttribute('src', 'https://x.test/p.png');
   });
 
-  it('uses the library when there is no avatar or photo', () => {
-    render(<PersonaAvatar libraryUrl="https://x.test/l.png" name="Viva Leve" />);
-
-    expect(screen.getByAltText('Viva Leve')).toHaveAttribute('src', 'https://x.test/l.png');
-  });
-
-  it('skips an empty avatar URL and uses the library', () => {
-    render(
-      <PersonaAvatar avatarUrl="" photoUrl="" libraryUrl="https://x.test/l.png" name="Viva Leve" />,
-    );
-    expect(screen.getByAltText('Viva Leve')).toHaveAttribute('src', 'https://x.test/l.png');
-  });
-
-  it('skips an empty photo URL and uses the library', () => {
-    render(<PersonaAvatar photoUrl="" libraryUrl="https://x.test/l.png" name="Viva Leve" />);
-    expect(screen.getByAltText('Viva Leve')).toHaveAttribute('src', 'https://x.test/l.png');
-  });
-
-  it('ignores an empty library URL the same as a missing one', () => {
-    render(<PersonaAvatar libraryUrl="" name="Viva Leve" />);
-
+  it('ignores empty avatar and photo URLs the same as missing ones', () => {
+    render(<PersonaAvatar avatarUrl="" photoUrl="" name="Viva Leve" />);
     expect(screen.queryByAltText('Viva Leve')).not.toBeInTheDocument();
     expect(screen.getByText('VL')).toBeInTheDocument();
   });
@@ -144,24 +122,11 @@ describe('PersonaAvatar', () => {
     expect(screen.getByText('VL')).toBeInTheDocument();
   });
 
-  it('ignores the library while the avatar is still loading', () => {
-    render(
-      <PersonaAvatar
-        avatarUrl="https://x.test/a.png"
-        photoUrl="https://x.test/p.png"
-        libraryUrl="https://x.test/l.png"
-        name="Viva Leve"
-      />,
-    );
-    expect(screen.getByAltText('Viva Leve')).toHaveAttribute('src', 'https://x.test/a.png');
-  });
-
   it('falls through to the photo when the avatar fails', () => {
     render(
       <PersonaAvatar
         avatarUrl="https://x.test/a.png"
         photoUrl="https://x.test/p.png"
-        libraryUrl="https://x.test/l.png"
         name="Viva Leve"
       />,
     );
@@ -169,30 +134,14 @@ describe('PersonaAvatar', () => {
     expect(screen.getByAltText('Viva Leve')).toHaveAttribute('src', 'https://x.test/p.png');
   });
 
-  it('falls through to the library when avatar and photo fail', () => {
+  it('shows initials after avatar and photo both fail', () => {
     render(
       <PersonaAvatar
         avatarUrl="https://x.test/a.png"
         photoUrl="https://x.test/p.png"
-        libraryUrl="https://x.test/l.png"
         name="Viva Leve"
       />,
     );
-    fireEvent.error(screen.getByAltText('Viva Leve'));
-    fireEvent.error(screen.getByAltText('Viva Leve'));
-    expect(screen.getByAltText('Viva Leve')).toHaveAttribute('src', 'https://x.test/l.png');
-  });
-
-  it('shows initials after avatar, photo, and library all fail', () => {
-    render(
-      <PersonaAvatar
-        avatarUrl="https://x.test/a.png"
-        photoUrl="https://x.test/p.png"
-        libraryUrl="https://x.test/l.png"
-        name="Viva Leve"
-      />,
-    );
-    fireEvent.error(screen.getByAltText('Viva Leve'));
     fireEvent.error(screen.getByAltText('Viva Leve'));
     fireEvent.error(screen.getByAltText('Viva Leve'));
     expect(screen.queryByAltText('Viva Leve')).not.toBeInTheDocument();

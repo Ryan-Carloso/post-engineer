@@ -293,15 +293,15 @@ def test_unsafe_workflow_lines_fail_and_comments_do_not():
 
 
 def test_mappings_match_files_in_the_tree():
-    voice = "apps/engine/app/services/voice.py"
-    assert "apps/engine/test/services/test_voice.py" in scope.test_candidates(voice)
-    assert (ROOT / "apps/engine/test/services/test_voice.py").is_file()
-    billing = "apps/web/lib/billing/batch-discount.ts"
-    mapped = "apps/web/lib/billing/__tests__/batch-discount.test.ts"
-    assert mapped in scope.test_candidates(billing)
+    notify = "apps/engine/app/services/notify.py"
+    assert "apps/engine/test/services/test_notify.py" in scope.test_candidates(notify)
+    assert (ROOT / "apps/engine/test/services/test_notify.py").is_file()
+    whatsapp = "apps/web/lib/whatsapp.ts"
+    mapped = "apps/web/lib/__tests__/whatsapp.test.ts"
+    assert mapped in scope.test_candidates(whatsapp)
     assert (ROOT / mapped).is_file()
-    assert "apps/engine/app/services/voice.py" in scope.production_candidates(
-        "apps/engine/test/services/test_voice.py"
+    assert "apps/engine/app/services/notify.py" in scope.production_candidates(
+        "apps/engine/test/services/test_notify.py"
     )
 
 

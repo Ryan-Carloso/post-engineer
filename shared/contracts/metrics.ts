@@ -33,14 +33,13 @@ export function isMetricsWindow(value: unknown): value is MetricsWindow {
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const LAST_24H_FILTERS = new Set(['persona', 'account', 'provider']);
-const KNOWN_PARAMS = new Set(['window', 'persona', 'account', 'provider', 'angle']);
+const KNOWN_PARAMS = new Set(['window', 'persona', 'account', 'provider']);
 
 export interface MetricsQuery {
   window: MetricsWindow;
   personaId: string | null;
   accountId: string | null;
   provider: SocialProvider | null;
-  angle: string | null;
 }
 
 type MetricsParseResult = { ok: true; query: MetricsQuery } | { ok: false; error: string };
@@ -63,8 +62,7 @@ export function parseMetricsQuery(params: URLSearchParams): MetricsParseResult {
   const persona = readOptional(params, 'persona');
   const account = readOptional(params, 'account');
   const provider = readOptional(params, 'provider');
-  const angle = readOptional(params, 'angle');
-  for (const value of [window, persona, account, provider, angle]) {
+  for (const value of [window, persona, account, provider]) {
     if (typeof value === 'object' && value !== null) return { ok: false, error: value.error };
   }
   if (!isMetricsWindow(window)) return { ok: false, error: 'window must be 24h, 7d or 28d.' };
@@ -81,7 +79,6 @@ export function parseMetricsQuery(params: URLSearchParams): MetricsParseResult {
       personaId: typeof persona === 'string' ? persona : null,
       accountId: typeof account === 'string' ? account : null,
       provider: typeof provider === 'string' && isSocialProvider(provider) ? provider : null,
-      angle: typeof angle === 'string' ? angle : null,
     },
   };
 }
@@ -119,7 +116,6 @@ export function metricsSearchParams(query: MetricsQuery): URLSearchParams {
   if (query.personaId !== null) params.set('persona', query.personaId);
   if (query.accountId !== null) params.set('account', query.accountId);
   if (query.provider !== null) params.set('provider', query.provider);
-  if (query.angle !== null) params.set('angle', query.angle);
   return params;
 }
 
@@ -142,7 +138,6 @@ export const MetricsQueryParamsSchema = z.strictObject({
   persona: z.string().optional(),
   account: z.string().optional(),
   provider: z.string().optional(),
-  angle: z.string().optional(),
 });
 
 export const Last24hQueryParamsSchema = z.strictObject({
@@ -162,7 +157,6 @@ export const MetricsRowSchema = z.object({
   provider: z.enum(SOCIAL_PROVIDERS),
   accountId: z.string(),
   externalId: z.string(),
-  scriptAngle: z.string().nullable(),
   publishedAt: z.string(),
   views: z.number().nullable(),
   likes: z.number().nullable(),
@@ -186,7 +180,6 @@ export const CoverageItemSchema = z.object({
   provider: z.enum(SOCIAL_PROVIDERS),
   accountId: z.string(),
   externalId: z.string().nullable(),
-  scriptAngle: z.string().nullable(),
   reason: z.enum(COVERAGE_REASONS),
   publishedAt: z.string(),
   windowOpensAt: z.string(),

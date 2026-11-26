@@ -8,36 +8,25 @@ import {
   usePostDetailQuery,
   useUpdateSlotMutation,
   useDeleteSlotMutation,
-  type ScheduledSlot,
   type SlotDetailPayload,
   type PostDetail,
-  type ProgressHistoryEntry,
 } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
-import { DetailProgressBar } from './detail-progress-bar';
-import { formatDateTime, ScheduleSection } from './schedule-section';
-import { GenerationFactsSection } from './generation-facts-section';
-import { HookPhotoSection } from './hook-photo-section';
-import { RescheduleSection } from './reschedule-section';
-import { ScriptAngleSection } from './script-angle-section';
-import { usePostAccountCards, type AccountCardData } from './account-cards';
+import { ScheduleSection } from './schedule-section';
 import { PostAccountsSection } from './post-accounts-section';
+import { SlotImagePreview } from './slot-image-preview';
+import { RescheduleSection } from './reschedule-section';
+import { PromptSection } from './prompt-section';
+import type { PostPromptFacts } from '@/lib/slot-detail';
+import { usePostAccountCards, type AccountCardData } from './account-cards';
 import { ExternalLinkIcon } from '@/lib/ui';
 import type { PublishLink } from '@/lib/publish-links';
 import { PROVIDER_LABELS, scheduleAccountIds } from '@/lib/account-options';
 import { useI18n } from '@/lib/i18n/provider';
 import { useCopyText } from '@/lib/use-copy-text';
-import { GENERATION_ERROR_KEY } from '@/lib/generation/generation-errors';
 import { Button } from '@/components/ui/button';
 import { STATUS_KEY, STATUS_STYLE } from '../status';
 import { PostFailureNotice } from './post-failure-notice';
-import { SlotImagePreview } from './slot-image-preview';
-
-function videoUrlFor(taskId: string | null | undefined): string | null {
-  return taskId ? `/api/persona/video-download/${encodeURIComponent(taskId)}/final-1.mp4` : null;
-}
-
-const SLOT_VIDEO_STATUSES = new Set<ScheduledSlot['status']>(['ready', 'publishing', 'published']);
 
 export default function PostDetailPage() {
   const { t, locale } = useI18n();
@@ -48,8 +37,7 @@ export default function PostDetailPage() {
   const accountOptions = usePostAccountCards();
 
   const post: PostDetail | null = postQuery.data ?? null;
-  const slotDetail = post?.kind === 'slot' ? post : null;
-  const generation = post?.kind === 'generation' ? post.generation : null;
+  const slotDetail = post;
   const isLoading = postQuery.isLoading;
 
   const accounts: AccountCardData[] = useMemo(() => {
@@ -62,7 +50,6 @@ export default function PostDetailPage() {
   const personaMissing =
     slotDetail !== null && slotDetail !== undefined && slotDetail.schedule.personaId === null;
   const personaName = slotDetail?.persona?.name
-    ?? generation?.personaName
     ?? (personaMissing ? t('posts.noPersona') : t('posts.personaFallback'));
 
   if (isLoading) return <DetailSkeleton />;
@@ -75,47 +62,12 @@ export default function PostDetailPage() {
   }
   if (!post) return <DetailNotFound />;
 
-  if (post.kind === 'generation' && generation) {
-    const videoUrl = generation.status === 'completed' ? videoUrlFor(generation.engineTaskId) : null;
-    return (
-      <div className="mx-auto max-w-3xl">
-        <DetailHeader
-          title={generation.personaName ?? t('posts.personaFallback')}
-          statusLabel={t(STATUS_KEY[generation.status] ?? 'posts.statusPending')}
-          statusStyle={STATUS_STYLE[generation.status] ?? STATUS_STYLE.pending}
-        />
-        <PostIdSection postId={generation.generationId} />
-        <ScriptAngleSection angle={generation.scriptAngle} />
-        <section aria-label={t('posts.detailsTitle')} className="mt-6">
-          <p className="text-sm text-muted-foreground">
-            {formatDateTime(generation.createdAt, locale)} · {generation.videoSubject ?? t('posts.unknownTitle')}
-          </p>
-          {(generation.status === 'pending' || generation.status === 'running') && generation.engineTaskId ? (
-            <DetailProgressBar progress={generation.progress} stage={generation.stage} />
-          ) : (
-            <DetailPlayer src={videoUrl} placeholder={t('posts.coverNoVideo')} />
-          )}
-          {generation.status === 'failed' && (
-            <p className="mt-4 text-sm text-destructive">
-              {t(GENERATION_ERROR_KEY[generation.errorCode ?? 'unknown'] ?? 'posts.errorUnknown')}
-            </p>
-          )}
-          {generation.tokensRefunded && (
-            <Badge variant="outline" className="mt-4 border-transparent bg-success-soft text-success">
-              {t('posts.refundedBadge')}
-            </Badge>
-          )}
-        </section>
-      </div>
-    );
-  }
-
   return (
     <div className="mx-auto max-w-3xl">
       <DetailHeader
         title={personaName}
-        statusLabel={t(STATUS_KEY[slot?.status ?? 'pending'] ?? 'posts.statusPending')}
-        statusStyle={STATUS_STYLE[slot?.status ?? 'pending'] ?? STATUS_STYLE.pending}
+        statusLabel={t(STATUS_KEY[slot?.status ?? 'ready'] ?? 'posts.statusReady')}
+        statusStyle={STATUS_STYLE[slot?.status ?? 'ready'] ?? STATUS_STYLE.ready}
       />
       {slot && slotDetail && (
         <SlotDetail
@@ -125,8 +77,7 @@ export default function PostDetailPage() {
           timezone={slotDetail.schedule.timezone}
           publishMode={slotDetail.schedule.publishMode}
           publishLinks={slotDetail.slot.publishLinks ?? []}
-          generation={slotDetail.generation}
-          personaName={personaName}
+          prompt={slotDetail.prompt}
         />
       )}
     </div>
@@ -186,65 +137,6 @@ export const PostIdSection = ({ postId }: { postId: string }) => {
   );
 };
 
-const DetailPlayer = ({ src, placeholder }: { src: string | null; placeholder: string }) => {
-  const { t } = useI18n();
-  const [debug, setDebug] = useState<{
-    status: 'loading' | 'ready' | 'error';
-    width: number;
-    height: number;
-    duration: number;
-    errorCode: number | null;
-  }>({ status: 'loading', width: 0, height: 0, duration: 0, errorCode: null });
-  const sourceSuffix = src !== null && src.startsWith('/') ? ` · ${src}` : '';
-
-  const handleMetadata = (event: React.SyntheticEvent<HTMLVideoElement>): void => {
-    const el = event.currentTarget;
-    setDebug({
-      status: 'ready',
-      width: el.videoWidth,
-      height: el.videoHeight,
-      duration: el.duration,
-      errorCode: null,
-    });
-  };
-
-  const handleError = (event: React.SyntheticEvent<HTMLVideoElement>): void => {
-    const el = event.target as HTMLVideoElement;
-    const code = el.error?.code ?? null;
-    setDebug((current) => ({
-      ...current,
-      status: 'error',
-      errorCode: code,
-    }));
-  };
-
-  return (
-    <div className="mt-4">
-      <div className="overflow-hidden rounded-2xl bg-black">
-        {src ? (
-          <video
-            src={src}
-            controls
-            preload="metadata"
-            onLoadedMetadata={handleMetadata}
-            onError={handleError}
-            className="mx-auto h-auto max-h-[46vh] w-auto max-w-full"
-          />
-        ) : (
-          <div className="flex h-56 w-full items-center justify-center bg-sunken text-sm font-medium text-muted-foreground">{placeholder}</div>
-        )}
-      </div>
-      {src && (
-        <p data-testid="video-debug" className="mt-2 font-mono text-xs text-[#8aa2b5]">
-          {debug.status === 'ready' &&
-            `${debug.width}×${debug.height} · ${Math.round(debug.duration)}s${sourceSuffix}`}
-          {debug.status === 'error' && `${t('posts.videoLoadError')} (code ${debug.errorCode ?? '?'})${sourceSuffix}`}
-          {debug.status === 'loading' && `loading…${sourceSuffix}`}
-        </p>
-      )}
-    </div>
-  );
-};
 
 const PublishLinks = ({ links }: { links: PublishLink[] }) => {
   const { t } = useI18n();
@@ -279,8 +171,7 @@ export const SlotDetail = ({
   timezone,
   publishMode,
   publishLinks,
-  generation,
-  personaName,
+  prompt,
 }: {
   slot: SlotDetailPayload['slot'];
   accounts: AccountCardData[];
@@ -288,8 +179,7 @@ export const SlotDetail = ({
   timezone: string;
   publishMode: SlotDetailPayload['schedule']['publishMode'];
   publishLinks: PublishLink[];
-  generation: SlotDetailPayload['generation'];
-  personaName: string;
+  prompt: PostPromptFacts | null;
 }) => {
   const { t } = useI18n();
   const router = useRouter();
@@ -299,11 +189,9 @@ export const SlotDetail = ({
   const [titleDraft, setTitleDraft] = useState(slot.title ?? '');
   const [armed, setArmed] = useState(false);
 
-  const videoUrl = videoUrlFor(slot.taskId) ?? slot.media?.url ?? null;
-  const canWatch = SLOT_VIDEO_STATUSES.has(slot.status) && videoUrl !== null && slot.media?.kind !== 'image';
-  const canEdit = slot.status === 'awaiting' || slot.status === 'ready';
+  const canEdit = slot.status === 'ready';
   const canDelete =
-    slot.status === 'awaiting' || slot.status === 'ready' || slot.status === 'failed';
+    slot.status === 'ready' || slot.status === 'failed';
   const mutationError =
     (updateTitle.isError ? updateTitle.error?.message : null) ??
     (deleteSlot.isError ? deleteSlot.error?.message : null);
@@ -327,32 +215,12 @@ export const SlotDetail = ({
     <section aria-label={t('posts.detailsTitle')} className="mt-6">
       {slot.media?.kind === 'image' && slot.media.url ? (
         <SlotImagePreview src={slot.media.url} />
-      ) : canWatch && videoUrl ? (
-        <DetailPlayer src={videoUrl} placeholder="" />
-      ) : slot.status === 'generating' ? (
-        <DetailProgressBar progress={slot.progress} stage={slot.stage} />
-      ) : (
-        <DetailPlayer
-          src={null}
-          placeholder={slot.status === 'awaiting' ? t('posts.videoPending') : t('posts.coverNoVideo')}
-        />
-      )}
-
-      <PostFailureNotice status={slot.status} error={slot.error} userNotices={slot.userNotices} />
-      {canWatch && videoUrl && slot.taskId && (
-        <div className="mt-3">
-          <a
-            href={`${videoUrl}?source=download`}
-            download
-            className="inline-block rounded-xl border border-input px-4 py-2 text-sm font-semibold text-primary hover:bg-background"
-          >
-            {t('posts.downloadVideo')}
-          </a>
+      ) : slot.media?.kind === 'upload' && slot.media.url ? (
+        <div className="mt-4 overflow-hidden rounded-2xl bg-black">
+          <video src={slot.media.url} controls className="mx-auto h-auto max-h-[70vh] w-full" />
         </div>
-      )}
-
-      <HookPhotoSection hookPhoto={slot.hookPhoto} voiceover={generation.voiceover} />
-
+      ) : null}
+      <PostFailureNotice status={slot.status} error={slot.error} userNotices={slot.userNotices} />
       <div className="mt-6">
         <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{t('posts.captionLabel')}</p>
         {editing ? (
@@ -392,21 +260,17 @@ export const SlotDetail = ({
         )}
       </div>
 
-      <ScriptAngleSection angle={slot.scriptAngle} />
-
       <PostIdSection postId={slot.id} />
+
+      <PromptSection prompt={prompt} />
 
       <ScheduleSection slot={slot} timezone={timezone} publishMode={publishMode} locale={locale} />
 
       <RescheduleSection slot={slot} timezone={timezone} publishMode={publishMode} />
 
-      <GenerationFactsSection generation={generation} personaName={personaName} />
-
       <PostAccountsSection accounts={accounts} />
 
       <PublishLinks links={publishLinks} />
-
-      <ProgressHistory history={slot.progressHistory ?? []} />
 
       {mutationError && (
         <p className="mt-6 rounded-xl bg-destructive-soft p-3 text-sm text-destructive" role="alert">
@@ -438,50 +302,8 @@ export const SlotDetail = ({
               {armed ? t('posts.deleteConfirm') : t('posts.delete')}
             </button>
           )}
-          {canDelete && armed && (
-            <span className="text-xs text-muted-foreground">{t('posts.deleteTokenNote')}</span>
-          )}
         </div>
       )}
-    </section>
-  );
-};
-
-export const ProgressHistory = ({ history }: { history: ProgressHistoryEntry[] }) => {
-  const { t, locale } = useI18n();
-  if (history.length === 0) return null;
-  return (
-    <section aria-label={t('posts.progressHistoryTitle')} className="mt-6">
-      <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-        {t('posts.progressHistoryTitle')}
-      </p>
-      <ol className="mt-3 space-y-2">
-        {history.map((entry, index) => {
-          const regressed = index > 0 && entry.progress < history[index - 1].progress;
-          return (
-            <li
-              key={`${entry.recordedAt}-${index}`}
-              data-testid="progress-history-row"
-              data-regressed={regressed ? 'true' : undefined}
-              className={`flex items-baseline justify-between gap-3 rounded-xl border px-3 py-2 text-sm ${
-                regressed ? 'border-warning/40 bg-warning-soft' : 'border-input bg-card'
-              }`}
-            >
-              <span className="flex min-w-0 items-baseline gap-2">
-                <span className={`font-semibold ${regressed ? 'text-warning' : 'text-primary'}`}>
-                  {entry.progress}%
-                </span>
-                {entry.stage && (
-                  <span className="truncate font-mono text-xs text-muted-foreground">{entry.stage}</span>
-                )}
-              </span>
-              <time className="shrink-0 text-xs text-muted-foreground">
-                {formatDateTime(entry.recordedAt, locale)}
-              </time>
-            </li>
-          );
-        })}
-      </ol>
     </section>
   );
 };

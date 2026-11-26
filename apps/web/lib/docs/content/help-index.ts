@@ -5,28 +5,23 @@ export const helpIndex: DocPage = {
   slug: null,
   title: { pt: 'Ajuda', en: 'Help' },
   description: {
-    pt: 'Guias para usar o Post Engineer: primeiros passos, tokens e contas conectadas.',
-    en: 'Guides for using Post Engineer: first steps, tokens and connected accounts.',
+    pt: 'Guias para usar o Post Engineer: primeiros passos e contas conectadas.',
+    en: 'Guides for using Post Engineer: first steps and connected accounts.',
   },
   updatedAt: '2026-11-26',
-  contentHash: '43d8e6dc9288d10e0bc3b172bdb0278ba2e2fd2f08a5adf8231f902e2abc1551',
+  contentHash: '997c4da5f9219e30a9c6556426f1c36e25da1d7c34a070f90e582f5454ca14ef',
   blocks: [
     {
       kind: 'paragraph',
       text: {
-        pt: 'Estes guias explicam como usar o Post Engineer: criar sua persona, entender os custos e ligar suas contas para publicar.',
-        en: 'These guides explain how to use Post Engineer: create your persona, understand the costs and connect your accounts to publish.',
+        pt: 'Estes guias explicam como usar o Post Engineer: criar sua persona, enviar sua mídia e ligar suas contas para publicar. Toda conta nova tem 7 dias grátis.',
+        en: 'These guides explain how to use Post Engineer: create your persona, upload your media and connect your accounts to publish. Every new account gets a 7-day free trial.',
       },
     },
     {
       kind: 'link',
       href: { pt: '/help/primeiros-passos', en: '/en/help/primeiros-passos' },
       text: { pt: 'Primeiros passos', en: 'First steps' },
-    },
-    {
-      kind: 'link',
-      href: { pt: '/help/tokens', en: '/en/help/tokens' },
-      text: { pt: 'Tokens', en: 'Tokens' },
     },
     {
       kind: 'link',

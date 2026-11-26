@@ -3,17 +3,17 @@ import { z } from 'zod';
 import { detectMagicMimeType } from '@/lib/media/magic-bytes';
 import { IMAGE_PROVIDERS, isImageProvider } from '@/lib/contracts/providers';
 import { MAX_IMAGE_UPLOAD_BYTES } from '@/lib/contracts/videos';
-import { resolveTitle } from '@/app/api/videos/generate-and-schedule/request-title';
+import { resolveTitle } from './request-title';
 import {
   validatePinterestBoard,
   validateProviders,
   type Provider,
-} from '@/app/api/videos/generate-and-schedule/providers-validation';
+} from './providers-validation';
 import {
   invalid,
   type Checked,
   type ValidationIssue,
-} from '@/app/api/videos/generate-and-schedule/validation-issues';
+} from './validation-issues';
 
 export const IMAGE_MAX_BYTES = MAX_IMAGE_UPLOAD_BYTES;
 
@@ -26,7 +26,6 @@ export type ImageContentType = (typeof IMAGE_CONTENT_TYPES)[number];
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const MediaSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('task'), taskId: z.string().min(1, 'taskId is required.') }).strict(),
   z.object({ kind: z.literal('upload'), uploadId: z.string().regex(UUID_PATTERN, 'uploadId must be a UUID.') }).strict(),
   z
     .object({
@@ -64,6 +63,7 @@ const BodySchema = z
     tags: z.array(z.string()).optional(),
     privacyStatus: z.string().optional(),
     caption: z.string().optional(),
+    promptVersionId: z.string().regex(UUID_PATTERN, 'promptVersionId must be a UUID.').optional(),
     idempotencyKey: z.string().optional(),
   })
   .strict();
@@ -85,6 +85,7 @@ export interface PublishExistingRequest {
   tags: string[] | undefined;
   privacyStatus: string | undefined;
   caption: string | undefined;
+  promptVersionId: string | undefined;
   idempotencyKey: string | undefined;
 }
 
@@ -102,10 +103,10 @@ export function parsePublishExistingBody(body: unknown): Checked<z.infer<typeof 
   }
   if (isRecord(body.media) && typeof body.media.kind === 'string') {
     const kind = body.media.kind;
-    if (kind !== 'task' && kind !== 'upload' && kind !== 'image') {
+    if (kind !== 'upload' && kind !== 'image') {
       return {
         ok: false,
-        issues: [invalid('media.kind must be one of: task, upload, image.', 'media.kind')],
+        issues: [invalid('media.kind must be one of: upload, image.', 'media.kind')],
       };
     }
   }
@@ -152,6 +153,10 @@ export function checkPublishExistingSemantics(
     if (issue !== null) issues.push(issue);
   }
 
+  if (mode === 'asap' && input.promptVersionId !== undefined) {
+    issues.push(invalid('promptVersionId only applies to scheduled posts: an immediate publish leaves no slot to measure.', 'promptVersionId'));
+  }
+
   if (mode === 'asap' && providers.ok && providers.value.includes('youtube')) {
     if (input.tags === undefined || input.tags.length === 0) {
       issues.push(invalid('Video tags are required', 'tags'));
@@ -181,6 +186,7 @@ export function checkPublishExistingSemantics(
       tags: input.tags,
       privacyStatus: input.privacyStatus,
       caption: input.caption,
+      promptVersionId: input.promptVersionId,
       idempotencyKey: input.idempotencyKey,
     },
   };

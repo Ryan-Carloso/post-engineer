@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import { ERROR_CODES, errorMessage, formatErrorMessage, isErrorCode } from '../error-codes';
-import { HOOK_TITLE_CODES, hookTitleMessage } from '../generation/hook-title';
 import { SCHEDULE_MAX_AHEAD_DAYS, SCHEDULE_MIN_ADVANCE_HOURS } from '../schedule-window';
 
 describe('error-codes', () => {
-  it('exposes every code required by the generate-and-schedule contract', () => {
+  it('exposes every code the publish and persona routes return', () => {
     const required = [
       'PERSONA_NOT_FOUND',
       'PERSONA_ACCESS_DENIED',
@@ -15,16 +14,10 @@ describe('error-codes', () => {
       'NO_CONNECTED_ACCOUNTS',
       'ACCOUNT_NOT_BOUND_TO_PERSONA',
       'PERSONA_NO_BOUND_ACCOUNTS',
-      'TOPICS_REQUIRED',
-      'TOPICS_LIMIT_EXCEEDED',
-      'INVALID_SCHEDULE_TIME',
       'SCHEDULE_OUT_OF_RANGE',
-      'INSUFFICIENT_TOKENS',
-      'RATE_LIMIT_EXCEEDED',
       'VALIDATION_FAILED',
+      'TRIAL_EXPIRED',
       'INTERNAL_ERROR',
-      'ENGINE_UNAVAILABLE',
-      'ENGINE_REJECTED',
     ] as const;
     for (const code of required) {
       expect(ERROR_CODES[code], code).toBe(code);
@@ -32,19 +25,18 @@ describe('error-codes', () => {
     }
   });
 
-  it('exposes every stable hook title code with the shared rule text', () => {
-    for (const code of Object.values(HOOK_TITLE_CODES)) {
-      expect(isErrorCode(code), code).toBe(true);
-      expect(ERROR_CODES[code], code).toBe(code);
-      expect(errorMessage(code), code).toBe(hookTitleMessage(code));
+  it('has no generation or token codes left', () => {
+    for (const code of ['INSUFFICIENT_TOKENS', 'ENGINE_REJECTED', 'ENGINE_UNAVAILABLE', 'UNKNOWN_VOICE', 'QUOTE_EXPIRED']) {
+      expect(isErrorCode(code), code).toBe(false);
     }
   });
 
-  it('fills {placeholders} in INSUFFICIENT_TOKENS', () => {
-    expect(formatErrorMessage('INSUFFICIENT_TOKENS', { need: 850, have: 600 })).toBe(
-      'You need 850 tokens, but only have 600.',
+  it('leaves unknown placeholders untouched instead of breaking the sentence', () => {
+    expect(formatErrorMessage('SOCIAL_ACCOUNT_NOT_OWNED')).toBe(
+      'Selected {provider} account does not belong to this user.',
     );
   });
+
 
   it('fills the {provider} placeholder', () => {
     expect(formatErrorMessage('SOCIAL_ACCOUNT_NOT_OWNED', { provider: 'youtube' })).toBe(
@@ -63,12 +55,6 @@ describe('error-codes', () => {
     ).toBe('Publishing must be scheduled between 3 hours and 30 days from now.');
   });
 
-  it('leaves unknown placeholders untouched instead of breaking the sentence', () => {
-    expect(formatErrorMessage('INSUFFICIENT_TOKENS')).toBe(
-      'You need {need} tokens, but only have {have}.',
-    );
-  });
-
   it('never leaks internals in the INTERNAL_ERROR default message', () => {
     const message = errorMessage('INTERNAL_ERROR').toLowerCase();
     for (const leaked of ['stack', 'sql', 'trace', 'path']) {
@@ -77,7 +63,7 @@ describe('error-codes', () => {
   });
 
   it('isErrorCode narrows valid codes only', () => {
-    expect(isErrorCode('TOPICS_REQUIRED')).toBe(true);
+    expect(isErrorCode('TRIAL_EXPIRED')).toBe(true);
     expect(isErrorCode('SOMETHING_WRONG')).toBe(false);
     expect(isErrorCode(undefined)).toBe(false);
     expect(isErrorCode(42)).toBe(false);

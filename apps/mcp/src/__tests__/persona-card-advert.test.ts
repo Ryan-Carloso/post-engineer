@@ -58,7 +58,7 @@ describe('identityCard as advertised on personas create and update', () => {
   });
 
   it('accepts a v1 card and a v2 card on create and update, locally and hosted', () => {
-    const create = { name: 'Maria', avatarUrl: 'https://example.com/a.png', voiceId: 'v1', accounts: { youtube: ['UC1'] } };
+    const create = { name: 'Maria', accounts: { youtube: ['UC1'] } };
     for (const card of [V1_CARD, V2_CARD]) {
       expect(UpdatePersonaSchema.safeParse({ personaId: MARIA, identityCard: card }).success).toBe(true);
       expect(UpdatePersonaRemoteSchema.safeParse({ personaId: MARIA, identityCard: card }).success).toBe(true);

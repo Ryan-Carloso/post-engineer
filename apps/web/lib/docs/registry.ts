@@ -1,7 +1,6 @@
 import { helpConnectAccounts } from './content/help-conectar-contas';
 import { helpIndex } from './content/help-index';
 import { helpFirstSteps } from './content/help-primeiros-passos';
-import { helpTokens } from './content/help-tokens';
 import { apiGuide } from './content/api';
 import { docsIndex } from './content/docs-index';
 import { integrationsGuide } from './content/integrations';
@@ -17,7 +16,6 @@ export const DOC_PAGES: DocPage[] = [
   integrationsGuide,
   helpIndex,
   helpFirstSteps,
-  helpTokens,
   helpConnectAccounts,
 ];
 

@@ -9,8 +9,6 @@ from typing import Any, Callable
 
 from loguru import logger
 
-from app.providers import URL_MEDIA_PROVIDERS
-from app.services.analytics import scrub_error_text
 from app.services.fill_schedule.account_outcomes import (
     _account_ids,
     _blank,
@@ -29,12 +27,10 @@ from app.services.fill_schedule.account_outcomes import (
     load_outcomes,
 )
 from app.services.fill_schedule.constants import MAX_PUBLISH_ATTEMPTS
-from app.services.fill_schedule.publish_results import entries_for_result, failed_entry
 from app.services import upload_publisher
 
 from app.services.fill_schedule.account_outcomes import next_delay_seconds as next_delay_seconds
 
-RecordResults = Callable[[list[dict[str, Any]]], bool]
 PersistOutcomes = Callable[[list[dict[str, Any]], dict[str, Any]], None]
 
 
@@ -44,7 +40,6 @@ class AccountPublishResult:
     published_providers: list[str] = field(default_factory=list)
     failed_providers: list[str] = field(default_factory=list)
     non_user_failed_providers: list[str] = field(default_factory=list)
-    publish_results: list[dict[str, Any]] = field(default_factory=list)
     first_error: str = ""
     max_attempts: int = 0
     any_retrying: bool = False
@@ -52,7 +47,6 @@ class AccountPublishResult:
     new_user_notices: list[str] = field(default_factory=list)
     provider_exceptions: list[tuple[str, BaseException]] = field(default_factory=list)
     failure_reason: str = ""
-    state_write_failed: bool = False
     transport_error: BaseException | None = None
 
 
@@ -69,16 +63,13 @@ def publish_slot_accounts(
     api_secret: str,
     publish_video: Callable[..., Any],
     persist_outcomes: PersistOutcomes,
-    record_results: RecordResults | None = None,
     content_type: str = "video/mp4",
-    video_object_path: str | None = None,
 ) -> AccountPublishResult:
     """Publish every account that does not already have a terminal outcome.
 
     ``read_video`` runs once, only when an account is due. When it fails,
     each due account records one transient try, so a storage outage uses
     the same per-account budget and never fails accounts already live.
-    Meta providers skip the read when ``video_object_path`` is set.
     """
     outcomes = load_outcomes(slot)
     legacy_slot = not outcomes
@@ -128,21 +119,19 @@ def publish_slot_accounts(
                 "publish_attempts": max_attempts,
                 "publish_not_before": lease,
             })
-            use_archive = video_object_path is not None and provider_name in URL_MEDIA_PROVIDERS
-            if not use_archive:
-                if video_bytes is None and result.transport_error is None:
-                    try:
-                        video_bytes = read_video()
-                    except (OSError, RuntimeError) as exc:
-                        result.transport_error = exc
-                        if not result.first_error:
-                            result.first_error = str(exc)
-                if result.transport_error is not None or video_bytes is None:
-                    reason = str(result.transport_error) if result.transport_error else "video unavailable"
-                    for outcome in started:
-                        _fail_outcome(outcome, reason, "transient", None, now)
-                    persist_outcomes(outcomes, {"publish_attempts": max_attempts})
-                    continue
+            if video_bytes is None and result.transport_error is None:
+                try:
+                    video_bytes = read_video()
+                except (OSError, RuntimeError) as exc:
+                    result.transport_error = exc
+                    if not result.first_error:
+                        result.first_error = str(exc)
+            if result.transport_error is not None or video_bytes is None:
+                reason = str(result.transport_error) if result.transport_error else "video unavailable"
+                for outcome in started:
+                    _fail_outcome(outcome, reason, "transient", None, now)
+                persist_outcomes(outcomes, {"publish_attempts": max_attempts})
+                continue
             try:
                 metadata = _metadata(provider_name, title, schedule, [item["accountId"] for item in started], description)
             except RuntimeError as exc:
@@ -159,12 +148,11 @@ def publish_slot_accounts(
                     owner_user_id=owner,
                     metadata=metadata,
                     video_path=video_name,
-                    video_bytes=None if use_archive else video_bytes,
+                    video_bytes=video_bytes,
                     content_type=content_type,
                     max_attempts=1,
                     surface_application_failure=True,
                     publish_scope_key=f"slot:{slot['id']}:video:{video_name}",
-                    r2_object_path=video_object_path if use_archive else None,
                 )
             except upload_publisher.PublishError as exc:
                 parsed = _json_accounts(getattr(exc, "response_body", None))
@@ -202,18 +190,12 @@ def publish_slot_accounts(
                     f"fill_schedule: slot {slot.get('id')} provider {provider_name} "
                     f"publish failed: {exc}"
                 )
-                entries = [
-                    failed_entry(provider_name, video_name, scrub_error_text(str(exc), max_chars=500))
-                ]
             except OSError as exc:
                 for outcome in started:
                     _fail_outcome(outcome, str(exc), None, None, now)
                 result.provider_exceptions.append((provider_name, exc))
                 if not result.first_error:
                     result.first_error = str(exc)
-                entries = [
-                    failed_entry(provider_name, video_name, scrub_error_text(str(exc), max_chars=500))
-                ]
             else:
                 assigned = _targets_from_body([item["accountId"] for item in started], body)
                 for outcome in started:
@@ -228,10 +210,6 @@ def publish_slot_accounts(
                             200,
                             now,
                         )
-                entries = entries_for_result(provider_name, video_name, body if isinstance(body, dict) else {})
-            result.publish_results.extend(entries)
-            if record_results is not None and entries:
-                result.state_write_failed = record_results(list(result.publish_results)) is False
             persist_outcomes(outcomes, {
                 "publish_attempts": max(int(item.get("attempts") or 0) for item in outcomes),
             })

@@ -9,7 +9,7 @@ function slot(overrides: Partial<AdapterSlot> = {}): AdapterSlot {
     id: 'slot-1',
     scheduleId: 'schedule-1',
     slotAt: '2030-06-01T10:00:00.000Z',
-    status: 'awaiting',
+    status: 'ready',
     title: 'Morning topic',
     ...overrides,
   };
@@ -38,12 +38,7 @@ describe('slotToCalendarEvent', () => {
   it.each([
     ['failed', 'red'],
     ['published', 'green'],
-    ['completed', 'green'],
-    ['generating', 'blue'],
     ['publishing', 'blue'],
-    ['running', 'blue'],
-    ['awaiting', 'gray'],
-    ['pending', 'gray'],
     ['ready', 'gray'],
     ['unknown-status', 'gray'],
   ] as const)('paints a %s slot %s', (status, color) => {

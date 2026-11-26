@@ -4,7 +4,6 @@ import os
 import sys
 import unittest
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -16,9 +15,6 @@ from app.services.owner_alert import (
     _post_link,
     _release,
     _render,
-    alert_failed_task,
-    direct_task_email_user,
-    notify_generation_failed,
     notify_owner_async,
     notify_publish_failed,
     notify_publish_partial,
@@ -38,7 +34,7 @@ class _Response:
 class _Session:
     def __init__(
         self, claim=True, resend_status=200, email="owner@example.com", user_status=200,
-        accounts=None, schedules=None, claim_status=200, release_status=204,
+        accounts=None, claim_status=200, release_status=204,
         user_payload=None, resend_raises=False, release_raises=False,
     ):
         self.calls = []
@@ -47,7 +43,6 @@ class _Session:
         self.email = email
         self.user_status = user_status
         self.accounts = accounts if accounts is not None else []
-        self.schedules = schedules if schedules is not None else []
         self.claim_status = claim_status
         self.release_status = release_status
         self.user_payload = user_payload
@@ -74,8 +69,6 @@ class _Session:
             return _Response(self.release_status, None)
         if "/rest/v1/social_accounts" in url:
             return _Response(200, self.accounts)
-        if "/rest/v1/schedules" in url:
-            return _Response(200, self.schedules)
         raise AssertionError(url)
 
     def close(self):
@@ -89,16 +82,6 @@ ENV = {
     "SUPABASE_SERVICE_ROLE_KEY": "service-role-test",
     "MPT_UPLOAD_API_BASE_URL": "https://post-engineer.com",
 }
-
-
-class DirectTaskEmailUserTests(unittest.TestCase):
-    def test_skips_a_slot_and_the_unknown_sentinel(self):
-        self.assertIsNone(direct_task_email_user({"slot_id": "slot-1", "user_id": "user-1"}))
-        self.assertIsNone(direct_task_email_user({"user_id": "unknown"}))
-        self.assertIsNone(direct_task_email_user({"user_id": "  "}))
-        self.assertIsNone(direct_task_email_user(None))
-        self.assertIsNone(direct_task_email_user({"user_id": 123}))
-        self.assertEqual(direct_task_email_user({"user_id": "user-1"}), "user-1")
 
 
 class SendOwnerEmailTests(unittest.TestCase):
@@ -115,8 +98,8 @@ class SendOwnerEmailTests(unittest.TestCase):
         ):
             send_owner_email(
                 user_id="user-1",
-                dedup_key="generate:slot-1",
-                subject="A post could not be generated",
+                dedup_key="publish:slot-1",
+                subject="A post could not be published",
                 html_body="<p>x</p>",
                 text="x",
             )
@@ -127,8 +110,8 @@ class SendOwnerEmailTests(unittest.TestCase):
         with patch.dict(os.environ, {"RESEND_API_KEY": "", "ACCOUNT_BREAK_FROM": ""}, clear=False):
             send_owner_email(
                 user_id="user-1",
-                dedup_key="generate:slot-1",
-                subject="A post could not be generated",
+                dedup_key="publish:slot-1",
+                subject="A post could not be published",
                 html_body="<p>x</p>",
                 text="x",
                 session=session,
@@ -140,8 +123,8 @@ class SendOwnerEmailTests(unittest.TestCase):
         with patch.dict(os.environ, ENV, clear=False):
             send_owner_email(
                 user_id="user-1",
-                dedup_key="generate:slot-1",
-                subject="A post could not be generated",
+                dedup_key="publish:slot-1",
+                subject="A post could not be published",
                 html_body="<p>x</p>",
                 text="x",
                 session=session,
@@ -152,7 +135,7 @@ class SendOwnerEmailTests(unittest.TestCase):
     def test_claim_true_sends_and_does_not_release(self):
         session = _Session()
         with patch.dict(os.environ, ENV, clear=False):
-            notify_generation_failed(
+            notify_publish_failed(
                 "user-1",
                 slot_id="slot-1",
                 title="Hello <title>",
@@ -166,7 +149,7 @@ class SendOwnerEmailTests(unittest.TestCase):
         resend = next(kwargs for _method, url, kwargs in session.calls if url == "https://api.resend.com/emails")
         body = resend["json"]
         self.assertEqual(body["from"], "Post Engineer <alerts@notifications.post-engineer.com>")
-        self.assertEqual(body["subject"], "A post could not be generated")
+        self.assertEqual(body["subject"], "A post could not be published")
         self.assertIn("Hello &lt;title&gt;", body["html"])
         self.assertIn("https://post-engineer.com/posts/slot-1", body["html"])
         headers = resend["headers"]
@@ -176,7 +159,7 @@ class SendOwnerEmailTests(unittest.TestCase):
     def test_secret_bearing_reason_is_redacted_in_the_body(self):
         session = _Session()
         with patch.dict(os.environ, ENV, clear=False):
-            notify_generation_failed(
+            notify_publish_failed(
                 "user-1",
                 slot_id="slot-1",
                 title="t",
@@ -213,8 +196,8 @@ class SendOwnerEmailTests(unittest.TestCase):
         with patch.dict(os.environ, ENV, clear=False):
             send_owner_email(
                 user_id="user-1",
-                dedup_key="generate:slot-1",
-                subject="A post could not be generated",
+                dedup_key="publish:slot-1",
+                subject="A post could not be published",
                 html_body="<p>x</p>",
                 text="x",
                 session=Boom(),
@@ -302,38 +285,6 @@ class PublishFailureEmailTests(unittest.TestCase):
             )
         self.assertEqual(session.calls, [])
 
-    def test_generation_failed_resolves_the_persona_from_the_schedule(self):
-        session = _Session(schedules=[{"personas": {"name": "Bicuda"}}])
-        with patch.dict(os.environ, ENV, clear=False):
-            notify_generation_failed(
-                "user-1",
-                slot_id="slot-1",
-                title="Hello",
-                reason="boom",
-                schedule_id="schedule-1",
-                session=session,
-            )
-        body = self._resend_body(session)
-        self.assertIn("Persona: Bicuda", body["html"])
-
-    def test_generation_failed_prefers_the_given_persona_over_the_lookup(self):
-        session = _Session(schedules=[{"personas": {"name": "Other"}}])
-        with patch.dict(os.environ, ENV, clear=False):
-            notify_generation_failed(
-                "user-1",
-                slot_id="slot-1",
-                title="Hello",
-                reason="boom",
-                persona="Direct",
-                schedule_id="schedule-1",
-                session=session,
-            )
-        body = self._resend_body(session)
-        self.assertIn("Persona: Direct", body["html"])
-        self.assertFalse(
-            any("/rest/v1/schedules" in url for _m, url, _k in session.calls)
-        )
-
     def test_failure_lines_skip_junk_and_fall_back_to_the_label(self):
         lines = _failure_lines(
             [
@@ -398,8 +349,8 @@ class DeliverHelpersTests(unittest.TestCase):
         ):
             send_owner_email(
                 user_id="user-1",
-                dedup_key="generate:slot-1",
-                subject="A post could not be generated",
+                dedup_key="publish:slot-1",
+                subject="A post could not be published",
                 html_body="<p>x</p>",
                 text="x",
             )
@@ -416,8 +367,8 @@ class DeliverHelpersTests(unittest.TestCase):
         ):
             send_owner_email(
                 user_id="user-1",
-                dedup_key="generate:slot-1",
-                subject="A post could not be generated",
+                dedup_key="publish:slot-1",
+                subject="A post could not be published",
                 html_body="<p>x</p>",
                 text="x",
             )
@@ -433,8 +384,8 @@ class DeliverHelpersTests(unittest.TestCase):
         ):
             send_owner_email(
                 user_id="user-1",
-                dedup_key="generate:slot-1",
-                subject="A post could not be generated",
+                dedup_key="publish:slot-1",
+                subject="A post could not be published",
                 html_body="<p>x</p>",
                 text="x",
             )
@@ -448,8 +399,8 @@ class DeliverHelpersTests(unittest.TestCase):
         ):
             send_owner_email(
                 user_id="user-1",
-                dedup_key="generate:slot-1",
-                subject="A post could not be generated",
+                dedup_key="publish:slot-1",
+                subject="A post could not be published",
                 html_body="<p>x</p>",
                 text="x",
                 session=session,
@@ -459,85 +410,10 @@ class DeliverHelpersTests(unittest.TestCase):
     def test_notify_early_returns_send_nothing(self):
         session = _Session()
         with patch.dict(os.environ, ENV, clear=False):
-            notify_generation_failed(None, slot_id="slot-1", title="x", reason="y", session=session)
             notify_publish_failed(None, slot_id="slot-1", title="x", reason="y", session=session)
             notify_publish_partial("user-1", slot_id="slot-1", title="x", failures=None, session=session)
             notify_publish_partial("", slot_id="slot-1", title="x", failures=[{"provider": "youtube", "account_id": "UC1", "reason": "boom"}], session=session)
         self.assertEqual(session.calls, [])
-
-
-class AlertFailedTaskTests(unittest.TestCase):
-    def test_releases_the_discord_reservation_when_send_fails(self):
-        should = MagicMock(return_value=True)
-        release = MagicMock()
-        send = MagicMock(return_value=False)
-        message = MagicMock(return_value="msg")
-        alert_failed_task("task-1", "boom", None, should, release, send, message)
-        send.assert_called_once()
-        release.assert_called_once_with("task-1")
-
-    def test_keeps_the_reservation_when_discord_sends(self):
-        should = MagicMock(return_value=True)
-        release = MagicMock()
-        send = MagicMock(return_value=True)
-        message = MagicMock(return_value="msg")
-        params = MagicMock()
-        params.video_title = "Title"
-        alert_failed_task("task-1", "boom", params, should, release, send, message)
-        message.assert_called_once_with("task-1", "boom", "Title")
-        release.assert_not_called()
-
-    def test_skips_discord_when_the_alert_was_already_sent(self):
-        should = MagicMock(return_value=False)
-        send = MagicMock()
-        alert_failed_task("task-1", "boom", None, should, MagicMock(), send, MagicMock())
-        send.assert_not_called()
-
-
-class EmailDirectGenerationFailureTests(unittest.TestCase):
-    def _call(self, task, params):
-        should = MagicMock(return_value=False)
-        with (
-            patch("app.services.owner_alert.running_under_test", return_value=False),
-            patch("app.services.state.state.get_task", return_value=task),
-            patch("app.services.owner_alert.notify_generation_failed") as notify,
-        ):
-            alert_failed_task("task-1", "boom", params, should, MagicMock(), MagicMock(), MagicMock())
-        return notify
-
-    def test_emails_the_owner_of_a_direct_generation(self):
-        notify = self._call(
-            {"user_id": "user-1"},
-            SimpleNamespace(video_title="My video"),
-        )
-        notify.assert_called_once_with(
-            "user-1",
-            slot_id=None,
-            title="My video",
-            reason="boom",
-            dedup_key="generate-task:task-1",
-        )
-
-    def test_skips_the_email_when_the_task_cannot_be_read(self):
-        with (
-            patch("app.services.owner_alert.running_under_test", return_value=False),
-            patch("app.services.state.state.get_task", side_effect=RuntimeError("db down")),
-            patch("app.services.owner_alert.notify_generation_failed") as notify,
-        ):
-            alert_failed_task("task-1", "boom", None, MagicMock(return_value=False), MagicMock(), MagicMock(), MagicMock())
-        notify.assert_not_called()
-
-    def test_skips_the_email_when_the_task_has_no_owner(self):
-        notify = self._call({}, None)
-        notify.assert_not_called()
-
-    def test_skips_the_email_for_a_slot_task(self):
-        notify = self._call({"slot_id": "slot-1", "user_id": "user-1"}, None)
-        notify.assert_not_called()
-
-    def test_skips_the_email_for_the_unknown_sentinel(self):
-        notify = self._call({"user_id": "unknown"}, None)
-        notify.assert_not_called()
 
 
 class NotifyOwnerAsyncTests(unittest.TestCase):

@@ -52,7 +52,7 @@ export function usePostJoins(): PostJoins {
       new Map(
         (personasQuery.data ?? []).map((persona) => [
           persona.id,
-          { avatarUrl: persona.avatarUrl, photoUrl: persona.photoUrl, libraryUrl: persona.libraryUrl, name: persona.name },
+          { avatarUrl: persona.avatarUrl, photoUrl: persona.photoUrl, name: persona.name },
         ]),
       ),
     [personasQuery.data],

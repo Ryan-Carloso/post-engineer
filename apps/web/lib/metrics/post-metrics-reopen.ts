@@ -25,7 +25,7 @@ export async function findReopenedPosts(
   const cutoff = new Date(now.getTime() - METRICS_WINDOW_LOOKBACK_HOURS * 60 * 60 * 1000);
   const { data: postData, error: postError } = await supabase
     .from('scheduled_posts')
-    .select('id, user_id, task_id, status, published_at, publish_outcomes')
+    .select('id, user_id, status, published_at, publish_outcomes')
     .eq('status', 'published')
     .gte('published_at', cutoff.toISOString())
     .order('published_at', { ascending: false })
@@ -83,7 +83,6 @@ export async function findReopenedPosts(
     if (
       typeof record.id !== 'string'
       || typeof record.user_id !== 'string'
-      || typeof record.task_id !== 'string'
       || typeof record.published_at !== 'string'
     ) {
       continue;
@@ -102,7 +101,7 @@ export async function findReopenedPosts(
       if (now.getTime() < opensAt.getTime() || now.getTime() >= closesAt.getTime()) continue;
       const collectedKeys = collectedByPostWindow.get(`${record.id}:${window}`) ?? new Set<string>();
       if (!found.targets.some((target) => !collectedKeys.has(targetKey(target)))) continue;
-      reopened.push({ id: record.id, userId: record.user_id, taskId: record.task_id, window, collectedKeys });
+      reopened.push({ id: record.id, userId: record.user_id, publishOutcomes: outcomes, window, collectedKeys });
       if (reopened.length >= budget) return reopened;
     }
   }

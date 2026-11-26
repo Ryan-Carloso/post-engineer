@@ -10,7 +10,6 @@ vi.mock('@/lib/supabase/service', () => ({
 }));
 vi.mock('@/lib/request-auth', () => ({
   requireSupabaseSession: vi.fn(),
-  engineAuthHeaders: vi.fn(() => ({ Authorization: 'Bearer test', 'x-user-id': 'u' })),
 }));
 vi.mock('@/lib/analytics', () => ({
   trackApiEvent: vi.fn(),
@@ -28,7 +27,6 @@ import { GetPersonaDeletePreviewResponseSchema } from '@/lib/contracts/personas'
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
-import { logger } from '@/lib/logger';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
 const USER_ID = 'user-uuid-1';
@@ -43,34 +41,11 @@ const BASE_TABLES: TableData = {
     { id: 'sched-2', persona_id: PERSONA_ID, user_id: USER_ID },
   ],
   scheduled_posts: [
-    { id: 'slot-1', schedule_id: 'sched-1', status: 'pending', user_id: USER_ID },
+    { id: 'slot-1', schedule_id: 'sched-1', status: 'publishing', user_id: USER_ID },
     { id: 'slot-2', schedule_id: 'sched-1', status: 'published', user_id: USER_ID },
     { id: 'slot-3', schedule_id: 'sched-2', status: 'ready', user_id: USER_ID },
     { id: 'slot-4', schedule_id: 'sched-2', status: 'failed', user_id: USER_ID },
-    { id: 'slot-x', schedule_id: 'sched-1', status: 'pending', user_id: 'user-uuid-2' },
-  ],
-  video_generations: [
-    {
-      id: 'gen-1',
-      engine_task_id: 'task-aaa',
-      video_subject: 'Topic one',
-      status: 'completed',
-      persona_id: PERSONA_ID,
-      user_id: USER_ID,
-    },
-    {
-      id: 'gen-2',
-      engine_task_id: 'task-bbb',
-      video_subject: 'Topic two',
-      status: 'failed',
-      persona_id: PERSONA_ID,
-      user_id: USER_ID,
-    },
-  ],
-  persona_images: [
-    { id: 'img-1', persona_id: PERSONA_ID, user_id: USER_ID },
-    { id: 'img-2', persona_id: PERSONA_ID, user_id: USER_ID },
-    { id: 'img-3', persona_id: PERSONA_ID, user_id: USER_ID },
+    { id: 'slot-x', schedule_id: 'sched-1', status: 'ready', user_id: 'user-uuid-2' },
   ],
 };
 
@@ -137,29 +112,12 @@ function mockAuth(personaIds: string[] | null = null) {
   } as never);
 }
 
-function mockEngine(downloadUri: string | null) {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async () => ({
-      ok: downloadUri !== null,
-      status: downloadUri !== null ? 200 : 404,
-      json: async () =>
-        downloadUri !== null ? { state: 1, result: { video: downloadUri } } : null,
-    })),
-  );
-}
-
 beforeEach(() => {
   vi.clearAllMocks();
   mockAuth(null);
-  mockEngine('/api/v1/download/task-aaa/final.mp4');
-  vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.internal:8080');
-  vi.stubEnv('MONEYPRINT_API_SECRET', 'test-secret');
 });
 
 afterEach(() => {
-  vi.unstubAllGlobals();
-  vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
 
@@ -173,7 +131,7 @@ function getClient(
 }
 
 describe('GET /api/persona/delete-preview', () => {
-  it('returns counts for schedules, upcoming slots, videos and images', async () => {
+  it('returns counts for schedules and upcoming, published and failed slots', async () => {
     getClient();
     const res = await GET(
       new Request(`http://localhost/api/persona/delete-preview?personaId=${PERSONA_ID}`),
@@ -190,39 +148,8 @@ describe('GET /api/persona/delete-preview', () => {
       upcomingSlots: 2,
       publishedSlots: 1,
       failedSlots: 1,
-      generatedVideos: 2,
-      personaImages: 3,
     });
-  });
-
-  it('lists completed videos with rewritten download URLs; failed videos get null', async () => {
-    getClient();
-    const res = await GET(
-      new Request(`http://localhost/api/persona/delete-preview?personaId=${PERSONA_ID}`),
-    );
-    const body = (await res.json()) as {
-      videos: Array<{ taskId: string; title: string; status: string; downloadUrl: string | null }>;
-    };
-    expect(body.videos).toHaveLength(2);
-    expect(body.videos[0]).toMatchObject({
-      taskId: 'task-aaa',
-      title: 'Topic one',
-      status: 'completed',
-      downloadUrl: '/api/persona/video-download/task-aaa/final.mp4',
-    });
-    expect(body.videos[1].downloadUrl).toBeNull();
-  });
-
-  it('returns null downloadUrl when the engine lookup fails', async () => {
-    getClient();
-    mockEngine(null);
-    const res = await GET(
-      new Request(`http://localhost/api/persona/delete-preview?personaId=${PERSONA_ID}`),
-    );
-    const body = (await res.json()) as {
-      videos: Array<{ downloadUrl: string | null }>;
-    };
-    expect(body.videos[0].downloadUrl).toBeNull();
+    expect(Object.keys(body.counts).sort()).toEqual(['failedSlots', 'publishedSlots', 'schedules', 'upcomingSlots']);
   });
 
   it('returns 400 when personaId is missing', async () => {
@@ -288,206 +215,5 @@ describe('GET /api/persona/delete-preview', () => {
     );
     expect(res.status).toBe(429);
     expect(applyRateLimit).toHaveBeenCalledWith(expect.any(Request), RATE_LIMITS.deletePreview, USER_ID);
-  });
-
-  it('caps engine lookups at 20 videos but reports the full count', async () => {
-    const generations = Array.from({ length: 25 }, (_, i) => ({
-      id: `gen-${i}`,
-      persona_id: PERSONA_ID,
-      user_id: USER_ID,
-      engine_task_id: `task-${i}`,
-      video_subject: `Topic ${i}`,
-      status: 'completed',
-    }));
-    getClient({ ...BASE_TABLES, video_generations: generations });
-    let engineCalls = 0;
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => {
-        engineCalls += 1;
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({ state: 1, result: { video: '/api/v1/download/x/final.mp4' } }),
-        };
-      }),
-    );
-    const res = await GET(
-      new Request(`http://localhost/api/persona/delete-preview?personaId=${PERSONA_ID}`),
-    );
-    const body = (await res.json()) as {
-      counts: { generatedVideos: number };
-      videos: unknown[];
-      videosTruncated: boolean;
-    };
-    expect(res.status).toBe(200);
-    expect(body.counts.generatedVideos).toBe(25);
-    expect(body.videos).toHaveLength(20);
-    expect(body.videosTruncated).toBe(true);
-    expect(engineCalls).toBe(20);
-  });
-
-  it('reports videosTruncated:false when nothing is cut', async () => {
-    getClient();
-    const res = await GET(
-      new Request(`http://localhost/api/persona/delete-preview?personaId=${PERSONA_ID}`),
-    );
-    const body = (await res.json()) as { videosTruncated: boolean };
-    expect(body.videosTruncated).toBe(false);
-  });
-
-  it('flags transient engine failures as incomplete and logs them', async () => {
-    getClient();
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => ({ ok: false, status: 500, json: async () => null })),
-    );
-    const res = await GET(
-      new Request(`http://localhost/api/persona/delete-preview?personaId=${PERSONA_ID}`),
-    );
-    const body = (await res.json()) as {
-      videos: Array<{ downloadUrl: string | null }>;
-      linksIncomplete: boolean;
-    };
-    expect(res.status).toBe(200);
-    expect(body.videos[0]?.downloadUrl).toBeNull();
-    expect(body.linksIncomplete).toBe(true);
-    expect(logger.warn).toHaveBeenCalledWith(
-      '[api/persona/delete-preview] engine task lookup failed',
-      expect.objectContaining({ engineTaskId: 'task-aaa', status: 500, transient: true }),
-    );
-  });
-
-  it('flags unparseable engine bodies as transient and logs them', async () => {
-    getClient();
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => ({
-        ok: true,
-        status: 200,
-        json: async () => {
-          throw new Error('unexpected token');
-        },
-      })),
-    );
-    const res = await GET(
-      new Request(`http://localhost/api/persona/delete-preview?personaId=${PERSONA_ID}`),
-    );
-    const body = (await res.json()) as {
-      videos: Array<{ downloadUrl: string | null }>;
-      linksIncomplete: boolean;
-    };
-    expect(res.status).toBe(200);
-    expect(body.videos[0]?.downloadUrl).toBeNull();
-    expect(body.linksIncomplete).toBe(true);
-    expect(logger.warn).toHaveBeenCalledWith(
-      '[api/persona/delete-preview] engine task response unparseable',
-      expect.objectContaining({ engineTaskId: 'task-aaa' }),
-    );
-  });
-
-  it('does not flag 404 engine responses as incomplete', async () => {
-    getClient();
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => ({ ok: false, status: 404, json: async () => null })),
-    );
-    const res = await GET(
-      new Request(`http://localhost/api/persona/delete-preview?personaId=${PERSONA_ID}`),
-    );
-    const body = (await res.json()) as {
-      videos: Array<{ downloadUrl: string | null }>;
-      linksIncomplete: boolean;
-    };
-    expect(res.status).toBe(200);
-    expect(body.videos[0]?.downloadUrl).toBeNull();
-    expect(body.linksIncomplete).toBe(false);
-  });
-
-  it('treats engine auth misconfig as non-transient and logs at error', async () => {
-    getClient();
-    const { engineAuthHeaders } = await import('@/lib/request-auth');
-    vi.mocked(engineAuthHeaders).mockImplementationOnce(() => {
-      throw new Error('MONEYPRINT_API_SECRET is not set');
-    });
-    const res = await GET(
-      new Request(`http://localhost/api/persona/delete-preview?personaId=${PERSONA_ID}`),
-    );
-    const body = (await res.json()) as {
-      videos: Array<{ downloadUrl: string | null }>;
-      linksIncomplete: boolean;
-    };
-    expect(res.status).toBe(200);
-    expect(body.videos[0]?.downloadUrl).toBeNull();
-    expect(body.linksIncomplete).toBe(false);
-    expect(logger.error).toHaveBeenCalledWith(
-      '[api/persona/delete-preview] engine auth misconfigured',
-      expect.objectContaining({ engineTaskId: 'task-aaa' }),
-    );
-  });
-
-  it('treats engine 401 as a config error, not transient', async () => {
-    getClient();
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => ({ ok: false, status: 401, json: async () => null })),
-    );
-    const res = await GET(
-      new Request(`http://localhost/api/persona/delete-preview?personaId=${PERSONA_ID}`),
-    );
-    const body = (await res.json()) as {
-      videos: Array<{ downloadUrl: string | null }>;
-      linksIncomplete: boolean;
-    };
-    expect(res.status).toBe(200);
-    expect(body.videos[0]?.downloadUrl).toBeNull();
-    expect(body.linksIncomplete).toBe(false);
-    expect(logger.error).toHaveBeenCalledWith(
-      '[api/persona/delete-preview] engine task lookup failed',
-      expect.objectContaining({ engineTaskId: 'task-aaa', status: 401, transient: false }),
-    );
-  });
-
-  it('stops engine lookups once the aggregate time budget is spent', async () => {
-    const generations = Array.from({ length: 5 }, (_, i) => ({
-      id: `gen-${i}`,
-      persona_id: PERSONA_ID,
-      user_id: USER_ID,
-      engine_task_id: `task-${i}`,
-      video_subject: `Topic ${i}`,
-      status: 'completed',
-    }));
-    getClient({ ...BASE_TABLES, video_generations: generations });
-    let now = 1_000_000;
-    vi.spyOn(Date, 'now').mockImplementation(() => now);
-    let engineCalls = 0;
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => {
-        engineCalls += 1;
-        now += 10_000;
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({ state: 1, result: { video: '/api/v1/download/x/final.mp4' } }),
-        };
-      }),
-    );
-    const res = await GET(
-      new Request(`http://localhost/api/persona/delete-preview?personaId=${PERSONA_ID}`),
-    );
-    const body = (await res.json()) as {
-      videos: Array<{ downloadUrl: string | null }>;
-      linksIncomplete: boolean;
-    };
-    expect(res.status).toBe(200);
-    expect(engineCalls).toBe(2);
-    expect(body.videos).toHaveLength(5);
-    expect(body.videos[0]?.downloadUrl).toContain('/api/persona/video-download/');
-    expect(body.videos[1]?.downloadUrl).toContain('/api/persona/video-download/');
-    expect(body.videos[2]?.downloadUrl).toBeNull();
-    expect(body.videos[3]?.downloadUrl).toBeNull();
-    expect(body.videos[4]?.downloadUrl).toBeNull();
-    expect(body.linksIncomplete).toBe(true);
   });
 });

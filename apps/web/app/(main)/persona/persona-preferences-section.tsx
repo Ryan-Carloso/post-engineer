@@ -1,65 +1,9 @@
 'use client';
 
-import { useFormContext } from 'react-hook-form';
-import { INPUT_CLASS } from '@/lib/ui';
 import { Switch } from '@/components/ui/switch';
-import { VIDEO_LAYOUTS } from '@/lib/persona-schema';
 import { usePersonaStore } from '@/lib/store';
 import { useI18n } from '@/lib/i18n/provider';
-import { InlineFieldError, SectionDivider } from './persona-section-parts';
-
-const PersonaLayoutFieldset = () => {
-  const videoLayout = usePersonaStore((s) => s.videoLayout);
-  const { t } = useI18n();
-  return (
-    <fieldset>
-      <legend className="text-sm font-semibold text-ink">{t('personas.layoutLabel')}</legend>
-      <p className="mt-1 text-xs leading-5 text-muted-text">{t('personas.layoutHint')}</p>
-      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {VIDEO_LAYOUTS.map((layout) => {
-          const isSelected = videoLayout === layout;
-          return (
-            <button
-              key={layout}
-              type="button"
-              aria-pressed={isSelected}
-              onClick={() => usePersonaStore.getState().setVideoLayout(layout)}
-              className={`flex min-h-14 items-center justify-center rounded-xl border px-4 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
-                isSelected
-                  ? 'border-accent bg-destructive-soft text-accent ring-2 ring-accent/10'
-                  : 'border-line bg-surface text-ink-soft hover:border-muted-text hover:bg-card'
-              }`}
-            >
-              {t(`personas.layout${layout === 'standard' ? 'Standard' : 'React'}`)}
-            </button>
-          );
-        })}
-      </div>
-    </fieldset>
-  );
-};
-
-const PersonaHookPanelField = () => {
-  const hookPanel = usePersonaStore((s) => s.hookPanel);
-  const { t } = useI18n();
-  return (
-    <div className="flex items-start justify-between gap-4">
-      <div>
-        <label htmlFor="persona-hook-panel" className="text-sm font-semibold text-ink">
-          {t('personas.hookPanelLabel')}
-        </label>
-        <p className="mt-1 text-xs leading-5 text-muted-text">{t('personas.hookPanelHint')}</p>
-      </div>
-      <Switch
-        id="persona-hook-panel"
-        data-testid="persona-hook-panel"
-        checked={hookPanel}
-        onCheckedChange={(checked) => usePersonaStore.getState().setHookPanel(checked)}
-        className="mt-0.5"
-      />
-    </div>
-  );
-};
+import { SectionDivider } from './persona-section-parts';
 
 const PersonaAiLabelField = () => {
   const aiLabel = usePersonaStore((s) => s.aiLabel);
@@ -84,63 +28,12 @@ const PersonaAiLabelField = () => {
 };
 
 export function PersonaPreferencesSection() {
-  const videoAspect = usePersonaStore((s) => s.videoAspect);
-  const result = usePersonaStore((s) => s.result);
   const { t } = useI18n();
-  const { register, formState: { errors } } = useFormContext();
   return (
     <section>
       <SectionDivider label={t('personas.preferencesLabel')} />
       <div className="mt-4 space-y-5 rounded-2xl border border-line bg-card p-5 shadow-sm sm:p-6">
-        <fieldset>
-          <legend className="text-sm font-semibold text-ink">{t('personas.aspectLabel')}</legend>
-          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {['9:16', '16:9', '1:1'].map((aspect) => {
-              const isSelected = videoAspect === aspect;
-              return (
-                <button
-                  key={aspect}
-                  type="button"
-                  aria-pressed={isSelected}
-                  onClick={() => usePersonaStore.getState().setVideoAspect(aspect)}
-                  className={`flex min-h-14 items-center justify-center rounded-xl border px-4 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
-                    isSelected
-                      ? 'border-accent bg-destructive-soft text-accent ring-2 ring-accent/10'
-                      : 'border-line bg-surface text-ink-soft hover:border-muted-text hover:bg-card'
-                  }`}
-                >
-                  {aspect}
-                </button>
-              );
-            })}
-          </div>
-        </fieldset>
-        <PersonaLayoutFieldset />
-        <PersonaHookPanelField />
         <PersonaAiLabelField />
-        <label className="block text-sm font-semibold text-ink">
-          {t('personas.nicheLabel')}
-          <input
-            type="text"
-            className={INPUT_CLASS}
-            placeholder={t('personas.nichePlaceholder')}
-            data-testid="persona-niche"
-            {...register('niche')}
-          />
-          {errors.niche ? (
-            <span role="alert" className="mt-1 block text-sm font-normal text-destructive">{t('personas.nicheMaxError')}</span>
-          ) : null}
-        </label>
-        <label className="block text-sm font-semibold text-ink" data-error-field="script">
-          {t('personas.scriptLabel')}
-          <textarea className={`${INPUT_CLASS} min-h-28 resize-y`} placeholder={t('personas.scriptPlaceholder')} {...register('scriptPrompt')} />
-          {errors.scriptPrompt ? (
-            <span role="alert" className="mt-1 block text-sm font-normal text-destructive">{t('personas.scriptMaxError')}</span>
-          ) : null}
-        </label>
-        {result && !result.success && result.error === 'prompt_rejected' ? (
-          <InlineFieldError message={t('persona.errPromptRejected')} />
-        ) : null}
       </div>
     </section>
   );

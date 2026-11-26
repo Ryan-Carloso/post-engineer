@@ -12,7 +12,7 @@ const PUBLISHED_AT = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(
 function view(overrides: Partial<MetricsRowView> = {}): MetricsRowView {
   return {
     postId: 'p', personaId: 'persona-a', provider: 'youtube', accountId: 'yt', externalId: 'v',
-    scriptAngle: 'myth', publishedAt: PUBLISHED_AT, views: 100, likes: null, comments: 3, saves: null, collectedAt: '2026-10-21T12:00:00Z',
+    publishedAt: PUBLISHED_AT, views: 100, likes: null, comments: 3, saves: null, collectedAt: '2026-10-21T12:00:00Z',
     analyticsViews: null, engagedViews: null, stayedToWatchPct: null, averageViewDurationSeconds: null,
     averageViewPercentage: null, contentType: null, analyticsStatus: null, provisional: false,
     ...overrides,
@@ -73,7 +73,7 @@ describe('sortByViews', () => {
 });
 
 describe('fetchMetrics', () => {
-  const query = { window: '24h' as const, personaId: null, accountId: 'yt', provider: null, angle: null };
+  const query = { window: '24h' as const, personaId: null, accountId: 'yt', provider: null };
 
   it('returns rows on success and sends the filters', async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ success: true, rows: [view()], truncated: false })));
@@ -87,7 +87,7 @@ describe('fetchMetrics', () => {
   it('returns coverage and the as-of timestamp when the response carries them', async () => {
     const item = {
       postId: 'p', personaId: null, provider: 'youtube', accountId: 'yt', externalId: 'v',
-      scriptAngle: null, reason: 'retrying', publishedAt: '2026-10-21T12:00:00.000Z',
+      reason: 'retrying', publishedAt: '2026-10-21T12:00:00.000Z',
       windowOpensAt: '2026-10-22T12:00:00.000Z', windowClosesAt: '2026-10-23T12:00:00.000Z',
     };
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
@@ -101,7 +101,7 @@ describe('fetchMetrics', () => {
   it('drops malformed coverage items instead of losing the rows', async () => {
     const item = {
       postId: 'p', personaId: null, provider: 'youtube', accountId: 'yt', externalId: 'v',
-      scriptAngle: null, reason: 'retrying', publishedAt: '2026-10-21T12:00:00.000Z',
+      reason: 'retrying', publishedAt: '2026-10-21T12:00:00.000Z',
       windowOpensAt: '2026-10-22T12:00:00.000Z', windowClosesAt: '2026-10-23T12:00:00.000Z',
     };
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
@@ -143,21 +143,17 @@ describe('fetchMetrics', () => {
 
 describe('parseMetricsQuery / metricsSearchParams', () => {
   it('round-trips a full query', () => {
-    const query = { window: '7d' as const, personaId: METRICS_NONE, accountId: 'a', provider: 'linkedin' as const, angle: 'x' };
+    const query = { window: '7d' as const, personaId: METRICS_NONE, accountId: 'a', provider: 'linkedin' as const };
     expect(parseMetricsQuery(metricsSearchParams(query))).toEqual({ ok: true, query });
   });
 
-  it('treats a literal none angle as an angle, not as the null sentinel', () => {
-    const parsed = parseMetricsQuery(new URLSearchParams({ window: '24h', angle: 'none' }));
-    expect(parsed).toEqual({
-      ok: true,
-      query: { window: '24h', personaId: null, accountId: null, provider: null, angle: 'none' },
-    });
+  it('rejects the removed angle filter as an unknown parameter', () => {
+    expect(parseMetricsQuery(new URLSearchParams({ window: '24h', angle: 'myth' })).ok).toBe(false);
   });
 
   it('rejects over-length filters', () => {
-    const params = new URLSearchParams({ window: '24h', angle: 'a'.repeat(METRICS_FILTER_MAX_LENGTH + 1) });
-    expect(parseMetricsQuery(params)).toEqual({ ok: false, error: 'angle is too long.' });
+    const params = new URLSearchParams({ window: '24h', account: 'a'.repeat(METRICS_FILTER_MAX_LENGTH + 1) });
+    expect(parseMetricsQuery(params)).toEqual({ ok: false, error: 'account is too long.' });
   });
 });
 

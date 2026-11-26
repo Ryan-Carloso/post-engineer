@@ -34,7 +34,6 @@ function post(overrides: Partial<Last24hPostInput> = {}): Last24hPostInput {
     personaId: PERSONA,
     publishedAt: ago(72),
     outcomes: [YT_OUTCOME],
-    voiceover: false,
     ...overrides,
   };
 }
@@ -225,24 +224,23 @@ describe('computeLast24h filters and scope', () => {
     posts: [
       post({ id: 'post-1', personaId: PERSONA }),
       post({ id: 'post-2', personaId: OTHER_PERSONA }),
-      post({ id: 'post-3', personaId: null, voiceover: true }),
-      post({ id: 'post-4', personaId: null, voiceover: false }),
+      post({ id: 'post-3', personaId: null }),
     ],
-    readings: ['post-1', 'post-2', 'post-3', 'post-4'].flatMap((id) => [
+    readings: ['post-1', 'post-2', 'post-3'].flatMap((id) => [
       reading({ postId: id, collectedAt: ago(1), views: 10 }),
       reading({ postId: id, collectedAt: ago(25), views: 5 }),
     ]),
   });
 
-  it('shows a persona-scoped key only its personas plus voiceover posts, hiding orphaned persona-less posts', () => {
+  it('shows a persona-scoped key only its personas, hiding persona-less posts', () => {
     const result = compute({ ...twoPersonaInput(), personaIds: [PERSONA] });
-    expect(result.rows.map((row) => row.postId).sort()).toEqual(['post-1', 'post-3']);
-    expect(result.totals.measurements).toBe(2);
+    expect(result.rows.map((row) => row.postId)).toEqual(['post-1']);
+    expect(result.totals.measurements).toBe(1);
   });
 
-  it('shows a scoped key with no personas only voiceover posts', () => {
+  it('shows a scoped key with no personas nothing', () => {
     const result = compute({ ...twoPersonaInput(), personaIds: [] });
-    expect(result.rows.map((row) => row.postId)).toEqual(['post-3']);
+    expect(result.rows).toEqual([]);
   });
 
   it('does not count out-of-scope videos in skipped or resets', () => {
@@ -270,17 +268,17 @@ describe('computeLast24h filters and scope', () => {
   });
 
   it('shows every post to an unscoped caller', () => {
-    expect(compute(twoPersonaInput()).rows).toHaveLength(4);
+    expect(compute(twoPersonaInput()).rows).toHaveLength(3);
   });
 
   it('filters by persona, by the none sentinel, by account and by provider', () => {
     const input = twoPersonaInput();
     expect(compute({ ...input, query: query({ personaId: OTHER_PERSONA }) }).rows.map((row) => row.postId)).toEqual(['post-2']);
-    expect(compute({ ...input, query: query({ personaId: METRICS_NONE }) }).rows.map((row) => row.postId).sort()).toEqual(['post-3', 'post-4']);
+    expect(compute({ ...input, query: query({ personaId: METRICS_NONE }) }).rows.map((row) => row.postId)).toEqual(['post-3']);
     expect(compute({ ...input, query: query({ accountId: 'other' }) }).rows).toEqual([]);
-    expect(compute({ ...input, query: query({ accountId: 'yt' }) }).rows).toHaveLength(4);
+    expect(compute({ ...input, query: query({ accountId: 'yt' }) }).rows).toHaveLength(3);
     expect(compute({ ...input, query: query({ provider: 'instagram' }) }).rows).toEqual([]);
-    expect(compute({ ...input, query: query({ provider: 'youtube' }) }).rows).toHaveLength(4);
+    expect(compute({ ...input, query: query({ provider: 'youtube' }) }).rows).toHaveLength(3);
   });
 
   it('applies the scope and the persona filter together', () => {

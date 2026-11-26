@@ -66,9 +66,9 @@ describe('listServerTools', () => {
     const server = createPostEngineerMcpServer(new PostEngineerClient({ apiKey: 'measure-only' }), 'stdio');
     const tools = await listServerTools(server);
     const names = tools.map((entry) => entry.name);
-    expect(tools).toHaveLength(17);
+    expect(tools).toHaveLength(10);
     expect(new Set(names).size).toBe(names.length);
-    expect(names).toContain('generate_video');
+    expect(names).toContain('publish_video');
     for (const entry of tools) expect(entry.inputSchema.type).toBe('object');
   });
 

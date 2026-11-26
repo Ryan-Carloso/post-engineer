@@ -8,12 +8,10 @@ import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { cn } from '@/lib/utils';
 import { StatusBadge, formatTime } from './post-card';
-import { SLOT_PROGRESS_STATUSES } from './post-row';
 import type { PostJoins } from './post-joins';
 import {
   CALENDAR_GROUP_KEY,
   CALENDAR_GROUP_PILL,
-  STATUS_KEY,
   STATUS_STYLE,
   calendarGroupOf,
 } from './status';
@@ -54,10 +52,7 @@ export function DayListRow({ slot, joins }: { slot: ScheduledSlot; joins: PostJo
   const isHistory = slot.status === 'published' || slot.status === 'failed';
   const shownAt = isHistory && slot.publishedAt ? slot.publishedAt : slot.slotAt;
   const group = calendarGroupOf(slot.status);
-  const showProgress = SLOT_PROGRESS_STATUSES.has(slot.status);
-  const chipLabel = showProgress
-    ? `${t(STATUS_KEY[slot.status] ?? 'posts.groupInProgress')} · ${slot.progress}%`
-    : t(CALENDAR_GROUP_KEY[group]);
+  const chipLabel = t(CALENDAR_GROUP_KEY[group]);
   const displayTitle = slot.title ?? t('posts.unknownTitle');
   return (
     <Link

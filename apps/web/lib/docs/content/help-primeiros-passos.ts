@@ -5,33 +5,33 @@ export const helpFirstSteps: DocPage = {
   slug: 'primeiros-passos',
   title: { pt: 'Primeiros passos', en: 'First steps' },
   description: {
-    pt: 'Crie sua persona, gere seu primeiro vídeo e publique nas suas contas.',
-    en: 'Create your persona, generate your first video and publish to your accounts.',
+    pt: 'Crie sua persona, envie seu primeiro vídeo e publique nas suas contas.',
+    en: 'Create your persona, upload your first video and publish to your accounts.',
   },
   updatedAt: '2026-11-26',
-  contentHash: '810551b74db0b60d4e17faf83d4b8d60d6d0be7de6fbe48161c7c7c62d462de6',
+  contentHash: '7d88c1cbec0d8d76721ba7f7370d24f86a95f2b1aec0c6cdd80976eb4fb935d6',
   blocks: [
     {
       kind: 'paragraph',
       text: {
-        pt: 'Tudo começa com uma persona: um rosto, uma voz e um nicho. A persona precisa de pelo menos uma conta de publicação ligada.',
-        en: 'Everything starts with a persona: a face, a voice and a niche. A persona needs at least one publishing account linked.',
+        pt: 'Tudo começa com uma persona: um nome, uma foto e as contas em que ela publica. A persona precisa de pelo menos uma conta de publicação ligada.',
+        en: 'Everything starts with a persona: a name, a photo and the accounts it publishes to. A persona needs at least one publishing account linked.',
       },
     },
     { kind: 'heading', level: 2, text: { pt: 'Crie a persona', en: 'Create the persona' } },
     {
       kind: 'paragraph',
       text: {
-        pt: 'Envie uma foto de rosto e escolha uma voz. A foto fica guardada como referência e nunca aparece nos vídeos: cada vídeo usa as fotos que você envia para ele.',
-        en: 'Upload a face photo and pick a voice. The photo is stored as a reference and never appears in videos: each video uses the photos you send for it.',
+        pt: 'Envie uma foto para a persona. Ela identifica a persona nas suas contas e nunca é publicada sozinha.',
+        en: 'Upload a photo for the persona. It identifies the persona on your accounts and is never published on its own.',
       },
     },
-    { kind: 'heading', level: 2, text: { pt: 'Gere o primeiro vídeo', en: 'Generate the first video' } },
+    { kind: 'heading', level: 2, text: { pt: 'Envie o primeiro vídeo', en: 'Upload the first video' } },
     {
       kind: 'paragraph',
       text: {
-        pt: 'Escreva o roteiro como takes: o hook primeiro, depois os takes de conteúdo. A geração já está ligada à publicação, então todo vídeo nasce agendado.',
-        en: 'Write the script as takes: the hook first, then the content takes. Generation is already tied to publishing, so every video is born scheduled.',
+        pt: 'Faça o vídeo na sua ferramenta e envie o arquivo pronto. Você escolhe publicar agora ou agendar para a data e a hora que quiser.',
+        en: 'Make the video in your own tool and upload the finished file. You choose to publish it now or schedule it for the date and time you want.',
       },
     },
     { kind: 'heading', level: 2, text: { pt: 'Publique', en: 'Publish' } },

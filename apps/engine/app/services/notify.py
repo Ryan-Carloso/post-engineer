@@ -4,10 +4,6 @@ Reads ``DISCORD_WEBHOOK_URL`` from the environment. Without the variable
 set it's a no-op — a deployment without a webhook keeps working. NEVER
 raises and never logs the URL: any network failure is swallowed with a
 warning log so a failed post can't take down the scheduler tick (60s).
-
-Also builds the video-task failure message (``task_failed_msg``) used by
-``app.services.task._fail_task``: one alert per failed task with the task
-id, subject and error so the user can find the failed job.
 """
 
 from __future__ import annotations
@@ -204,11 +200,6 @@ def scheduler_started_msg() -> str:
     return "🗓️ Fill schedule scheduler started"
 
 
-def generation_batch_msg(count: int, titles: list[str]) -> str:
-    listing = "\n".join(f"  • {_clip(title, 120)}" for title in titles) if titles else "  (none)"
-    return _clip(f"🎬 Generation batch: {count} video(s) started\n{listing}", DISCORD_MAX_CONTENT)
-
-
 def slot_published_msg(persona: str, title: str, providers: list[str]) -> str:
     return _clip(
         f"✅ Post published — persona: {_clip(persona, 100)} | title: {_clip(title, 150)} | providers: {', '.join(providers)}",
@@ -241,19 +232,5 @@ def partial_publish_msg(slot_id: str, failed_providers: list[str]) -> str:
     listing = ", ".join(failed_providers) if failed_providers else "unknown"
     return _clip(
         f"⚠️ Partial publish — slot: {slot_id} | failed providers: {listing}",
-        DISCORD_MAX_CONTENT,
-    )
-
-
-def task_failed_msg(task_id: str, error: str, subject: str = "") -> str:
-    """Build the Discord alert for a failed video task.
-
-    Includes the task id and subject so the failed job can be found, plus
-    the error (clipped). Callers pass ``safe_reason(...)`` for untrusted
-    errors so the webhook URL can't leak into the message.
-    """
-    subject_part = f"subject: {_clip(subject, 150)} | " if subject else ""
-    return _clip(
-        f"❌ Video task failed — task: {task_id} | {subject_part}error: {_clip(error, 300)}",
         DISCORD_MAX_CONTENT,
     )

@@ -60,8 +60,7 @@ describe('MCP tool docs sync', () => {
 
 describe('MCP schedule window copy sync', () => {
   const windowSurfaces = [
-    { label: 'apps/mcp/src/generate-video.ts', rel: '../generate-video.ts' },
-    { label: 'apps/mcp/src/single-video-shape.ts', rel: '../single-video-shape.ts' },
+    { label: 'apps/mcp/src/publish-existing-shape.ts', rel: '../publish-existing-shape.ts' },
     { label: 'apps/mcp/README.md', rel: '../../README.md' },
   ].map(({ label, rel }) => ({
     label,

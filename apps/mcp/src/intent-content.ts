@@ -1,28 +1,17 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { z } from 'zod';
-import { actionDescription, actionShape, byAction, offeredSpecs, type ActionOptions } from './action-tool.js';
+import { actionDescription, actionShape, byAction, type ActionOptions, offeredSpecs } from './action-tool.js';
 import type { PostEngineerClient } from './client.js';
 import { optionalPersonaRefShape, withOptionalPersona } from './refs.js';
-import { withScriptOutcome, type RecipeSession } from './recipe-session.js';
 import { CompleteVideoUploadShape, CreateVideoUploadShape, PublishUploadedVideoShape } from './publish-uploaded-shape.js';
 import { PublishExistingLocalShape, PublishExistingRemoteShape, PublishExistingShape } from './publish-existing-shape.js';
-import { IMAGE_AS_SHORT_NOTE, IMAGE_PROVIDERS } from './contracts/providers.js';
+import { IMAGE_PROVIDERS } from './contracts/providers.js';
 import { handlePublishExisting } from './tools-publish-existing.js';
-import { DESTRUCTIVE, MUTATING, READ_ONLY } from './tool-annotations.js';
-import { POINTER_IMAGES } from './server-instructions.js';
+import { DESTRUCTIVE, READ_ONLY } from './tool-annotations.js';
 import { PublishVideoDirectShape, handlePublishVideoDirect } from './tools.js';
-import { CreateExperimentShape, PromptComparisonShape, handleCreateExperiment, handlePromptComparison, withExperimentRefs } from './tools-experiments.js';
-import { UploadMediaRemoteShape } from './remote-shapes-images.js';
-import { CheckMediaShape, UploadMediaRemoteSchema, UploadMediaShape, handleCheckMedia, handleUploadMedia, handleUploadMediaFromUrl } from './tools-user-media.js';
-import { ValidateScriptSchema } from './single-video-shape.js';
-import { ScoreDraftShape, ValidateScriptShape, handleScoreDraft, handleValidateScript } from './tools-single-video.js';
+import { PromptComparisonShape, handlePromptComparison } from './tools-experiments.js';
 import { handleCompleteVideoUpload, handleCreateVideoUpload, handlePublishUploadedVideo } from './tools-publish-uploaded.js';
 
-const EXPERIMENTS_SPECS = { results: PromptComparisonShape, create: CreateExperimentShape };
-
-const MEDIA_SPECS = { upload: UploadMediaShape, check: CheckMediaShape };
-
-const CHECK_SCRIPT_SPECS = { validate: ValidateScriptShape, score: optionalPersonaRefShape(ScoreDraftShape) };
+const EXPERIMENTS_SPECS = { results: PromptComparisonShape };
 
 const PUBLISH_SPECS = {
   from_file: PublishVideoDirectShape,
@@ -32,60 +21,21 @@ const PUBLISH_SPECS = {
   publish_existing: optionalPersonaRefShape(PublishExistingShape),
 };
 
-export function registerContentTools(server: McpServer, client: PostEngineerClient, session: RecipeSession, remote: boolean): void {
+export function registerContentTools(server: McpServer, client: PostEngineerClient, remote: boolean): void {
   server.tool(
     'experiments',
     actionDescription(
-      'Experiments compare prompts. Every video generated with a promptVersionId (the versionId that prompts (action: get) returns) records that prompt version. results: per publishing account (never across accounts), each prompt version with its video count, median views, lift (views divided by the median of the account\'s other videos; above 1 beats the account) and a sign-test label: insufficient (fewer than 5 videos), no_signal, indicative or clear. Videos made without a prompt form the "no prompt" group. The clear and indicative thresholds are corrected for the number of prompts compared: they are divided by the number of groups of the account with at least 5 videos (the "no prompt" group included). Never call a prompt the winner unless the label is clear; make at least 10 videos per prompt (5 only lift a prompt out of insufficient). create: 5-15 videos per version, at most 40 in total and at most 20 when videoType is full_lipsync; quote first (no quoteKey, nothing is charged), then confirm with the quoteKey and expiresAt of the quote; persona and account.accountId take a name or an id; the versions rotate over the posting times.',
+      'Experiments compare prompts. Every post scheduled with a promptVersionId (the versionId that prompts (action: get) returns) records that prompt version. results: per publishing account (never across accounts), each prompt version with its post count, median views, lift (views divided by the median of the account\'s other posts; above 1 beats the account) and a sign-test label: insufficient (fewer than 5 posts), no_signal, indicative or clear. Posts made without a prompt form the "no prompt" group. The clear and indicative thresholds are corrected for the number of prompts compared: they are divided by the number of groups of the account with at least 5 posts (the "no prompt" group included). Never call a prompt the winner unless the label is clear. To compare any number of prompts fairly, rotate them round-robin on the same account, swap their posting times, and schedule at least 10 posts per prompt: 5 posts only lift a prompt out of insufficient, and even a unanimous lead needs 6 posts to be clear with one group and 8 with five.',
       EXPERIMENTS_SPECS,
     ),
     actionShape(EXPERIMENTS_SPECS),
-    DESTRUCTIVE,
-    byAction(
-      {
-        results: async (args) => handlePromptComparison(client, args),
-        create: async (args) => withExperimentRefs(client, args, (resolved) => handleCreateExperiment(client, resolved)),
-      },
-      EXPERIMENTS_SPECS,
-      'experiments',
-    ),
-  );
-
-  const mediaOptions: ActionOptions<typeof MEDIA_SPECS> = remote ? { variants: { upload: UploadMediaRemoteShape } } : {};
-  server.tool(
-    'media',
-    actionDescription(
-      `Images for video segments. check: mechanically check one public image URL (no LLM, relevance is for you to judge): returns one code (ok, blocked_403 when the host blocks the download — ${remote ? 'use another public URL for that photo' : 'then use upload with bytes fetched on your own machine'} — plus size, type and aspect failures). upload: ${remote ? 'a public https imageUrl is downloaded by the server' : 'a local image'} and becomes a mediaId for a segment (temporary, 1 hour: upload shortly before generating). ${POINTER_IMAGES}`,
-      offeredSpecs(MEDIA_SPECS, mediaOptions),
-    ),
-    actionShape(offeredSpecs(MEDIA_SPECS, mediaOptions)),
-    MUTATING,
-    byAction(
-      {
-        upload: async (args) => (remote ? handleUploadMediaFromUrl(client, UploadMediaRemoteSchema.parse(args)) : handleUploadMedia(client, args)),
-        check: async (args) => handleCheckMedia(client, args),
-      },
-      MEDIA_SPECS,
-      'media',
-      mediaOptions,
-    ),
-  );
-
-  server.tool(
-    'check_script',
-    actionDescription(
-      'Check a script before spending tokens. validate: the mechanical rules (hook first, exactly one hook, no placeholders/links/markdown/emoji/stage directions, hook terminal punctuation, word limits: total 60-200, content at least 30, hook 25-40 words; a CTA is a content take, placed anywhere; an optional hookTitle is checked with the same stable HOOK_TITLE_* codes generate_video returns), no tokens spent. score: a 0-100 score of a draft against your own measured posts, every point explained.',
-      CHECK_SCRIPT_SPECS,
-    ),
-    actionShape(CHECK_SCRIPT_SPECS),
     READ_ONLY,
     byAction(
       {
-        validate: withScriptOutcome<z.infer<typeof ValidateScriptSchema>>(session, 'check_script_validate', async (args) => handleValidateScript(client, args), (args) => [{ segments: args.segments, videoType: args.videoType }]),
-        score: (args) => withOptionalPersona(client, args, (resolved) => handleScoreDraft(client, resolved)),
+        results: async (args) => handlePromptComparison(client, args),
       },
-      CHECK_SCRIPT_SPECS,
-      'check_script',
+      EXPERIMENTS_SPECS,
+      'experiments',
     ),
   );
 
@@ -95,7 +45,7 @@ export function registerContentTools(server: McpServer, client: PostEngineerClie
   server.tool(
     'publish_video',
     actionDescription(
-      `Publish media that already exists, with no generation and no charge. ${remote ? '' : 'from_file: a local video (.mp4 or .mov) is published now. '}create_upload → complete_upload → publish_upload: a signed upload, video or JPEG/PNG (PUT straight to storage, never via this server; expires in 15 min), published now; publishing consumes it. publish_existing: a finished video (taskId), a completed upload (uploadId)${remote ? '' : ' or a local image (imagePath)'}, to every network of its accounts in one call (images: ${IMAGE_PROVIDERS.join('/')}; ${IMAGE_AS_SHORT_NOTE}), with mode asap (now) or scheduled (once, at publishAt). YouTube needs title, description, tags and privacyStatus; Rumble and Fanvue title and description; the other networks a caption (publish_existing uses description). If a call times out, retry with the same idempotencyKey: the original result is replayed. A result with errorCode publish_unknown must NOT be retried: the post may be live, check the account first.`,
+      `Publish media you made elsewhere. ${remote ? '' : 'from_file: a local video (.mp4 or .mov) is published now. '}create_upload → complete_upload → publish_upload: a signed upload, video or JPEG/PNG (PUT straight to storage, never via this server; expires in 15 min), published now; publishing consumes it. publish_existing: a completed upload (uploadId)${remote ? '' : ' or a local image (imagePath)'}, to every network of its accounts in one call (images: ${IMAGE_PROVIDERS.join('/')} only; YouTube and the other networks take video), with mode asap (now) or scheduled (once, at publishAt; scheduled posts accept a promptVersionId for experiments). The 7-day free trial gates all publishing: after it ends the call fails with TRIAL_EXPIRED. YouTube needs title, description, tags and privacyStatus; Rumble and Fanvue title and description; the other networks a caption (publish_existing uses description). If a call times out, retry with the same idempotencyKey: the original result is replayed. A result with errorCode publish_unknown must NOT be retried: the post may be live, check the account first.`,
       offeredSpecs(PUBLISH_SPECS, publishOptions),
     ),
     actionShape(offeredSpecs(PUBLISH_SPECS, publishOptions)),

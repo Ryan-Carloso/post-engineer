@@ -2,7 +2,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
-import { PINTEREST_DESCRIPTION_MAX_CHARS, PUBLISH_NETWORKS, checkPublish } from '@/lib/draft-scoring';
 import { PROVIDER_LABELS, accountOption, scheduleAccountIds } from '@/lib/account-options';
 import { resolvePublishLinks } from '@/lib/publish-links';
 import { COUNTER_FETCHERS } from '@/lib/metrics/provider-counters';
@@ -20,19 +19,9 @@ describe('Pinterest across the shared surfaces', () => {
     expect(counters).toEqual({ views: null, likes: null, comments: null, saves: null });
   });
 
-  it('fails the publish check only past the description ceiling', () => {
-    expect(PUBLISH_NETWORKS).toContain('pinterest');
-    expect(PINTEREST_DESCRIPTION_MAX_CHARS).toBe(PINTEREST_LIB_MAX_CHARS);
-    expect(checkPublish('a'.repeat(PINTEREST_DESCRIPTION_MAX_CHARS), 'pinterest').failures).toEqual([]);
-    expect(checkPublish('a'.repeat(PINTEREST_DESCRIPTION_MAX_CHARS + 1), 'pinterest').failures[0]).toContain('Pinterest 800-character');
-  });
-
-  it('pins the description ceiling to the engine publisher and its request model', () => {
+  it('pins the description ceiling to the engine publisher', () => {
     const publisher = readFileSync(join(repoRoot, 'apps/engine/app/services/publish_pinterest.py'), 'utf8');
     expect(publisher).toContain(`PINTEREST_DESCRIPTION_MAX_LENGTH: int = ${PINTEREST_LIB_MAX_CHARS}`);
-    const models = readFileSync(join(repoRoot, 'apps/engine/app/models/publish.py'), 'utf8');
-    const pinterestModel = models.slice(models.indexOf('class PinterestPublish'), models.indexOf('class PublishParams'));
-    expect(pinterestModel).toContain(`max_length=${PINTEREST_LIB_MAX_CHARS}`);
   });
 
   it('links the pin permalink and derives it from a bare numeric pin id, dropping failed publishes', () => {

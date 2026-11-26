@@ -2,14 +2,7 @@ import { z } from 'zod';
 
 import { SOCIAL_PROVIDERS } from './providers.js';
 
-export const VOICE_FALLBACK_WARNING_CODE = 'voice_fallback_applied';
 export const ACCOUNT_NEEDS_RECONNECT_WARNING_CODE = 'account_needs_reconnect';
-
-export const VoiceFallbackWarningSchema = z.object({
-  code: z.literal(VOICE_FALLBACK_WARNING_CODE),
-  fromVoice: z.string(),
-  toVoice: z.string(),
-});
 
 export const AccountNeedsReconnectWarningSchema = z.object({
   code: z.literal(ACCOUNT_NEEDS_RECONNECT_WARNING_CODE),
@@ -19,7 +12,4 @@ export const AccountNeedsReconnectWarningSchema = z.object({
   })).min(1),
 });
 
-export const ScheduleWarningSchema = z.discriminatedUnion('code', [
-  VoiceFallbackWarningSchema,
-  AccountNeedsReconnectWarningSchema,
-]);
+export const ScheduleWarningSchema = AccountNeedsReconnectWarningSchema;

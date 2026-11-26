@@ -8,9 +8,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useSessionQuery } from '@/lib/api';
 import { useI18n } from '@/lib/i18n/provider';
 import { LOCALES } from '@/lib/i18n';
-import { TokenBalance } from '@/app/(main)/token-balance';
 import VersionBadge from '@/components/ui/version-badge';
-import { CoinsIcon, KeyIcon, ProfileIcon } from '@/lib/ui';
+import { KeyIcon, ProfileIcon } from '@/lib/ui';
 
 interface UserDisplay {
   avatarUrl?: string;
@@ -304,7 +303,6 @@ export function AccountPanel({
         <div className="min-w-0 flex-1"><LocaleSwitcher /></div>
         <ThemeSwitcher className="shrink-0" />
       </div>
-      <TokenBalance compact={compact} />
       {showVersionBadge && (
         <div className="flex items-center justify-between rounded-[28px] border border-hairline bg-surface px-5 py-3">
           <span className="text-sm font-medium text-muted-text">{t('account.version')}</span>
@@ -332,7 +330,6 @@ export function AccountPanel({
             </div>
           </Link>
           {!hideSidebarApiKeysRow && <ApiKeysRow compact={compact} />}
-          <BillingRow compact={compact} />
           <SignOutButton compact={compact} />
           {!compact && <SignOutAllButton />}
         </div>
@@ -355,24 +352,6 @@ export function ApiKeysRow({ compact = false }: { compact?: boolean }) {
         <KeyIcon />
       </span>
       {t('nav.prompts')}
-    </Link>
-  );
-}
-
-export function BillingRow({ compact = false }: { compact?: boolean }) {
-  const { t } = useI18n();
-  return (
-    <Link
-      href="/billing"
-      data-testid="profile-billing-link"
-      className={`flex w-full items-center gap-3.5 rounded-[18px] bg-surface text-left leading-snug text-muted-text transition-colors hover:bg-sunken hover:text-ink ${
-        compact ? 'px-3.5 py-1.5 text-sm' : 'px-4 py-3 text-[15px]'
-      }`}
-    >
-      <span className="shrink-0 [&>svg]:size-5">
-        <CoinsIcon />
-      </span>
-      {t('account.billingLink')}
     </Link>
   );
 }

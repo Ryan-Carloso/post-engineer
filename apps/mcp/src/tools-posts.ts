@@ -18,7 +18,7 @@ export const GetPostShape = {
     .string()
     .min(1, 'id is required')
     .describe(
-      'A post id of either kind: a slot id (slotId from posts (action: list) / generate_video) or a generation id (generationId from video_tasks (action: list_generations)). The server resolves which one it is.',
+      'The slot id of the post (slotId from posts (action: list), or a slot id from publish_video (action: publish_existing)).',
     ),
 };
 
@@ -42,9 +42,6 @@ export const GetPostMetricsShape = {
     .optional()
     .describe('Optional publishing account id filter (the account ids from accounts (action: list)).'),
   provider: z.enum(METRICS_PROVIDERS).optional().describe('Optional network filter.'),
-  angle: metricsFilter
-    .optional()
-    .describe(`Optional script angle filter (exact match), or ${METRICS_NONE} for posts with no angle.`),
 };
 
 export const GetPostMetricsSchema = z.object(GetPostMetricsShape);

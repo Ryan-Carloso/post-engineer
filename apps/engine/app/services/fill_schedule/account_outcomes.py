@@ -71,8 +71,7 @@ def user_notice(provider: str, code: str) -> str | None:
     if code == "publish_unknown":
         return (
             f"{label} may already have published this video, but the publish record was lost. "
-            f"Check {label} before posting it again: this slot will not retry on its own "
-            f"and the token was not refunded."
+            f"Check {label} before posting it again: this slot will not retry on its own."
         )
     return None
 

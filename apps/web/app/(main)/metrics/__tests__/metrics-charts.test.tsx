@@ -104,7 +104,7 @@ const DAY = new Date(Date.now() - 86400000).toISOString();
 function row(overrides: Partial<MetricsRowView> = {}): MetricsRowView {
   return {
     postId: 'post-1', personaId: null, provider: 'youtube', accountId: 'UC1', externalId: 'v1',
-    scriptAngle: 'myth', publishedAt: DAY, views: 100, likes: 10, comments: 3, saves: 1, collectedAt: '2026-10-21T12:00:00Z',
+    publishedAt: DAY, views: 100, likes: 10, comments: 3, saves: 1, collectedAt: '2026-10-21T12:00:00Z',
     analyticsViews: null, engagedViews: null, stayedToWatchPct: null, averageViewDurationSeconds: null,
     averageViewPercentage: null, contentType: null, analyticsStatus: null, provisional: false,
     ...overrides,
@@ -116,7 +116,7 @@ const BASE_PROPS = {
   isError: false,
   truncated: false,
   personaLabel: (id: string | null): string => (id === null ? 'metrics.noPersona' : `Persona ${id}`),
-  rowTitle: (item: MetricsRowView): string => item.scriptAngle ?? `${item.provider} video`,
+  rowTitle: (item: MetricsRowView): string => item.externalId,
   onSelectRow: vi.fn(),
 };
 
@@ -225,8 +225,8 @@ describe('MetricsCharts', () => {
   it('reports the clicked top video to the page', () => {
     const onSelectRow = vi.fn<(item: MetricsRowView) => void>();
     renderCharts([
-      row({ postId: 'a', scriptAngle: 'best', views: 500 }),
-      row({ postId: 'b', scriptAngle: 'second', views: 9 }),
+      row({ postId: 'a', externalId: 'best', views: 500 }),
+      row({ postId: 'b', externalId: 'second', views: 9 }),
     ], { onSelectRow });
     fireEvent.click(screen.getByRole('button', { name: /best 500/ }));
     expect(onSelectRow).toHaveBeenCalledTimes(1);
@@ -325,8 +325,8 @@ describe('MetricsCharts', () => {
   it('reports the second top video when its bar is clicked', () => {
     const onSelectRow = vi.fn<(item: MetricsRowView) => void>();
     renderCharts([
-      row({ postId: 'a', scriptAngle: 'best', views: 500 }),
-      row({ postId: 'b', scriptAngle: 'second', views: 9 }),
+      row({ postId: 'a', externalId: 'best', views: 500 }),
+      row({ postId: 'b', externalId: 'second', views: 9 }),
     ], { onSelectRow });
     fireEvent.click(screen.getByRole('button', { name: /second 9/ }));
     expect(onSelectRow).toHaveBeenCalledTimes(1);

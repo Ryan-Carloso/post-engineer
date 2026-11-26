@@ -10,7 +10,6 @@ import {
 import type { SocialProvider } from './contracts/providers.js';
 import { getPost as getPostContract } from './contracts/posts.js';
 import { listPostsInRange as listPostsInRangeContract } from './contracts/schedule.js';
-import { scoreDraft as scoreDraftContract } from './contracts/videos.js';
 import type { ResponseOf } from './contracts/endpoint.js';
 
 export interface PostMetricsQuery {
@@ -18,7 +17,6 @@ export interface PostMetricsQuery {
   persona?: string;
   account?: string;
   provider?: SocialProvider;
-  angle?: string;
 }
 
 export async function getPost(client: PostEngineerClient, id: string): Promise<ResponseOf<typeof getPostContract>> {
@@ -39,7 +37,6 @@ export async function getPostMetrics(
     personaId: query.persona ?? null,
     accountId: query.account ?? null,
     provider: query.provider ?? null,
-    angle: query.angle ?? null,
   });
   const raw = await client.request(
     `/api/metrics?${params.toString()}`,
@@ -84,29 +81,6 @@ export async function getYouTubeRetentionCurve(
     'get YouTube retention curve',
   );
   return parseContractResponse(getRetentionCurveContract, raw);
-}
-
-export interface ScoreDraftInput {
-  draft: string;
-  network?: string;
-  personaId?: string;
-  kind?: string;
-}
-
-export async function scoreDraft(
-  client: PostEngineerClient,
-  input: ScoreDraftInput,
-): Promise<ResponseOf<typeof scoreDraftContract>> {
-  const body: Record<string, unknown> = { draft: input.draft };
-  if (input.network !== undefined) body.network = input.network;
-  if (input.personaId !== undefined) body.personaId = input.personaId;
-  if (input.kind !== undefined) body.kind = input.kind;
-  const raw = await client.request(
-    '/api/videos/score-draft',
-    { method: 'POST', headers: client.getHeaders(), body: JSON.stringify(body) },
-    'score draft',
-  );
-  return parseContractResponse(scoreDraftContract, raw);
 }
 
 export async function listPostsInRange(

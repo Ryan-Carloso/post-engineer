@@ -65,7 +65,7 @@ describe('PROTECTED_PREFIXES', () => {
 });
 
 describe('isProtectedPath', () => {
-  it.each(['/', '/posts', '/posts/abc', '/personas/new', '/billing', '/metrics/x'])(
+  it.each(['/', '/posts', '/posts/abc', '/personas/new', '/metrics/x'])(
     'protects %s',
     (pathname) => {
       expect(isProtectedPath(pathname)).toBe(true);

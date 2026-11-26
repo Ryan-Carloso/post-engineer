@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { useFormContext } from 'react-hook-form';
 import { createPersona, useUpdatePersonaMutation } from '@/lib/api';
-import { resolveScriptLanguage, usePersonaStore } from '@/lib/store';
+import { usePersonaStore } from '@/lib/store';
 import { useI18n } from '@/lib/i18n/provider';
 import { scrollToErrorField } from '@/lib/scroll-to-error';
 import { notifyIfSessionExpired } from '@/lib/session-expiry';
@@ -48,7 +48,7 @@ async function savePublishingAccounts(
 }
 
 export const PersonaSubmit = ({ editId }: { editId: string | null }) => {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -68,16 +68,6 @@ export const PersonaSubmit = ({ editId }: { editId: string | null }) => {
       scrollToErrorField('name');
       return;
     }
-    if (!state.photo && !state.avatarUrl && !state.storedPhotoUrl) {
-      state.setResult({ success: false, error: t('persona.errAvatar') });
-      scrollToErrorField('avatar');
-      return;
-    }
-    if (!state.voiceId) {
-      state.setResult({ success: false, error: t('persona.errVoice') });
-      scrollToErrorField('voice');
-      return;
-    }
     if (totalBoundAccounts(state.publishingAccounts) === 0) {
       state.setResult({ success: false, error: t('publishing.mustSelectAccount') });
       scrollToErrorField('accounts');
@@ -90,8 +80,6 @@ export const PersonaSubmit = ({ editId }: { editId: string | null }) => {
       scrollToErrorField('identity-card');
       return;
     }
-
-    const language = resolveScriptLanguage(locale);
 
     state.setResult(null);
     setIsPending(true);
@@ -121,18 +109,14 @@ export const PersonaSubmit = ({ editId }: { editId: string | null }) => {
           }
           await queryClient.invalidateQueries({ queryKey: ['persona-list'] });
           router.back();
-        } else if (result.error === 'prompt_rejected') {
-          scrollToErrorField('script');
         }
       } else {
-        const result = localizeIdentityCardResult(await createPersona(state.buildPersonaFormData(language)), t);
+        const result = localizeIdentityCardResult(await createPersona(state.buildPersonaFormData()), t);
         const createResult = result.success || result.error ? result : { success: false, error: t('persona.errServer') };
         usePersonaStore.getState().setResult(createResult);
         if (result.success) {
           await queryClient.invalidateQueries({ queryKey: ['persona-list'] });
           router.push('/personas');
-        } else if (result.error === 'prompt_rejected') {
-          scrollToErrorField('script');
         }
       }
     } catch (error) {

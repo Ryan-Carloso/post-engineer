@@ -1,33 +1,29 @@
 # Post Engineer
 
-> Post Engineer lets AI agents create AI personas (avatar, voice, language,
-> niche), generate videos with them, and schedule automated posting to
-> YouTube, Instagram, LinkedIn, Threads, Facebook Pages, Bluesky and Rumble.
-> Generation is always tied to publishing: one call generates, schedules and
-> auto-publishes — no orphan videos. Voiceover videos are supported without a persona. Videos cost
-> prepaid tokens; check the balance before generating. Post Engineer is open
-> source under the Apache-2.0 license
+> Post Engineer lets AI agents schedule and auto-publish videos and images
+> they made elsewhere to YouTube, Instagram, LinkedIn, Threads, Facebook Pages,
+> Bluesky, Rumble and more. Personas group the publishing accounts of one
+> brand or character. Post Engineer does not generate media: bring the file
+> from your own tool. New accounts get a 7-day free trial for publishing.
+> Post Engineer is open source under the Apache-2.0 license
 > (https://github.com/Ryan-Carloso/post-engineer): self-host it on your own
-> VPS or use the hosted platform and buy tokens. Lip sync runs on Modal.com,
-> whose Starter plan includes $30/month in compute credits — we are not
-> Modal, and this free-credit offer is theirs and can end at any time.
+> VPS or use the hosted platform.
 
 ## Platform
 
-- [Post Engineer](https://post-engineer.com/landing): create an account, create AI
-  personas, generate videos, connect social accounts, schedule automated posting.
+- [Post Engineer](https://post-engineer.com/): create an account, create
+  personas, connect social accounts, schedule automated posting.
 - [API keys](https://post-engineer.com/recipes): generate the API key used by
   the MCP server.
 - [Prompts and recipes](https://post-engineer.com/recipes): ready-made prompts
-  for the MCP server, including daily news becomes a video and GitHub PRs
-  become videos.
+  for the MCP server.
 
 ## HTTP API
 
 - [OpenAPI spec](https://post-engineer.com/openapi.json): every endpoint callable
   with an API key (`Authorization: Bearer pe_live_...`).
 - [API documentation](https://post-engineer.com/api-documentation.txt): auth,
-  errors, the video flow and token costs.
+  errors and the publishing flow.
 
 ## MCP server
 
@@ -47,12 +43,10 @@
 - [Use cases](https://post-engineer.com/docs/use-cases): daily videos, series and scheduled campaigns.
 - [Integrations](https://post-engineer.com/docs/integrations): every network Post Engineer publishes to.
 - [Help](https://post-engineer.com/help): guides for using Post Engineer, in Portuguese and English.
-- [First steps](https://post-engineer.com/help/primeiros-passos): create a persona, generate a first video and publish it.
-- [Tokens](https://post-engineer.com/help/tokens): what each video costs and how the token balance works.
+- [First steps](https://post-engineer.com/help/primeiros-passos): create a persona, upload a first video and publish it.
 - [Connect accounts](https://post-engineer.com/help/conectar-contas): connect social accounts to publish videos to them.
 - [Help in English](https://post-engineer.com/en/help): guides for using Post Engineer.
-- [First steps in English](https://post-engineer.com/en/help/primeiros-passos): create a persona, generate a first video and publish it.
-- [Tokens in English](https://post-engineer.com/en/help/tokens): what each video costs and how the token balance works.
+- [First steps in English](https://post-engineer.com/en/help/primeiros-passos): create a persona, upload a first video and publish it.
 - [Connect accounts in English](https://post-engineer.com/en/help/conectar-contas): connect social accounts to publish videos to them.
 
 
@@ -69,7 +63,7 @@ The OpenAPI spec lists every endpoint below. It is generated from the MCP
 parity mapping (apps/mcp/src/__tests__/parity-endpoint-tools.json) by
 `node apps/web/scripts/generate-openapi.mjs`, with request and response
 schemas from apps/web/scripts/openapi-schemas.mjs. Some nested items (social
-accounts, metrics rows, generation lists) are typed as free-form objects.
+accounts, metrics rows) are typed as free-form objects.
 
 ================================================================================
 AUTHENTICATION
@@ -92,40 +86,30 @@ RESPONSES AND ERRORS
 ================================================================================
 
 - JSON bodies. Failures carry success:false and an error message.
-- Most routes return a flat { "success", ... } payload. Only the two engine
-  proxies, GET /api/persona/video-status/{taskId} and
-  DELETE /api/persona/video-task/{taskId}, return the engine envelope
-  { "status", "message", "body" }: the payload is `body`, never `data`.
+- Routes return a flat { "success", ... } payload.
 - 400 invalid, over-length or conflicting input (nothing is truncated or
-  coerced silently). POST /api/videos/generate-and-schedule lists every
-  problem in one response: `code`, `error` and `field` describe the first
-  one, and `errors` (an array of { code, message, field }) holds at most 20 of them. 401 bad key. 402 not enough tokens. 404 unknown id.
-  409 conflict (e.g. the persona already has an active schedule). 410 gone:
-  terminal, stop polling. 429 rate limited: retry with backoff. 5xx
-  transient: retry with backoff. Each operation's statuses are in the spec.
+  coerced silently). 401 bad key. 402 TRIAL_EXPIRED: the free trial ended,
+  publishing and scheduling are blocked (contact the owner to extend it).
+  404 unknown id. 409 conflict. 410 gone: an expired upload. 429 rate
+  limited: retry with backoff. 5xx transient: retry with backoff. Each
+  operation's statuses are in the spec.
 - Upload, destructive and fan-out routes are rate limited per caller.
 
 ================================================================================
-VIDEOS (cost prepaid tokens: voiceover 1, ok 2, very_good 3)
+PUBLISHING
 ================================================================================
 
-Check the balance first: GET /api/billing/tokens.
+Post Engineer does not generate media. Make the video or image with your own
+tool, then publish it:
 
-1. POST /api/videos/validate-script   mechanical validation, spends no tokens
-2. POST /api/videos/score-draft       mechanical score + publish check, no tokens
-3. POST /api/videos/generate-and-schedule
-   One call generates the video, schedules it and auto-publishes it. There
-   are no orphan videos. Script is segments: hook first, then content takes
-   in order, 60-200 words total. Slot is 3h to 30d ahead, or mode "asap".
-4. GET  /api/persona/video-status/{taskId}   task state
-   state: -1 failed, 1 complete, 3 queued, 4 processing. Only -1 and 1 are
-   terminal. HTTP 200 does not mean the job is alive: read `state`.
-   410 Gone is terminal too (the engine lost the task): stop polling and
-   read GET /api/schedule/slots/{slotId} to see if the video was delivered
-   or failed and refunded.
-5. DELETE /api/persona/video-task/{taskId}   cancel a task
+1. POST /api/videos/upload-url                     create a staged upload
+2. PUT the file to the returned signed URL
+3. POST /api/videos/uploads/{uploadId}/complete    mark the upload complete
+4. POST /api/media/publish-existing                publish now (mode "asap")
+   or schedule once at publishAt (mode "scheduled", 3h to 30d ahead)
 
-Jobs stuck for several days are refunded automatically.
+POST /api/upload-content publishes a small video directly in one multipart
+request. Read the result with GET /api/schedule/slots/{slotId}.
 
 ================================================================================
 ENDPOINTS (all require an API key)
@@ -133,40 +117,18 @@ ENDPOINTS (all require an API key)
 
 METHOD PATH                                                   OPERATION
 --------------------------------------------------------------------------------
-POST   /api/videos/validate-script                            validate script
-POST   /api/videos/score-draft                                score draft
-POST   /api/videos/generate-and-schedule                      generate persona video
-POST   /api/videos/batch-discount                             apply batch discount
-GET    /api/persona/video-status/{taskId}                     get video status
-DELETE /api/persona/video-task/{taskId}                       cancel video task
-GET    /api/persona/video-generations                         list video generations
-GET    /api/persona/video-generations/{generationId}          get video generation
 POST   /api/upload-content                                    publish video direct
 POST   /api/videos/upload-url                                 create video upload
 POST   /api/videos/uploads/{uploadId}/complete                complete video upload
 POST   /api/videos/publish-by-id                              publish uploaded video
-POST   /api/media/upload                                      upload media
 POST   /api/media/publish-existing                            publish or schedule existing media
-POST   /api/media/check                                       check media
 GET    /api/persona/list                                      list personas
 POST   /api/persona                                           create persona
 PATCH  /api/persona                                           update persona
 DELETE /api/persona                                           delete persona
 GET    /api/persona/delete-preview                            get persona delete preview
-GET    /api/persona/faces                                     list faces
-GET    /api/persona/images                                    list persona images
-POST   /api/persona/images                                    add persona image
-PATCH  /api/persona/images                                    update persona image
-DELETE /api/persona/images                                    remove persona image
 GET    /api/persona/identity-card                             read a persona's identity card
 POST   /api/persona/identity-card                             render the image prompt for a scene from the card
-GET    /api/persona/voices                                    list voices
-GET    /api/persona/cloned-voices                             list cloned voices
-POST   /api/persona/cloned-voices                             create cloned voice
-GET    /api/persona/cloned-voices/{cloneId}                   get cloned voice
-DELETE /api/persona/cloned-voices/{cloneId}                   delete cloned voice
-POST   /api/persona/cloned-voices/{cloneId}/preview           preview cloned voice
-POST   /api/persona/voices/{voiceId}/preview                  preview house voice
 GET    /api/persona/publishing-accounts                       get persona publishing accounts
 PUT    /api/persona/publishing-accounts                       set persona publishing accounts
 GET    /api/account                                           list social accounts
@@ -193,9 +155,6 @@ POST   /api/share-links                                       create public read
 GET    /api/share-links                                       list share links
 DELETE /api/share-links/{id}                                  revoke share link
 GET    /api/experiments                                       compare prompts per account
-POST   /api/experiments                                       quote then create a prompt experiment
-GET    /api/billing/tokens                                    get token balance
-GET    /api/billing/transactions                              list token transactions
 GET    /api/prompts                                           list recipe prompts
 GET    /api/prompts/{slug}                                    get recipe prompt
 POST   /api/prompts                                           create prompt
@@ -206,7 +165,7 @@ GET    /api/prompts/{slug}/versions/{version}                 read one old versi
 POST   /api/prompts/{slug}/versions/{version}/restore         restore an old version as a new one
 
 Not in this list: session-only routes (OAuth callbacks, API key management,
-billing checkout/webhook, logout, GET /api/health) and the public
+logout, GET /api/health) and the public
 GET /api/version.
 
 ================================================================================
@@ -224,17 +183,14 @@ post, a group bot a member allowed to send). Then map accounts to a persona
 with PUT /api/persona/publishing-accounts.
 
 ================================================================================
-MARKETPLACES (RapidAPI, Apify, MCP Registry)
+MARKETPLACES (RapidAPI, MCP Registry)
 ================================================================================
 
-The same API key works everywhere; tokens are always billed by Post Engineer.
+The same API key works everywhere.
 
 - RapidAPI: send your Post Engineer key in Authorization: Bearer pe_live_...
   next to the X-RapidAPI-Key header. RapidAPI forwards it; without it the API
   returns 401.
-- Apify: the "Post Engineer video" Actor takes the key as a secret input and
-  calls POST /api/videos/generate-and-schedule for you (source:
-  integrations/apify in the repository).
 - MCP Registry: io.github.Ryan-Carloso/post-engineer (npm post-engineer-mcp),
   configured with POST_ENGINEER_API_KEY.
 
@@ -247,23 +203,16 @@ See docs/SELF_HOSTING.md in https://github.com/Ryan-Carloso/post-engineer.
 
 ## MCP tools
 
-17 intent tools; each takes an `action`, except `generate_video` and `cancel_video`. Personas and accounts are given by name or id. Every tool and every action is listed below.
+10 intent tools; each takes an `action`, except `generate_video` and `cancel_video`. Personas and accounts are given by name or id. Every tool and every action is listed below.
 
-- `generate_video` — Generate one video or a batch of 2-12, schedule each 3 hours to 30 days ahead (or `mode: 'asap'`) and auto-publish it. The script is segments: the hook first, then the content takes in order, 60-200 words in total.
-- `video_tasks` — Check the progress or the final outcome of video generations, list past generations and read one in full. Actions: `status`, `list_generations`, `get_generation`.
-- `cancel_video` — Cancel a video that is still generating (your own task only). Kept apart from `video_tasks` so a client can allow status checks without allowing cancellation.
-- `personas` — List, read, create, update and delete personas (avatar, voice, language, niche). Writes are previewed first, then confirmed. Personas are given by name or id. Actions: `list`, `get`, `create`, `update`, `delete`.
-- `persona_media` — A persona's face and image library: the stock faces to pick an avatar from, the library images used for per-video image selection, the identity card and the rendered image prompt. Actions: `list_faces`, `list_images`, `add_image`, `update_image`, `remove_image`, `get_card`, `render_prompt`.
-- `voices` — List the house voices and preview them, and manage your own cloned voices (create, read, preview, delete). Actions: `list`, `preview`, `list_clones`, `create_clone`, `get_clone`, `preview_clone`, `delete_clone`.
+- `personas` — List, read, create, update and delete personas (avatar, language, niche). Writes are previewed first, then confirmed. Personas are given by name or id. Actions: `list`, `get`, `create`, `update`, `delete`.
+- `persona_media` — A persona's identity card and the image prompts rendered from it, for your own image tool. Actions: `get_card`, `render_prompt`.
 - `accounts` — List, connect and disconnect social accounts, read or set which accounts a persona publishes to, and list Pinterest boards. Accounts are given by name or id. Actions: `list`, `connect`, `disconnect`, `get_persona_publishing`, `set_persona_publishing`, `list_boards`.
 - `schedules` — List scheduled posts, cancel a schedule, read a slot, change a slot title or delete a slot. Actions: `list`, `cancel`, `get_slot`, `update_slot_title`, `delete_slot`.
 - `posts` — List published posts and read one. Actions: `list`, `get`.
 - `insights` — Post metrics, the last-24-hours metrics, the YouTube retention curve, and public share links for metrics (create, list, revoke). Actions: `post_metrics`, `last_day`, `retention_curve`, `share_link_create`, `share_link_list`, `share_link_revoke`.
-- `billing` — Read the prepaid token balance and the token transactions. Check the balance before generating. Actions: `balance`, `transactions`.
-- `experiments` — Compare your prompts inside each publishing account: per account, each prompt version with its results, and run the comparison: a quote first, then a confirm that charges once and schedules every video. Actions: `results`, `create`.
-- `check_script` — Check a script mechanically (`validate`) or score a draft (`score`). No tokens are spent. Actions: `validate`, `score`.
-- `media` — Images for video segments: upload an image or mechanically check a public image URL. Actions: `upload`, `check`.
-- `publish_video` — Publish a finished video file you already have, directly or through a staged upload, or publish an existing generation. Actions: `from_file`, `create_upload`, `complete_upload`, `publish_upload`, `publish_existing`.
+- `experiments` — Compare your prompts inside each publishing account: per account, each prompt version with its results. Actions: `results`.
+- `publish_video` — Publish a finished video or image you made elsewhere, directly or through a staged upload, now or at a scheduled time. Actions: `from_file`, `create_upload`, `complete_upload`, `publish_upload`, `publish_existing`.
 - `prompts` — The prompt library: list and read prompts, and create, update, delete and restore your own, with version history. Actions: `list`, `get`, `create`, `update`, `delete`, `versions`, `restore`.
 - `tool_config` — Read and save the search tool and the licensed stock sources. Keys are stored encrypted and only their presence and last 4 characters are ever returned. Actions: `get`, `save`.
 - Prompts: `/daily-news` (daily news becomes a video), `/github-prs` (GitHub PRs become videos), `/full-setup` (full setup becomes videos).

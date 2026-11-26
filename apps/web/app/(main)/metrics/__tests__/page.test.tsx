@@ -108,7 +108,7 @@ const PUBLISHED_AT = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(
 function row(overrides: Partial<MetricsRowView> = {}): MetricsRowView {
   return {
     postId: 'post-1', personaId: PERSONA_A, provider: 'youtube', accountId: 'UC1', externalId: 'v1',
-    scriptAngle: 'myth', publishedAt: PUBLISHED_AT, views: 100, likes: 10, comments: 3, saves: 1, collectedAt: '2026-10-21T12:00:00Z',
+    publishedAt: PUBLISHED_AT, views: 100, likes: 10, comments: 3, saves: 1, collectedAt: '2026-10-21T12:00:00Z',
     analyticsViews: null, engagedViews: null, stayedToWatchPct: null, averageViewDurationSeconds: null,
     averageViewPercentage: null, contentType: null, analyticsStatus: null, provisional: false,
     ...overrides,
@@ -118,7 +118,7 @@ function row(overrides: Partial<MetricsRowView> = {}): MetricsRowView {
 function coverageItem(overrides: Partial<CoverageItem> = {}): CoverageItem {
   return {
     postId: 'post-9', personaId: PERSONA_A, provider: 'youtube', accountId: 'UC1', externalId: 'v9',
-    scriptAngle: 'myth', reason: 'retrying',
+    reason: 'retrying',
     publishedAt: '2026-10-21T12:00:00.000Z',
     windowOpensAt: '2026-10-22T12:00:00.000Z', windowClosesAt: '2026-10-23T12:00:00.000Z',
     ...overrides,
@@ -224,11 +224,11 @@ describe('MetricsPage', () => {
       row(),
       row({
         postId: 'post-2', personaId: null, provider: 'instagram', accountId: 'ig1', externalId: 'v2',
-        scriptAngle: null, views: 300, likes: null, comments: null, saves: null,
+        views: 300, likes: null, comments: null, saves: null,
       }),
       row({
         postId: 'post-3', personaId: PERSONA_B, provider: 'bluesky', accountId: 'did:plc:x', externalId: 'v3',
-        scriptAngle: 'tutorial', views: null, likes: 5, comments: 0, saves: 0,
+        views: null, likes: 5, comments: 0, saves: 0,
       }),
     ];
     stubMetricsFetch({ success: true, rows, truncated: false });
@@ -245,7 +245,7 @@ describe('MetricsPage', () => {
     expect(items[2]).toHaveTextContent('metrics.notReported');
     expect(screen.getByText('Instagram · Oct 21, 2026')).toBeInTheDocument();
     expect(screen.queryByText('metrics.noAngle')).toBeNull();
-    expect(screen.getAllByText('myth').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('YouTube · Oct 21, 2026').length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Alpha/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/metrics.noPersona/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Chan One/).length).toBeGreaterThan(0);
@@ -349,7 +349,7 @@ describe('MetricsPage', () => {
       truncated: true,
     });
     renderPage();
-    await waitFor(() => expect(screen.getByRole('button', { name: /myth 1200/ })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: /YouTube · Oct 21, 2026 1200/ })).toBeInTheDocument());
     expect(screen.getAllByText(/metrics\.chartsTruncated/)).toHaveLength(3);
   });
 
@@ -418,8 +418,8 @@ describe('MetricsPage', () => {
     });
     renderPage();
     await waitFor(() => expect(screen.getByText('metrics.chartsOverTimeTitle')).toBeInTheDocument());
-    await waitFor(() => expect(screen.getByRole('button', { name: /myth 1200/ })).toBeInTheDocument());
-    fireEvent.click(screen.getByRole('button', { name: /myth 1200/ }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /YouTube · Oct 21, 2026 1200/ })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /YouTube · Oct 21, 2026 1200/ }));
     expect(screen.getByText('metrics.tableTitle')).toBeInTheDocument();
     expect(screen.queryByText('metrics.chartsOverTimeTitle')).toBeNull();
     expect(window.localStorage.getItem('metrics-view-mode')).toBeNull();
@@ -436,7 +436,7 @@ describe('MetricsPage', () => {
         coverageItem({ reason: 'retrying' }),
         coverageItem({
           postId: 'post-10', provider: 'instagram', accountId: 'ig1', externalId: null,
-          reason: 'publish-failed', scriptAngle: null,
+          reason: 'publish-failed',
         }),
         coverageItem({ postId: 'post-11', accountId: 'unknown-acct', reason: 'pending' }),
       ],
@@ -471,7 +471,7 @@ describe('MetricsPage', () => {
     });
     renderPage();
     await waitFor(() => expect(screen.getByText('metrics.coverageTitle')).toBeInTheDocument());
-    expect(screen.getAllByText(/21 de out\. de 2026/).length).toBe(2);
+    expect(screen.getAllByText(/21 de out\. de 2026/).length).toBe(3);
   });
 
   it('hides the coverage card when nothing is missing, but still dates the data', async () => {
@@ -589,7 +589,7 @@ describe('MetricsPage', () => {
   it('sends the window and the sheet filters to the API, and clears them from the chips', async () => {
     const fetchMock = stubMetricsFetch({
       success: true,
-      rows: [row(), row({ postId: 'post-2', scriptAngle: 'tutorial', views: 50 })],
+      rows: [row(), row({ postId: 'post-2', views: 50 })],
       truncated: false,
     });
     renderPage();

@@ -48,25 +48,9 @@ export function parseCancelScheduleQuery(params: URLSearchParams):
   return { ok: true, query: { id } };
 }
 
-export const CancelRefundSchema = z.object({
-  slotId: z.string(),
-  refunded: z.boolean(),
-  alreadyRefunded: z.boolean(),
-  reason: z.enum([
-    'not_generated',
-    'already_generated',
-    'already_refunded',
-    'not_charged',
-    'refund_failed',
-    'discount_withheld',
-  ]),
-});
-
 export const CancelScheduleResponseSchema = z.object({
   success: z.literal(true),
   cancelledSlotIds: z.array(z.string()),
-  refunds: z.array(CancelRefundSchema),
-  batchDiscountWithheld: z.number(),
 });
 
 export const STATUS_LIMIT_DEFAULT = 10;
@@ -82,8 +66,6 @@ export function parseStatusLimit(value: string | null): number {
 export const RANGE_MAX_SPAN_DAYS = 62;
 export const RANGE_MAX_SLOTS = 1000;
 export const RANGE_STATUSES = [
-  'pending',
-  'generating',
   'ready',
   'publishing',
   'published',
@@ -139,24 +121,15 @@ export const StatusSlotSchema = z.object({
   id: z.string(),
   slot_at: z.string(),
   status: z.enum([
-    'awaiting',
-    'generating',
     'ready',
     'publishing',
     'published',
     'failed',
-    'completed',
   ]),
   title: z.string().nullable(),
   error: z.string().nullable(),
   published_at: z.string().nullable(),
   schedule_id: z.string(),
-  task_id: z.string().nullable(),
-  progress: z.number(),
-  stage: z.string().nullable(),
-  queuePosition: z.number().nullable(),
-  queueTotal: z.number().nullable(),
-  retryable: z.boolean().nullable(),
   postUrl: z.string().nullable(),
   userNotices: z.array(PublishUserNoticeSchema).optional(),
   providerFailures: z.array(PublishProviderFailureSchema).optional(),

@@ -106,15 +106,10 @@ describe('week helpers', () => {
 });
 
 describe('calendar groups and day counts', () => {
-  it('maps every real slot and generation status to a group', () => {
-    for (const status of ['generating', 'publishing', 'running']) {
-      expect(calendarGroupOf(status)).toBe('inProgress');
-    }
-    for (const status of ['pending', 'awaiting', 'ready']) {
-      expect(calendarGroupOf(status)).toBe('scheduled');
-    }
+  it('maps every real slot status to a group', () => {
+    expect(calendarGroupOf('publishing')).toBe('inProgress');
+    expect(calendarGroupOf('ready')).toBe('scheduled');
     expect(calendarGroupOf('published')).toBe('published');
-    expect(calendarGroupOf('completed')).toBe('published');
     expect(calendarGroupOf('failed')).toBe('failed');
   });
 
@@ -125,9 +120,9 @@ describe('calendar groups and day counts', () => {
   it('counts failed, published, in progress and scheduled', () => {
     expect(
       calendarCounts([
-        { status: 'awaiting' as const },
         { status: 'ready' as const },
-        { status: 'generating' as const },
+        { status: 'ready' as const },
+        { status: 'publishing' as const },
         { status: 'published' as const },
         { status: 'failed' as const },
       ]),
@@ -150,9 +145,9 @@ describe('calendar vocabulary', () => {
     expect(CALENDAR_GROUP_PILL.failed).toBe('bg-destructive-soft text-destructive');
   });
 
-  it('keeps the detail page word for an awaiting post: scheduled, not pending', () => {
-    expect(STATUS_KEY.awaiting).toBe('posts.groupScheduled');
-    expect(STATUS_KEY.pending).toBe('posts.statusPending');
+  it('keeps the detail page word for a ready post', () => {
+    expect(STATUS_KEY.ready).toBe('posts.statusReady');
+    expect(STATUS_KEY.publishing).toBe('posts.statusPublishing');
   });
 });
 

@@ -8,17 +8,14 @@ function slotDetailPayload() {
       id: POST_DETAIL_SLOT_ID,
       scheduleId: POST_DETAIL_SCHEDULE_ID,
       slotAt: '2030-06-01T10:00:00.000Z',
-      status: 'awaiting',
+      status: 'ready',
       title: 'E2E caption for the post details page',
       error: null,
       publishedAt: null,
-      taskId: null,
-      progress: 0,
-      stage: null,
-      retryable: null,
       publishLinks: [],
-      queuePosition: 1,
-      queueTotal: 3,
+      userNotices: [],
+      providerFailures: [],
+      postUrl: null,
     },
     schedule: {
       id: POST_DETAIL_SCHEDULE_ID,
@@ -31,15 +28,7 @@ function slotDetailPayload() {
       timezone: 'Europe/Lisbon',
     },
     persona: { id: 'persona-e2e-1', name: 'E2E Persona' },
-    generation: {
-      voiceover: false,
-      language: 'pt-BR',
-      voiceId: 'ana_neural',
-      videoAspect: '9:16',
-      niche: 'cooking',
-      paragraphNumber: 5,
-      faceQuality: 'high',
-    },
+    prompt: null,
   };
 }
 
@@ -88,7 +77,7 @@ describe('Post details page', () => {
   beforeEach(() => {
     cy.loginE2EUser();
 
-    cy.intercept('GET', '/api/posts/*', { ...slotDetailPayload(), kind: 'slot' }).as('slotDetail');
+    cy.intercept('GET', '/api/posts/*', slotDetailPayload()).as('slotDetail');
     cy.intercept('GET', '/api/account', accountsPayload()).as('accounts');
     cy.visit(`/posts/${POST_DETAIL_SLOT_ID}`);
     cy.wait('@slotDetail');
@@ -109,20 +98,6 @@ describe('Post details page', () => {
     cy.contains(/Agendado para|Scheduled for/).scrollIntoView().should('be.visible');
     cy.contains('11:00').scrollIntoView().should('be.visible');
     cy.contains('(Europe/Lisbon)').scrollIntoView().should('be.visible');
-  });
-
-  it('shows the generation facts of the post', () => {
-    cy.contains(/Como foi gerado|How it was generated/).scrollIntoView().should('be.visible');
-    cy.contains('pt-BR').scrollIntoView().should('be.visible');
-    cy.contains('ana_neural').scrollIntoView().should('be.visible');
-    cy.contains('9:16').scrollIntoView().should('be.visible');
-    cy.contains(/Com o rosto da persona|With the persona's face/).scrollIntoView().should('be.visible');
-    cy.contains(/Como foi gerado|How it was generated/)
-      .parent('section')
-      .within(() => {
-        cy.get('button').should('not.exist');
-        cy.get('input, textarea').should('not.exist');
-      });
   });
 
   it('lists the target accounts by name', () => {
@@ -157,63 +132,5 @@ describe('Post details page', () => {
 
     cy.wait('@deleteSlot');
     cy.url().should('match', /\/posts$/);
-  });
-});
-
-describe('Post details page — progress history', () => {
-  const HISTORY = [
-    { progress: 40, stage: 'subtitle', recordedAt: '2026-10-05T22:10:00.000Z' },
-    { progress: 0, stage: 'music_mood', recordedAt: '2026-10-05T22:12:00.000Z' },
-    { progress: 50, stage: 'materials', recordedAt: '2026-10-05T22:14:00.000Z' },
-  ];
-
-  function visitWithHistory(progressHistory: unknown[]) {
-    cy.loginE2EUser();
-    cy.intercept('GET', '/api/persona/video-generations/*', {
-      statusCode: 404,
-      body: { success: false, error: 'Not found' },
-    }).as('generationDetail');
-    const payload = slotDetailPayload() as {
-      success: boolean;
-      slot: Record<string, unknown>;
-      schedule: unknown;
-      persona: unknown;
-    };
-    payload.slot = {
-      ...payload.slot,
-      status: 'generating',
-      taskId: 'task-e2e-7',
-      progress: 50,
-      stage: 'materials',
-      progressHistory,
-    };
-    cy.intercept('GET', '/api/posts/*', { ...payload, kind: 'slot' }).as('slotDetail');
-    cy.intercept('GET', '/api/account', accountsPayload()).as('accounts');
-    cy.visit(`/posts/${POST_DETAIL_SLOT_ID}`);
-    cy.wait('@slotDetail');
-  }
-
-  it('lists the observed transitions oldest-first with the regression marked', () => {
-    visitWithHistory(HISTORY);
-
-    cy.contains(/Histórico de progresso|Progress history/)
-      .scrollIntoView()
-      .should('be.visible');
-    cy.get('[data-testid="progress-history-row"]').should('have.length', 3);
-    cy.get('[data-testid="progress-history-row"]').eq(0).should('contain', '40%');
-    cy.get('[data-testid="progress-history-row"]')
-      .eq(1)
-      .should('have.attr', 'data-regressed', 'true')
-      .and('contain', '0%');
-    cy.get('[data-testid="progress-history-row"]')
-      .eq(2)
-      .should('not.have.attr', 'data-regressed');
-  });
-
-  it('hides the section when nothing was recorded', () => {
-    visitWithHistory([]);
-
-    cy.contains(/Histórico de progresso|Progress history/).should('not.exist');
-    cy.get('[data-testid="progress-history-row"]').should('not.exist');
   });
 });

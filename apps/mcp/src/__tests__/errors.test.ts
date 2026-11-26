@@ -69,3 +69,30 @@ describe('apiErrorFromResponse', () => {
     expect(error).toMatchObject({ code: 'X', field: 'f', delivered: true, postUrl: 'https://p', status: 410 });
   });
 });
+
+describe('TRIAL_EXPIRED responses', () => {
+  function trialResponse(body: Record<string, unknown>): Response {
+    return new Response(JSON.stringify({ success: false, error: 'Your free trial has ended.', code: 'TRIAL_EXPIRED', ...body }), { status: 402 });
+  }
+
+  it('names the contact link the API returns', async () => {
+    const error = await apiErrorFromResponse(trialResponse({ contactUrl: 'https://wa.me/0000000000' }), 'publish existing media');
+    expect(error.code).toBe('TRIAL_EXPIRED');
+    expect(error.status).toBe(402);
+    expect(error.message).toBe(
+      'Failed to publish existing media: 402 The 7-day free trial has ended: scheduling and publishing are blocked, reading your data still works. Contact the Post Engineer team to continue: https://wa.me/0000000000',
+    );
+  });
+
+  it('drops a contact link that is not https', async () => {
+    const error = await apiErrorFromResponse(trialResponse({ contactUrl: 'javascript:alert(1)' }), 'publish existing media');
+    expect(error.message).toContain('Contact the Post Engineer team to continue.');
+    expect(error.message).not.toContain('javascript');
+  });
+
+  it('keeps the API message for any other code', async () => {
+    const response = new Response(JSON.stringify({ success: false, error: 'Bad input', code: 'VALIDATION_ERROR', contactUrl: 'https://wa.me/0000000000' }), { status: 400 });
+    const error = await apiErrorFromResponse(response, 'publish existing media');
+    expect(error.message).toBe('Failed to publish existing media: 400 Bad input');
+  });
+});

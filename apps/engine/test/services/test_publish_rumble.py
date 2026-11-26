@@ -7,34 +7,10 @@ fill-schedule mapping for the rumble provider.
 
 import unittest
 
-from pydantic import ValidationError
 
 from app.providers import SOCIAL_PROVIDERS
-from app.models.publish import PublishParams, RumblePublish
 from app.services import publish_rumble, upload_publisher
 from app.services.fill_schedule.metadata import metadata_for, validate_publish_plan
-
-
-class RumblePublishParamsTest(unittest.TestCase):
-    def test_accepts_rumble_publish(self) -> None:
-        params = PublishParams(
-            providers=["rumble"],
-            rumble=RumblePublish(title="post", description="desc", account_ids=["123"]),
-        )
-        self.assertEqual(params.rumble.account_ids, ["123"])
-
-    def test_rejects_provider_without_metadata(self) -> None:
-        with self.assertRaisesRegex(ValidationError, "rumble provider requires rumble metadata"):
-            PublishParams(providers=["rumble"])
-
-    def test_rejects_title_over_limit(self) -> None:
-        RumblePublish(title="a" * 100, description="desc", account_ids=["123"])
-        with self.assertRaises(ValidationError):
-            RumblePublish(title="a" * 101, description="desc", account_ids=["123"])
-
-    def test_rejects_empty_description(self) -> None:
-        with self.assertRaises(ValidationError):
-            RumblePublish(title="post", description="", account_ids=["123"])
 
 
 class PublishRumbleModuleTest(unittest.TestCase):

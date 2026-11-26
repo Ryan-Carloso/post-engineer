@@ -43,10 +43,10 @@ begin
 end;
 $$;
 
-insert into public.user_profiles (id, tokens_balance, free_tokens_balance)
+insert into public.user_profiles (id, trial_ends_at)
 values
-  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 5, 1),
-  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 7, 2);
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2099-01-01T00:00:00Z'),
+  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '2099-01-02T00:00:00Z');
 
 insert into public.personas (id, user_id, name)
 values
@@ -69,14 +69,13 @@ values
     '{}', '{}', '{}', '{}', '{}', '{}'
   );
 
-insert into public.scheduled_posts (id, schedule_id, user_id, slot_at, charged_tokens, title)
+insert into public.scheduled_posts (id, schedule_id, user_id, slot_at, title)
 values
   (
     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa03',
     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa02',
     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
     '2026-12-01T00:00:00Z',
-    10,
     'mine'
   ),
   (
@@ -84,7 +83,6 @@ values
     'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb02',
     'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
     '2026-12-01T00:00:00Z',
-    10,
     'theirs'
   );
 
@@ -109,36 +107,6 @@ values
     'cipher-b'
   );
 
-insert into public.video_generations (id, user_id, generation_id, status, tokens_refunded)
-values
-  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa05', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'gen-a', 'pending', false),
-  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb05', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'gen-b', 'pending', false);
-
-insert into public.token_transactions (id, user_id, amount, type)
-values
-  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa06', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 5, 'grant'),
-  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb06', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 7, 'grant');
-
--- User B's library, inserted as the table owner so the limit trigger can
--- lock the parent persona. The authenticated probes below must not move
--- the primary flag onto the second image.
-insert into public.persona_images (id, persona_id, user_id, image_path, is_primary)
-values
-  (
-    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb11',
-    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb01',
-    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-    'b/primary.png',
-    true
-  ),
-  (
-    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb12',
-    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb01',
-    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-    'b/other.png',
-    false
-  );
-
 -- No policy may be FOR ALL, and every core-table policy is TO authenticated.
 do $$
 declare
@@ -151,7 +119,7 @@ begin
   where n.nspname = 'public'
     and c.relname in (
       'user_profiles', 'personas', 'schedules', 'scheduled_posts',
-      'social_accounts', 'video_generations', 'token_transactions'
+      'social_accounts'
     )
     and (
       p.polcmd = '*'
@@ -181,23 +149,14 @@ select pg_temp.expect_count(
 select pg_temp.expect_count(
   $$select count(*) from public.social_accounts where user_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'$$,
   0, 'user B accounts hidden');
-select pg_temp.expect_count(
-  $$select count(*) from public.video_generations where user_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'$$,
-  0, 'user B generations hidden');
-select pg_temp.expect_count(
-  $$select count(*) from public.token_transactions where user_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'$$,
-  0, 'user B ledger hidden');
 
 -- Own reads the session client performs.
 select pg_temp.expect_count(
   $$select count(*) from public.user_profiles where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'$$,
   1, 'own profile readable');
 select pg_temp.expect_count(
-  $$select count(*) from public.user_profiles where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' and tokens_balance = 5 and free_tokens_balance = 1$$,
-  1, 'own balances readable');
-select pg_temp.expect_count(
-  $$select count(*) from public.token_transactions where user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'$$,
-  1, 'own ledger readable');
+  $$select count(*) from public.user_profiles where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' and trial_ends_at = '2099-01-01T00:00:00Z'$$,
+  1, 'own trial end readable');
 select pg_temp.expect_count(
   $$select count(*) from public.personas where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01'$$,
   1, 'own persona readable');
@@ -205,11 +164,8 @@ select pg_temp.expect_count(
   $$select count(*) from public.schedules where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa02'$$,
   1, 'own schedule readable');
 select pg_temp.expect_count(
-  $$select count(*) from public.scheduled_posts where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa03' and charged_tokens = 10$$,
-  1, 'own slot billing columns readable');
-select pg_temp.expect_count(
-  $$select count(*) from public.video_generations where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa05' and tokens_refunded = false$$,
-  1, 'own generation readable');
+  $$select count(*) from public.scheduled_posts where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa03' and status = 'pending'$$,
+  1, 'own slot readable');
 select pg_temp.expect_count(
   $$select count(*) from public.social_accounts where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa04' and account_name is null$$,
   1, 'own account public columns readable');
@@ -217,16 +173,10 @@ select pg_temp.expect_count(
   $$select count(*) from public.social_accounts where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa04' and needs_reconnect = false$$,
   1, 'own account needs_reconnect readable');
 
--- Billing and server columns are not writable with the user JWT.
+-- The trial end is not writable with the user JWT.
 select pg_temp.expect_state(
-  $$update public.user_profiles set tokens_balance = 99999 where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'$$,
-  '42501', 'tokens_balance update denied');
-select pg_temp.expect_state(
-  $$update public.user_profiles set free_tokens_balance = 99999 where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'$$,
-  '42501', 'free_tokens_balance update denied');
-select pg_temp.expect_state(
-  $$update public.user_profiles set stripe_customer_id = 'cus_evil' where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'$$,
-  '42501', 'stripe_customer_id update denied');
+  $$update public.user_profiles set trial_ends_at = '2100-01-01T00:00:00Z' where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'$$,
+  '42501', 'trial_ends_at update denied');
 select pg_temp.expect_state(
   $$insert into public.user_profiles (id) values ('cccccccc-cccc-cccc-cccc-cccccccccccc')$$,
   '42501', 'user_profiles insert denied');
@@ -235,33 +185,11 @@ select pg_temp.expect_state(
   '42501', 'user_profiles delete denied');
 
 select pg_temp.expect_state(
-  $$update public.scheduled_posts set charged_tokens = 0 where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa03'$$,
-  '42501', 'charged_tokens update denied');
-select pg_temp.expect_state(
-  $$update public.scheduled_posts set discount_tokens = 10 where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa03'$$,
-  '42501', 'discount_tokens update denied');
-select pg_temp.expect_state(
   $$update public.scheduled_posts set status = 'published' where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa03'$$,
   '42501', 'scheduled_posts status update denied');
 select pg_temp.expect_state(
-  $$update public.scheduled_posts set task_id = 'task-evil' where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa03'$$,
-  '42501', 'task_id update denied');
-select pg_temp.expect_state(
-  $$update public.scheduled_posts set batch_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa03' where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa03'$$,
-  '42501', 'batch_id update denied');
-select pg_temp.expect_state(
-  $$insert into public.scheduled_posts (schedule_id, user_id, slot_at, charged_tokens) values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa02', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', now(), 0)$$,
+  $$insert into public.scheduled_posts (schedule_id, user_id, slot_at) values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa02', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', now())$$,
   '42501', 'scheduled_posts insert denied');
-
-select pg_temp.expect_state(
-  $$update public.video_generations set status = 'completed' where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa05'$$,
-  '42501', 'video status update denied');
-select pg_temp.expect_state(
-  $$update public.video_generations set tokens_refunded = true where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa05'$$,
-  '42501', 'tokens_refunded update denied');
-select pg_temp.expect_state(
-  $$insert into public.video_generations (user_id, generation_id) values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'gen-evil')$$,
-  '42501', 'video_generations insert denied');
 
 select pg_temp.expect_state(
   $$insert into public.schedules (user_id, providers, youtube_account_ids, instagram_account_ids, times, linkedin_account_ids, bluesky_account_ids) values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '{}', '{}', '{}', '{}', '{}', '{}')$$,
@@ -271,34 +199,19 @@ select pg_temp.expect_state(
   '42501', 'schedules update denied');
 
 select pg_temp.expect_state(
-  $$insert into public.token_transactions (user_id, amount, type) values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 99999, 'grant')$$,
-  '42501', 'token_transactions insert denied');
-select pg_temp.expect_state(
-  $$update public.token_transactions set amount = 99999 where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa06'$$,
-  '42501', 'token_transactions update denied');
-select pg_temp.expect_state(
-  $$delete from public.token_transactions where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa06'$$,
-  '42501', 'token_transactions delete denied');
-
-select pg_temp.expect_state(
   $$select encrypted_tokens from public.social_accounts where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa04'$$,
   '42501', 'encrypted_tokens select denied');
 
 -- Deletes and writes a cookie JWT must not be able to perform. A session
--- delete of scheduled_posts plus video_generations makes
--- find_zombie_schedule_candidates refund the batch. A direct slot_at
+-- delete of scheduled_posts drops a post the user scheduled. A direct slot_at
 -- write publishes a ready slot as soon as it is due, skipping the route's
 -- window. A direct encrypted_tokens write stores ciphertext the refresh
--- path cannot decrypt. Persona columns (language, face_quality,
--- recent_image_ids, voice_id, photo_path) are coerced in the route, so
--- PostgREST must not write them either. The routes do these on the
+-- path cannot decrypt. Persona columns (photo_path, identity_card) are
+-- coerced in the route, so PostgREST must not write them either. The routes do these on the
 -- service client after their own checks.
 select pg_temp.expect_state(
   $$delete from public.scheduled_posts where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa03'$$,
   '42501', 'slot delete denied');
-select pg_temp.expect_state(
-  $$delete from public.video_generations where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa05'$$,
-  '42501', 'generation delete denied');
 select pg_temp.expect_state(
   $$delete from public.schedules where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa02'$$,
   '42501', 'schedule delete denied');
@@ -312,8 +225,8 @@ select pg_temp.expect_state(
   $$update public.scheduled_posts set slot_at = '2026-12-02T00:00:00Z' where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa03'$$,
   '42501', 'slot time update denied');
 select pg_temp.expect_count(
-  $$select count(*) from public.scheduled_posts where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa03' and title = 'mine' and charged_tokens = 10$$,
-  1, 'title and charge unchanged');
+  $$select count(*) from public.scheduled_posts where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa03' and title = 'mine'$$,
+  1, 'title unchanged');
 
 select pg_temp.expect_state(
   $$insert into public.personas (user_id, name) values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Cara')$$,
@@ -322,8 +235,8 @@ select pg_temp.expect_state(
   $$update public.personas set name = 'Ada 2' where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01'$$,
   '42501', 'persona update denied');
 select pg_temp.expect_state(
-  $$update public.personas set language = 'pt' where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01'$$,
-  '42501', 'persona language update denied');
+  $$update public.personas set photo_path = 'evil.png' where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01'$$,
+  '42501', 'persona photo_path update denied');
 select pg_temp.expect_state(
   $$delete from public.personas where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01'$$,
   '42501', 'persona delete denied');
@@ -344,59 +257,6 @@ select pg_temp.expect_state(
   $$select encrypted_tokens from public.social_accounts where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa04'$$,
   '42501', 'encrypted_tokens still unreadable');
 
--- Persona image library. The session client inserts persona_images and
--- calls set_primary_persona_image. Both lock public.personas with
--- SELECT ... FOR UPDATE, which needs UPDATE privilege plus an UPDATE
--- policy. authenticated has SELECT only, so the invoker forms fail with
--- 42501. The functions run as the owner (security definer) and the RPC
--- still binds the row to auth.uid() before p_user_id.
-select pg_temp.expect_state(
-  $$insert into public.persona_images (id, persona_id, user_id, image_path)
-    values (
-      'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa11',
-      'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01',
-      'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-      'a/one.png'
-    )$$,
-  'ok', 'own persona image insert locks the parent persona');
-select pg_temp.expect_state(
-  $$select public.set_primary_persona_image(
-      'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01',
-      'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa11',
-      null
-    )$$,
-  'ok', 'set primary on own persona');
-select pg_temp.expect_count(
-  $$select count(*) from public.persona_images
-    where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa11' and is_primary$$,
-  1, 'own image became primary');
-select pg_temp.expect_state(
-  $$select public.set_primary_persona_image(
-      'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb01',
-      'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb12',
-      null
-    )$$,
-  'P0002', 'cannot set primary on another user persona');
-select pg_temp.expect_state(
-  $$select public.set_primary_persona_image(
-      'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb01',
-      'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb12',
-      'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
-    )$$,
-  'P0002', 'spoofed p_user_id cannot retarget another persona');
-
--- A's session cannot see B's rows, so confirm the primary flag as the
--- table owner. A successful spoof would have moved it.
-reset role;
-select pg_temp.expect_count(
-  $$select count(*) from public.persona_images
-    where id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb11' and is_primary$$,
-  1, 'user B primary image unchanged');
-select pg_temp.expect_count(
-  $$select count(*) from public.persona_images
-    where id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb12' and is_primary$$,
-  0, 'user B second image stayed non-primary');
-
 -- anon has no table privilege.
 reset role;
 set local role anon;
@@ -407,12 +267,12 @@ select pg_temp.expect_state(
 select pg_temp.expect_state(
   $$select id from public.social_accounts$$, '42501', 'anon account read denied');
 
--- service_role still writes billing (it bypasses RLS and keeps its grants).
+-- service_role still writes the trial end (it bypasses RLS and keeps its grants).
 reset role;
 set local role service_role;
 select pg_temp.expect_state(
-  $$update public.user_profiles set tokens_balance = 6 where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'$$,
-  'ok', 'service_role can write tokens_balance');
+  $$update public.user_profiles set trial_ends_at = '2099-06-01T00:00:00Z' where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'$$,
+  'ok', 'service_role can write trial_ends_at');
 select pg_temp.expect_count(
   $$select count(*) from public.social_accounts where id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb04' and encrypted_tokens = 'cipher-b'$$,
   1, 'service_role can read encrypted_tokens');
@@ -425,9 +285,6 @@ select pg_temp.expect_state(
 select pg_temp.expect_state(
   $$delete from public.scheduled_posts where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa03'$$,
   'ok', 'service_role can delete a slot');
-select pg_temp.expect_state(
-  $$delete from public.video_generations where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa05'$$,
-  'ok', 'service_role can delete a generation');
 select pg_temp.expect_state(
   $$delete from public.schedules where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa02'$$,
   'ok', 'service_role can delete a schedule');

@@ -40,14 +40,13 @@ export interface CounterContext {
 export interface DuePost {
   id: string;
   userId: string;
-  taskId: string;
+  publishOutcomes: unknown[];
   window: MetricsWindow;
   collectedKeys: Set<string>;
 }
 
 export interface MetricsRow extends MetricsCounters {
   postId: string;
-  scriptAngle: string | null;
   userId: string;
   provider: MeasuredProvider;
   accountId: string;
@@ -67,7 +66,6 @@ export interface PromptTag {
 
 export interface PostMetricsDeps {
   listDuePosts: (now: Date, limit: number) => Promise<DuePost[]>;
-  fetchTaskSource: (taskId: string, userId: string) => Promise<{ publishResults: unknown[]; scriptAngle: string | null }>;
   fetchCounters: (userId: string, target: MetricsTarget, context: CounterContext) => Promise<MetricsCounters>;
   resolveTarget: (userId: string, target: MetricsTarget) => Promise<MetricsTarget | null>;
   saveMetrics: (row: MetricsRow) => Promise<PromptTag>;
@@ -179,22 +177,11 @@ export async function collectPostMetrics(deps: PostMetricsDeps): Promise<PostMet
     }
     report.checked += 1;
 
-    let targets: MetricsTarget[];
-    let scriptAngle: string | null;
-    try {
-      const source = await deps.fetchTaskSource(post.taskId, post.userId);
-      scriptAngle = source.scriptAngle;
-      const found = metricsTargets(source.publishResults);
-      targets = found.targets;
-      for (const provider of found.unknownProviders) {
-        logger.warn('[post-metrics] unknown provider in publish results', { postId: post.id, provider });
-        report.errors.push(`${post.id}/${provider}: unknown provider`);
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      logger.warn('[post-metrics] publish results unavailable', { postId: post.id, error: message });
-      report.errors.push(`${post.id}: publish results unavailable`);
-      continue;
+    const found = metricsTargets(post.publishOutcomes);
+    const targets = found.targets;
+    for (const provider of found.unknownProviders) {
+      logger.warn('[post-metrics] unknown provider in publish outcomes', { postId: post.id, provider });
+      report.errors.push(`${post.id}/${provider}: unknown provider`);
     }
 
     let failed = false;
@@ -215,12 +202,10 @@ export async function collectPostMetrics(deps: PostMetricsDeps): Promise<PostMet
         const counters = await deps.fetchCounters(post.userId, resolved, { window: post.window, now: deps.now() });
         if (counters.retention?.status === 'scope_missing') missingAnalyticsScope = true;
         const tag = await deps.saveMetrics({
-          postId: post.id, userId: post.userId, window: post.window, scriptAngle, ...resolved, ...counters,
+          postId: post.id, userId: post.userId, window: post.window, ...resolved, ...counters,
         });
         report.recorded += 1;
         deps.track('post_metrics_collected', {
-          task_id: post.taskId,
-          script_angle: scriptAngle,
           post_id: post.id,
           user_id: post.userId,
           provider: resolved.provider,
@@ -299,7 +284,6 @@ export function createPostMetricsStore(
         if (
           typeof row.post_id !== 'string'
           || typeof row.user_id !== 'string'
-          || typeof row.task_id !== 'string'
           || !isMetricsWindow(window)
         ) {
           continue;
@@ -310,7 +294,7 @@ export function createPostMetricsStore(
         posts.push({
           id: row.post_id,
           userId: row.user_id,
-          taskId: row.task_id,
+          publishOutcomes: Array.isArray(row.publish_outcomes) ? row.publish_outcomes : [],
           window,
           collectedKeys: new Set(keys),
         });
@@ -339,7 +323,6 @@ export function createPostMetricsStore(
           likes: row.likes,
           comments: row.comments,
           saves: row.saves,
-          script_angle: row.scriptAngle,
           ...retentionColumns(row.retention),
         },
         { onConflict: 'post_id,provider,external_id,metrics_window' },

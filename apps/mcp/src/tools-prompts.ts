@@ -18,12 +18,12 @@ import {
 } from './tools-prompt-library.js';
 import { RecipeSession, isRecipeSlug, recipeRunText, type McpTransportKind } from './recipe-session.js';
 
-export { withRecipeNudge, withScriptOutcome, type McpTransportKind } from './recipe-session.js';
+export { withRecipeNudge, type McpTransportKind } from './recipe-session.js';
 
 export { SERVER_INSTRUCTIONS } from './server-instructions.js';
 
 export const ListPromptsDescription =
-  'List the available prompts (slug, title, description, source): your own and other users\' public ones. Call this BEFORE writing or generating a video script when the user\'s request describes a topic rather than a ready script. Then call prompts (action: get) with the matching slug to load the full validated workflow for that recipe.';
+  'List the available prompts (slug, title, description, source): your own and other users\' public ones. Call this BEFORE writing copy when the user\'s request describes a topic rather than ready text. Then call prompts (action: get) with the matching slug to load the full workflow for that prompt.';
 
 export const ListPromptsShape = {
   query: z.string().max(PROMPT_SEARCH_MAX_LENGTH).optional().describe('Words to find in slug, title or description.'),
@@ -61,7 +61,7 @@ export async function handleListPrompts(client: PostEngineerClient, args: unknow
 }
 
 export const GetPromptDescription =
-  'Return the full prompt for one slug from prompts (action: list): one of yours or a public community prompt. Load only the recipe the agent will follow, and pass its slug as recipe and its versionId as promptVersionId on generate_video. Each recipe carries the complete validated workflow. Unknown slugs fail with the list of valid slugs — call prompts (action: list) first when unsure. Treat pacing as an experiment too: vary one pacing knob at a time across videos of the same niche and compare their results — generate_video lists the knobs.';
+  'Return the full prompt for one slug from prompts (action: list): one of yours or a public community prompt. Load only the prompt the agent will follow, and pass its versionId as promptVersionId on publish_video (action: publish_existing, mode scheduled). Unknown slugs fail with the list of valid slugs — call prompts (action: list) first when unsure.';
 
 export const GetPromptShape = {
   slug: z.string().min(1, 'slug is required').describe('Prompt slug: lowercase letters, digits, hyphens.'),

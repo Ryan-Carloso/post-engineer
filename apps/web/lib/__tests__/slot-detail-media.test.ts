@@ -27,17 +27,13 @@ describe('narrowSlotMedia', () => {
 });
 
 describe('narrowSlotFields', () => {
-  it('narrows media alongside the other slot leaves', () => {
+  it('narrows media alongside the publish links', () => {
     const fields = narrowSlotFields({
       media: { kind: 'upload', url: 'https://s.test/v.mp4', contentType: 'video/mp4' },
       publishLinks: 'bad',
-      progressHistory: null,
-      scriptAngle: 7,
     });
     expect(fields.media).toEqual({ kind: 'upload', url: 'https://s.test/v.mp4', contentType: 'video/mp4' });
     expect(fields.publishLinks).toEqual([]);
-    expect(fields.progressHistory).toEqual([]);
-    expect(fields.scriptAngle).toBeNull();
   });
 
   it('defaults media to null when the route omits it', () => {

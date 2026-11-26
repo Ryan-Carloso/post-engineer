@@ -3,18 +3,13 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any
 
 import requests
 from loguru import logger
 
-from app.services.analytics import scrub_secret_values
 from app.services.fill_schedule.constants import (
-    GENERATION_HORIZON_HOURS,
-    SIGNED_URL_EXPIRES_SECONDS,
-    SLOT_GENERATING,
-    SLOT_PENDING,
     SLOT_PUBLISHING,
     SLOT_READY,
 )
@@ -39,13 +34,10 @@ class ScheduleStore:
 
     SLOT_IDENTITY_SELECT = (
         "id,user_id,persona_id,providers,youtube_account_ids,"
-        "instagram_account_ids,linkedin_account_ids,bluesky_account_ids,threads_account_ids,facebook_account_ids,pinterest_account_ids,pinterest_board_id,threespeak_account_ids,"
-        "instagram_account_ids,linkedin_account_ids,bluesky_account_ids,threads_account_ids,facebook_account_ids,pinterest_account_ids,pinterest_board_id,rumble_account_ids,fanvue_account_ids,telegram_account_ids,"
-        "post_voice_id,post_niche,post_language,"
-        "post_video_aspect,post_video_layout,post_hook_panel,post_paragraph_number,post_face_quality,"
-        "post_voice_audio_url,post_cta_type,"
-        "personas(name,niche,cta_type,language,video_aspect,video_layout,hook_panel,ai_label,"
-        "photo_path,avatar_url,voice_id,voice_audio_path,paragraph_number,face_quality)"
+        "instagram_account_ids,linkedin_account_ids,bluesky_account_ids,threads_account_ids,"
+        "facebook_account_ids,pinterest_account_ids,pinterest_board_id,threespeak_account_ids,"
+        "rumble_account_ids,fanvue_account_ids,telegram_account_ids,"
+        "personas(name,ai_label)"
     )
 
     SLOT_SELECT = "*,schedules!left(" + SLOT_IDENTITY_SELECT + ")"
@@ -112,41 +104,6 @@ class ScheduleStore:
             return None
         return response.json()
 
-    def pending_slots(self, now_utc: datetime, *, limit: int) -> list[dict[str, Any]]:
-        """Soonest pending rows in the horizon, at most ``limit`` rows.
-
-        The caller chooses the page. The tick passes the free running slots.
-        This store does not read the task manager.
-        """
-        from app.services.fill_schedule.batch_admission import pending_page_limit
-
-        horizon = (now_utc + timedelta(hours=self.generation_horizon_hours())).isoformat()
-        page = pending_page_limit(limit)
-        rows = self._request(
-            "GET",
-            "scheduled_posts",
-            params={
-                "status": f"eq.{SLOT_PENDING}",
-                "slot_at": f"lte.{horizon}",
-                "select": self.SLOT_SELECT,
-                "order": "slot_at.asc",
-                "limit": str(page),
-            },
-        )
-        return [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
-
-    def generating_slots(self) -> list[dict[str, Any]]:
-        rows = self._request(
-            "GET",
-            "scheduled_posts",
-            params={
-                "status": f"eq.{SLOT_GENERATING}",
-                "task_id": "not.is.null",
-                "select": "*",
-            },
-        )
-        return [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
-
     def ready_due_slots(self, now_utc: datetime) -> list[dict[str, Any]]:
         rows = self._request(
             "GET",
@@ -186,22 +143,6 @@ class ScheduleStore:
                 bound.setdefault(provider, []).append(account_id)
         return bound
 
-    def get_slot(self, slot_id: str) -> dict[str, Any] | None:
-        """Fetch one scheduled_posts row by id (status + task linkage).
-
-        Used by the boot orphan triage to decide whether a requeueable task
-        still has a generating slot to reset.
-        """
-        rows = self._request(
-            "GET",
-            "scheduled_posts",
-            params={"id": f"eq.{slot_id}", "select": "id,status,task_id", "limit": 1},
-        )
-        if not rows:
-            return None
-        row = rows[0]
-        return row if isinstance(row, dict) else None
-
     def update_slot(self, slot_id: str, **fields: Any) -> None:
         self._request(
             "PATCH",
@@ -209,92 +150,6 @@ class ScheduleStore:
             json=fields,
             params={"id": f"eq.{slot_id}"},
         )
-
-    def spend_tokens(self, user_id: str, generation_id: str, amount: int, reason: str) -> bool:
-        result = self._request(
-            "POST",
-            "rpc/spend_tokens",
-            json={
-                "p_user_id": user_id,
-                "p_amount": amount,
-                "p_generation_id": generation_id,
-                "p_reason": reason,
-            },
-            headers=self._headers,
-        )
-        return isinstance(result, dict) and result.get("spent") is True
-
-    def refund_tokens(self, user_id: str, generation_id: str, reason: str) -> bool:
-        result = self._request(
-            "POST",
-            "rpc/refund_generation_tokens",
-            json={
-                "p_user_id": user_id,
-                "p_generation_id": generation_id,
-                "p_reason": reason,
-            },
-            headers=self._headers,
-        )
-        return isinstance(result, dict) and result.get("refunded") is True
-
-    def refund_batch_tokens(
-        self,
-        user_id: str,
-        batch_generation_id: str,
-        refund_key: str,
-        amount: int,
-        reason: str,
-        engine_task_id: str | None = None,
-    ) -> bool:
-        """Refund one prepaid video of a batch (see rpc/refund_batch_tokens).
-
-        engine_task_id links the refund ledger row to the failed engine task
-        (token_transactions.engine_task_id, migration 018); None when the
-        task never reached the engine (dispatch failure still records the
-        allocated id, so callers should always pass one when they have it).
-        A landed refund also marks the slot's video_generations row
-        (generation_id = refund_key) refunded, so the generation status
-        the agent reads says so (mark_generation_refunded).
-        """
-        result = self._request(
-            "POST",
-            "rpc/refund_batch_tokens",
-            json={
-                "p_user_id": user_id,
-                "p_batch_generation_id": batch_generation_id,
-                "p_refund_key": refund_key,
-                "p_amount": amount,
-                "p_reason": reason,
-                "p_engine_task_id": engine_task_id,
-            },
-            headers=self._headers,
-        )
-        refunded = isinstance(result, dict) and result.get("refunded") is True
-        if refunded:
-            self.mark_generation_refunded(refund_key)
-        return refunded
-
-    def mark_generation_refunded(self, generation_id: str) -> None:
-        """Set tokens_refunded on the video_generations row of a refunded slot.
-
-        Best effort: the refund already landed, so a failed write is
-        logged loudly and never raised — raising would make the caller
-        report a refund that did happen as failed. A key with no row
-        (a publish refund) patches nothing.
-        """
-        try:
-            self._request(
-                "PATCH",
-                "video_generations",
-                json={"tokens_refunded": True},
-                params={"generation_id": f"eq.{generation_id}"},
-                headers=self._headers,
-            )
-        except Exception as exc:
-            logger.error(
-                f"fill_schedule: refund landed but video_generations was not marked "
-                f"for {generation_id}: {scrub_secret_values(str(exc))}"
-            )
 
     def claim_ready_slot(self, slot_id: str, now_utc: datetime) -> bool:
         """Atomic ready→publishing claim (C2: avoids duplicate posts).
@@ -439,50 +294,3 @@ class ScheduleStore:
             headers={**self._headers, "Prefer": "return=representation"},
         )
         return bool(rows)
-
-    def publishing_slots(self) -> list[dict[str, Any]]:
-        rows = self._request(
-            "GET",
-            "scheduled_posts",
-            params={
-                "status": f"eq.{SLOT_PUBLISHING}",
-                "select": "id,task_id,updated_at",
-            },
-        )
-        return [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
-
-    def signed_url(self, bucket: str, path: str) -> str:
-        """Signed URL valid long enough to reach the cutoff."""
-        response = self._requests.post(
-            f"{self._base_url}/storage/v1/object/sign/{bucket}/{path}",
-            headers=self._headers,
-            json={"expiresIn": SIGNED_URL_EXPIRES_SECONDS},
-            timeout=REQUEST_TIMEOUT_SECONDS,
-        )
-        response.raise_for_status()
-        signed: str = response.json()["signedURL"]
-        return f"{self._base_url}/storage/v1{signed}"
-
-    @staticmethod
-    def generation_horizon_hours() -> int:
-        """Generation horizon (hours ahead), configurable in config.toml.
-
-        M1 — invalid/non-positive falls back to the default (24h) instead of
-        breaking the whole pipeline every tick; cap of 168h (7 days).
-        """
-        from app.config import config
-
-        raw = config.app.get("fill_schedule_generation_horizon_hours", GENERATION_HORIZON_HOURS)
-        try:
-            horizon = int(raw)
-        except (TypeError, ValueError):
-            logger.warning(
-                f"fill_schedule: invalid horizon {raw!r}, using default {GENERATION_HORIZON_HOURS}h"
-            )
-            return GENERATION_HORIZON_HOURS
-        if horizon <= 0 or horizon > 168:
-            logger.warning(
-                f"fill_schedule: horizon {horizon}h outside 1..168, using default {GENERATION_HORIZON_HOURS}h"
-            )
-            return GENERATION_HORIZON_HOURS
-        return horizon

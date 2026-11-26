@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { resolveScriptLanguage, useUploadStore } from '@/lib/store';
+import { useUploadStore } from '@/lib/store';
 
 describe('useUploadStore', () => {
   beforeEach(() => {
@@ -318,19 +318,3 @@ describe('useUploadStore', () => {
   });
 });
 
-describe('resolveScriptLanguage', () => {
-  it('resolves every locale to English during the English-only launch', () => {
-    expect(resolveScriptLanguage('pt')).toBe('en');
-    expect(resolveScriptLanguage('pt-BR')).toBe('en');
-    expect(resolveScriptLanguage('es')).toBe('en');
-    expect(resolveScriptLanguage('es-ES')).toBe('en');
-    expect(resolveScriptLanguage('fr')).toBe('en');
-    expect(resolveScriptLanguage('fr-FR')).toBe('en');
-    expect(resolveScriptLanguage('en')).toBe('en');
-    expect(resolveScriptLanguage('en-US')).toBe('en');
-    expect(resolveScriptLanguage('de')).toBe('en');
-    expect(resolveScriptLanguage('ja-JP')).toBe('en');
-    expect(resolveScriptLanguage('')).toBe('en');
-    expect(resolveScriptLanguage('PT')).toBe('en');
-  });
-});

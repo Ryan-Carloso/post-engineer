@@ -10,7 +10,6 @@ import {
   withTracking,
 } from '../analytics.js';
 import { PostEngineerClient } from '../client.js';
-import { handleWaitForVideoTasks } from '../video-task-tools.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -121,27 +120,6 @@ describe('PostEngineerClient telemetry headers', () => {
     expect(headers[MCP_CALL_ID_HEADER]).toMatch(UUID);
     expect(headers[MCP_VERSION_HEADER]).toBe(pkg.version);
     expect(headers.Authorization).toBe('Bearer pe_test');
-  });
-
-  it('numbers every status request of a server-side wait under one call id', async () => {
-    let polls = 0;
-    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => {
-      polls += 1;
-      const state = polls >= 3 ? 1 : 4;
-      return new Response(
-        JSON.stringify({ status: 200, message: 'success', body: { task_id: 'task-1', state, progress: state === 1 ? 100 : 50, stage: null } }),
-        { status: 200 },
-      );
-    });
-    vi.stubGlobal('fetch', fetchMock);
-    const client = new PostEngineerClient({ apiKey: 'pe_test', baseUrl: 'https://api.example.test' });
-    await withToolCall('video_tasks', 'status', () =>
-      handleWaitForVideoTasks(client, { taskIds: ['task-1'], waitSeconds: 600 }, { sleep: async () => {}, now: () => 0 }),
-    );
-    const headers = fetchMock.mock.calls.map((call) => call[1].headers as Record<string, string>);
-    expect(headers).toHaveLength(3);
-    expect(new Set(headers.map((entry) => entry[MCP_CALL_ID_HEADER])).size).toBe(1);
-    expect(headers.map((entry) => entry[MCP_CALL_REQUEST_HEADER])).toEqual(['1', '2', '3']);
   });
 
   it('sends the version header by default (stdio identity)', () => {

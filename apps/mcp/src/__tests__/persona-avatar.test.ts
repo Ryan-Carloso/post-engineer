@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PostEngineerClient } from '../client.js';
 import { appendPersonaAvatar } from '../persona-avatar.js';
+import { ImageTooLargeError } from '../errors.js';
+import { MAX_PERSONA_PHOTO_BYTES } from '../limits.js';
 import { CreatePersonaSchema, UpdatePersonaSchema } from '../tools.js';
 
 const JPEG_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
@@ -47,20 +49,6 @@ describe('persona avatar from a local file (avatarPath)', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it('createPersona uploads avatarPath as the photo file and sends no avatarUrl', async () => {
-    const fetchMock = okFetch({ success: true, personaId: 'persona-123', imageIds: [] });
-    await client.createPersona({ accounts: { youtube: ['acct-1'] }, name: 'Ryan', voiceId: 'voice-1', avatarPath: photoPath });
-
-    const form = sentForm(fetchMock);
-    const photo = form.get('photo');
-    expect(photo).toBeInstanceOf(File);
-    if (!(photo instanceof File)) throw new Error('photo missing');
-    expect(photo.name).toBe('beige-sweater.jpg');
-    expect(photo.type).toBe('image/jpeg');
-    expect(Buffer.from(await photo.arrayBuffer())).toEqual(JPEG_BYTES);
-    expect(form.has('avatarUrl')).toBe(false);
-  });
-
   it('updatePersona uploads avatarPath as the photo file', async () => {
     const fetchMock = okFetch();
     await client.updatePersona({ personaId: 'p-1', avatarPath: photoPath });
@@ -79,86 +67,52 @@ describe('persona avatar from a local file (avatarPath)', () => {
     expect(form.has('avatarUrl')).toBe(false);
   });
 
-  it.each(['create', 'update'] as const)(
-    '%s rejects avatarUrl and avatarPath together before any fetch',
-    async (mode) => {
-      const fetchMock = okFetch();
-        const both = { avatarUrl: 'https://example.com/face.png', avatarPath: photoPath };
-      const call =
-        mode === 'create'
-          ? client.createPersona({ accounts: { youtube: ['acct-1'] }, name: 'Ryan', voiceId: 'voice-1', ...both })
-          : client.updatePersona({ personaId: 'p-1', ...both });
-      await expect(call).rejects.toThrow('Give either avatarUrl or avatarPath, not both.');
-      expect(fetchMock).not.toHaveBeenCalled();
-    },
-  );
-
-  it('createPersona fails with the file path when avatarPath does not exist', async () => {
-    const fetchMock = okFetch();
-    const missing = join(dir, 'missing.jpg');
-    await expect(
-      client.createPersona({ accounts: { youtube: ['acct-1'] }, name: 'Ryan', voiceId: 'voice-1', avatarPath: missing }),
-    ).rejects.toThrow(`Failed to read image "${missing}"`);
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
   it.skipIf(process.platform === 'win32')('createPersona rejects an avatarPath that is not a regular file before any fetch', async () => {
     const fetchMock = okFetch();
     const zero = join(dir, 'zero.jpg');
     symlinkSync('/dev/zero', zero);
     await expect(
-      client.createPersona({ accounts: { youtube: ['acct-1'] }, name: 'Ryan', voiceId: 'voice-1', avatarPath: zero }),
+      client.createPersona({ accounts: { youtube: ['acct-1'] }, name: 'Ryan', avatarPath: zero }),
     ).rejects.toThrow(`Image "${zero}" is not a regular file.`);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('createPersona rejects an unsupported avatarPath extension before any fetch', async () => {
-    const fetchMock = okFetch();
-    await expect(
-      client.createPersona({ accounts: { youtube: ['acct-1'] }, name: 'Ryan', voiceId: 'voice-1', avatarPath: join(dir, 'face.gif') }),
-    ).rejects.toThrow('Unsupported image extension ".gif"');
-    expect(fetchMock).not.toHaveBeenCalled();
+  it('appendPersonaAvatar rejects a photo over the size limit and an empty photo', async () => {
+    const large = join(dir, 'large.jpg');
+    await writeFile(large, Buffer.alloc(MAX_PERSONA_PHOTO_BYTES + 1, 0xff));
+    await expect(appendPersonaAvatar(new FormData(), { avatarPath: large })).rejects.toBeInstanceOf(ImageTooLargeError);
+    const empty = join(dir, 'empty.jpg');
+    await writeFile(empty, Buffer.alloc(0));
+    await expect(appendPersonaAvatar(new FormData(), { avatarPath: empty })).rejects.toThrow(`Image "${empty}" is empty.`);
   });
 
-  it('appendPersonaAvatar sets avatarUrl as text when only the URL is given', async () => {
+  it('appendPersonaAvatar leaves the form untouched without an avatarPath', async () => {
     const form = new FormData();
-    await appendPersonaAvatar(form, { avatarUrl: 'https://example.com/face.png' }, true);
-    expect(form.get('avatarUrl')).toBe('https://example.com/face.png');
-    expect(form.has('photo')).toBe(false);
+    await appendPersonaAvatar(form, { avatarPath: null });
+    await appendPersonaAvatar(form, {});
+    expect([...form.keys()]).toEqual([]);
   });
 });
 
-describe('persona avatar schema refine', () => {
-  const base = { name: 'Ryan', voiceId: 'en-US-AriaNeural', accounts: { youtube: ['acct-1'] } };
+describe('persona avatar schema', () => {
+  const base = { name: 'Ryan', accounts: { youtube: ['acct-1'] } };
 
   it('create accepts avatarPath alone', () => {
     expect(CreatePersonaSchema.safeParse({ ...base, avatarPath: '/tmp/face.jpg' }).success).toBe(true);
   });
 
-  it('create rejects a persona with no face', () => {
-    const parsed = CreatePersonaSchema.safeParse(base);
-    expect(parsed.success).toBe(false);
-    expect(JSON.stringify(parsed.error?.issues)).toContain('avatarUrl or avatarPath is required');
+  it('create accepts a persona with no photo: the photo is optional', () => {
+    expect(CreatePersonaSchema.safeParse(base).success).toBe(true);
   });
 
-  it('create rejects both face sources', () => {
-    const parsed = CreatePersonaSchema.safeParse({
-      ...base,
-      avatarUrl: 'https://example.com/face.png',
-      avatarPath: '/tmp/face.jpg',
-    });
-    expect(parsed.success).toBe(false);
-    expect(JSON.stringify(parsed.error?.issues)).toContain('Give either avatarUrl or avatarPath, not both.');
+  it('create drops a remote avatarUrl instead of forwarding it', () => {
+    const parsed = CreatePersonaSchema.safeParse({ ...base, avatarUrl: 'https://example.com/face.png' });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect('avatarUrl' in parsed.data).toBe(false);
   });
 
-  it('update accepts no face source and rejects both', () => {
+  it('update accepts no photo and an avatarPath', () => {
     expect(UpdatePersonaSchema.safeParse({ personaId: 'p-1' }).success).toBe(true);
-    expect(
-      UpdatePersonaSchema.safeParse({
-        personaId: 'p-1',
-        avatarUrl: 'https://example.com/face.png',
-        avatarPath: '/tmp/face.jpg',
-      }).success,
-    ).toBe(false);
+    expect(UpdatePersonaSchema.safeParse({ personaId: 'p-1', avatarPath: '/tmp/face.jpg' }).success).toBe(true);
   });
 });

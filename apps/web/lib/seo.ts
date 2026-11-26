@@ -3,7 +3,7 @@ import { GITHUB_URL, OG_IMAGE_PATH, SITE_URL } from './site-urls';
 
 export { GITHUB_URL, OG_IMAGE_PATH, SITE_URL };
 
-export const LEGAL_UPDATED_AT = '2026-09-10';
+export const LEGAL_UPDATED_AT = '2026-11-26';
 
 export const LANDING_TITLE =
   'Post Engineer — Vídeos com IA publicados automaticamente no YouTube e Instagram';

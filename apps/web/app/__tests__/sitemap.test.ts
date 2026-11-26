@@ -20,8 +20,6 @@ describe('app/sitemap — real sitemap, not the homepage', () => {
       'https://post-engineer.com/en/help',
       'https://post-engineer.com/help/primeiros-passos',
       'https://post-engineer.com/en/help/primeiros-passos',
-      'https://post-engineer.com/help/tokens',
-      'https://post-engineer.com/en/help/tokens',
       'https://post-engineer.com/help/conectar-contas',
       'https://post-engineer.com/en/help/conectar-contas',
     ]);

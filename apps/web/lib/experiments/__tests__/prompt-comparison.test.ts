@@ -8,7 +8,6 @@ import {
   comparisonLabel,
   median,
   signTestPValue,
-  unversionedAccounts,
   type ComparedVideo,
   type PromptVersionFacts,
 } from '../prompt-comparison';
@@ -163,29 +162,6 @@ describe('comparePrompts', () => {
   it('gives no direction when the median lift is exactly 1', () => {
     const [account] = comparePrompts([...videos(A, [10]), ...videos(B, [10])], VERSIONS);
     expect(account?.prompts.every((entry) => entry.lift === 1 && entry.direction === null)).toBe(true);
-  });
-});
-
-describe('unversionedAccounts', () => {
-  it('lists the accounts with no prompt-versioned video, which comparePrompts leaves out', () => {
-    const all = [...videos(null, [100, 200, 300, 400, 500, 600], 'yt-1'), ...videos(A, [10, 20], 'yt-2'), ...videos(null, [5], 'yt-2')];
-
-    expect(comparePrompts(all, VERSIONS).map((account) => account.accountId)).toEqual(['yt-2']);
-    expect(unversionedAccounts(all)).toEqual([{ provider: 'youtube', accountId: 'yt-1', comparedVideos: 6 }]);
-  });
-
-  it('counts only the videos that have a lift, the way the no-prompt group is counted', () => {
-    expect(unversionedAccounts(videos(null, [0, 0, 0, 0, 0, 0]))).toEqual([{ provider: 'youtube', accountId: 'yt-1', comparedVideos: 0 }]);
-    expect(unversionedAccounts(videos(null, [7]))).toEqual([{ provider: 'youtube', accountId: 'yt-1', comparedVideos: 0 }]);
-  });
-
-  it('keeps two accounts of different providers apart', () => {
-    const all = [...videos(null, [1, 2, 3], 'same-id', 'youtube'), ...videos(null, [1, 2], 'same-id', 'instagram')];
-
-    expect(unversionedAccounts(all).map((account) => [account.provider, account.comparedVideos])).toEqual([
-      ['youtube', 3],
-      ['instagram', 2],
-    ]);
   });
 });
 

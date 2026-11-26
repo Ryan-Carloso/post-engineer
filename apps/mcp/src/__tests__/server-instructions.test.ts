@@ -11,7 +11,6 @@ import {
   POINTER_POSTS_SCHEDULES,
   ROUTING_LIFECYCLE,
   SERVER_INSTRUCTIONS,
-  TESTING_CREATE_RULES,
   TESTING_FOLLOW_UPS,
   TESTING_KNOBS,
   TESTING_PROMPT_FLOW,
@@ -21,9 +20,9 @@ import {
 
 type Transport = 'stdio' | 'http';
 
-const POINTER_DESCRIPTION_TOOLS = ['personas', 'persona_media', 'media', 'posts', 'schedules'];
+const POINTER_DESCRIPTION_TOOLS = ['personas', 'persona_media', 'posts', 'schedules'];
 
-const LIFECYCLE_TOOLS = ['generate_video', 'publish_video', 'video_tasks', 'schedules', 'posts', 'insights', 'experiments', 'check_script'];
+const LIFECYCLE_TOOLS = ['publish_video', 'schedules', 'posts', 'insights', 'experiments'];
 
 const ACTION_REFERENCE = /([a-z_]+) \(action: ([a-z_]+)\)/g;
 
@@ -98,44 +97,36 @@ describe.each(['stdio', 'http'] as const)('server instructions on the %s server'
     expect(POINTER_PERSONA_ACCOUNTS).toContain('accounts (action: set_persona_publishing)');
   });
 
-  it('answers persona image vs segment image', () => {
+  it('answers where the persona photo and identity card live', () => {
     expect(SERVER_INSTRUCTIONS).toContain(POINTER_IMAGES);
     expect(POINTER_IMAGES).toContain('persona_media');
-    expect(POINTER_IMAGES).toContain('media (action: upload)');
+    expect(POINTER_IMAGES).toContain('personas (action: create or update)');
   });
 
-  it('answers where generation history vs post status lives', () => {
+  it('answers where post status lives', () => {
     expect(SERVER_INSTRUCTIONS).toContain(POINTER_HISTORY);
-    expect(SERVER_INSTRUCTIONS).toContain('video_tasks (action: list_generations)');
     expect(SERVER_INSTRUCTIONS).toContain('posts (action: list)');
   });
 
-  describe('test flow routes to experiments create (#779)', () => {
-    it('routes a test through versionId → create quote → confirm → results', () => {
+  it('says that generation is gone and that the free trial gates publishing', () => {
+    expect(SERVER_INSTRUCTIONS).toContain('It does not generate video');
+    expect(SERVER_INSTRUCTIONS).toContain('TRIAL_EXPIRED');
+  });
+
+  describe('prompt test flow', () => {
+    it('routes a test to the versions → promptVersionId → results flow', () => {
       const get = TESTING_PROMPT_FLOW.indexOf('prompts (action: get)');
-      const create = TESTING_PROMPT_FLOW.indexOf('experiments (action: create)');
-      const confirm = TESTING_PROMPT_FLOW.indexOf('quoteKey and expiresAt');
+      const pass = TESTING_PROMPT_FLOW.indexOf('promptVersionId');
       const read = TESTING_PROMPT_FLOW.indexOf('experiments (action: results)');
       expect(SERVER_INSTRUCTIONS).toContain(TESTING_PROMPT_FLOW);
       expect(get).toBeGreaterThan(-1);
-      expect(create).toBeGreaterThan(get);
-      expect(confirm).toBeGreaterThan(create);
-      expect(read).toBeGreaterThan(confirm);
-      expect(TESTING_PROMPT_FLOW).toContain('schedules (action: cancel)');
+      expect(pass).toBeGreaterThan(get);
+      expect(read).toBeGreaterThan(pass);
     });
 
-    it('no longer routes the agent to rotate variants by hand', () => {
-      expect(TESTING_PROMPT_FLOW).not.toContain('rotate the variants round-robin');
-      expect(TESTING_PROMPT_FLOW).not.toContain('pass it as promptVersionId on every video');
-      expect(TESTING_FOLLOW_UPS).toContain('run another experiments (action: create)');
-      expect(TESTING_FOLLOW_UPS).not.toContain('keep rotating');
-    });
-
-    it('states the create rules the tool description leaves out', () => {
-      expect(SERVER_INSTRUCTIONS).toContain(TESTING_CREATE_RULES);
-      for (const rule of ['one script', 'never post one script several times', 'public URLs', 'QUOTE_CHANGED', 'QUOTE_EXPIRED', 'never charges twice']) {
-        expect(TESTING_CREATE_RULES).toContain(rule);
-      }
+    it('does not route to an experiments create action', () => {
+      expect(SERVER_INSTRUCTIONS).not.toContain('experiments (action: create)');
+      expect(SERVER_INSTRUCTIONS).not.toContain('create an experiment');
     });
   });
 
@@ -146,45 +137,15 @@ describe.each(['stdio', 'http'] as const)('server instructions on the %s server'
     expect(SERVER_INSTRUCTIONS).toContain(TESTING_SAMPLE_RULES);
   });
 
-  it('does not send the agent to the manual rotation flow that experiments create replaced', () => {
-    expect(TESTING_SAMPLE_RULES).not.toContain('prefer rotating variants');
-    expect(SERVER_INSTRUCTIONS).not.toContain('prefer rotating variants');
-    expect(SERVER_INSTRUCTIONS).not.toContain('videos the user already plans to post');
-  });
-
-  it('says the create total is a ceiling, not an exact count', () => {
-    expect(TESTING_CREATE_RULES).toContain('at most 40 in total');
-    expect(TESTING_CREATE_RULES).not.toContain('(5-15 each, 40 in total)');
-  });
-
-  it('says persona and account take a name or an id', () => {
-    expect(TESTING_CREATE_RULES).toContain('persona (name or id)');
-    expect(TESTING_CREATE_RULES).toContain('accountId (name or id)');
-  });
-
-  it('asks for the token cost to be stated before a test is generated', () => {
-    expect(TESTING_SAMPLE_RULES).toContain('State the token cost before generating videos for a test');
-  });
-
   it('recommends a test only for comparative requests', () => {
     expect(SERVER_INSTRUCTIONS).toContain(TESTING_WHEN);
     expect(TESTING_WHEN).toContain('"which is better"');
-    expect(TESTING_WHEN).toContain('just generate it');
+    expect(TESTING_WHEN).toContain('just publish it');
   });
 
-  it('points knob comparisons at generate_video and post_metrics without copying the knob list', () => {
+  it('points other comparisons at post_metrics', () => {
     expect(SERVER_INSTRUCTIONS).toContain(TESTING_KNOBS);
-    expect(TESTING_KNOBS).toContain('generate_video');
     expect(TESTING_KNOBS).toContain('insights (action: post_metrics)');
-    for (const knob of ['pacing', 'caption position', 'persona', 'hook']) {
-      expect(TESTING_KNOBS).not.toContain(knob);
-    }
-    expect(SERVER_INSTRUCTIONS).not.toContain('videoClipDuration');
-  });
-
-  it('points knob comparisons at the one-knob rule in generate_video', async () => {
-    const { tools } = await connect(transport);
-    expect(tools.get('generate_video')?.description).toContain('change one knob at a time');
   });
 
   it('explains the no prompt baseline group', () => {
@@ -202,9 +163,8 @@ describe.each(['stdio', 'http'] as const)('server instructions on the %s server'
     expect(tools.get('personas')?.description).toContain('accounts (action: set_persona_publishing)');
   });
 
-  it('points media and persona_media at each other for images', async () => {
+  it('points persona_media at the photo pointer', async () => {
     const { tools } = await connect(transport);
-    expect(tools.get('media')?.description).toContain(POINTER_IMAGES);
     expect(tools.get('persona_media')?.description).toContain(POINTER_IMAGES);
   });
 

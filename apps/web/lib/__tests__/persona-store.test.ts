@@ -9,243 +9,51 @@ describe('usePersonaStore', () => {
   });
 
   it('starts with an empty form', () => {
-    const state = usePersonaStore.getState();
-    expect(state.name).toBe('');
-    expect(state.photo).toBeNull();
-    expect(state.avatarUrl).toBeNull();
-    expect(state.voiceId).toBeNull();
-    expect(state.result).toBeNull();
-    expect(state.faceQuality).toBe('ok');
-  });
-
-  it('setters atualizam os campos da persona', () => {
-    const photo = new File(['img'], 'foto.png', { type: 'image/png' });
-    const state = usePersonaStore.getState();
-
-    state.setName('Zé Persona');
-    state.setPhoto(photo);
-    state.setPrompt('avatar estiloso');
-    state.setAvatarUrl('data:image/png;base64,ABC');
-
-    const updated = usePersonaStore.getState();
-    expect(updated.name).toBe('Zé Persona');
-    expect(updated.photo).toBe(photo);
-    expect(updated.prompt).toBe('avatar estiloso');
-    expect(updated.avatarUrl).toBe('data:image/png;base64,ABC');
-  });
-
-  it('setCta replaces the whole CTA intent', () => {
-    const state = usePersonaStore.getState();
-
-    state.setCta({ type: 'link', url: 'https://example.com/x', instruction: '' });
-
-    const updated = usePersonaStore.getState();
-    expect(updated.ctaType).toBe('link');
-    expect(updated.ctaUrl).toBe('https://example.com/x');
-    expect(updated.ctaInstruction).toBe('');
-  });
-
-  it('resetForm restores the default CTA (follow, no facts)', () => {
-    const state = usePersonaStore.getState();
-    state.setCta({ type: 'other', url: '', instruction: 'join the group' });
-
-    state.resetForm();
-
-    const reset = usePersonaStore.getState();
-    expect(reset.ctaType).toBe('follow');
-    expect(reset.ctaUrl).toBe('');
-    expect(reset.ctaInstruction).toBe('');
-  });
-
-  it('buildPersonaFormData always sends the type and only non-blank facts', () => {
-    const state = usePersonaStore.getState();
-    state.setCta({ type: 'link', url: 'https://example.com/x', instruction: '' });
-
-    const formData = state.buildPersonaFormData();
-
-    expect(formData.get('ctaType')).toBe('link');
-    expect(formData.get('ctaUrl')).toBe('https://example.com/x');
-    expect(formData.get('ctaInstruction')).toBeNull();
-  });
-
-  it('buildPersonaEditFormData always sends all three CTA fields, blank clears', () => {
-    const state = usePersonaStore.getState();
-    state.setCta({ type: 'follow', url: '', instruction: '' });
-
-    const formData = state.buildPersonaEditFormData();
-
-    expect(formData.get('ctaType')).toBe('follow');
-    expect(formData.get('ctaUrl')).toBe('');
-    expect(formData.get('ctaInstruction')).toBe('');
-  });
-
-  it('buildPersonaFormData sends name, photo and house voice', () => {
-    const photo = new File(['img'], 'foto.png', { type: 'image/png' });
     const s = usePersonaStore.getState();
-    s.setName('Zé Persona');
-    s.setPhoto(photo);
-    s.setVoiceId('calm');
-
-    const formData = usePersonaStore.getState().buildPersonaFormData();
-    expect(formData.get('name')).toBe('Zé Persona');
-    expect(formData.get('photo')).toBe(photo);
-    expect(formData.get('voiceId')).toBe('calm');
-    expect(formData.has('voiceAudio')).toBe(false);
+    expect(s.name).toBe('');
+    expect(s.photo).toBeNull();
+    expect(s.storedPhotoUrl).toBeNull();
+    expect(s.result).toBeNull();
+    expect(s.isSubmitting).toBe(false);
   });
 
-  it('buildPersonaFormData no longer includes the schedule field (persona/schedule separation)', () => {
-    const formData = usePersonaStore.getState().buildPersonaFormData();
-    expect(formData.has('schedule')).toBe(false);
-  });
-
-  it('buildPersonaFormData includes avatarUrl when no photo was uploaded', () => {
-    const s = usePersonaStore.getState();
-    s.setName('IA Persona');
-    s.setAvatarUrl('data:image/png;base64,IA');
-
-    const formData = usePersonaStore.getState().buildPersonaFormData();
-    expect(formData.get('avatarUrl')).toBe('data:image/png;base64,IA');
-    expect(formData.has('photo')).toBe(false);
-  });
-
-  it('holds no voiceover mode and no face mix', () => {
+  it('holds no generation fields', () => {
     const state = usePersonaStore.getState() as unknown as Record<string, unknown>;
-    for (const key of [
-      'personaMode',
-      'setPersonaMode',
-      'faceMixPercent',
-      'setFaceMixPercent',
-    ]) {
+    for (const key of ['voiceId', 'avatarUrl', 'faceQuality', 'niche', 'cta', 'videoLayout', 'hookPanel', 'extraPhotos']) {
       expect(state).not.toHaveProperty(key);
     }
   });
 
-  it('buildPersonaFormData sends no persona mode and no face mix', () => {
-    const s = usePersonaStore.getState();
-    s.setName('Zé Persona');
-    s.setAvatarUrl('data:image/png;base64,IA');
-    s.setVoiceId('calm');
-
+  it('buildPersonaFormData sends the trimmed name, the AI label and the binding, and no photo when none is staged', () => {
+    usePersonaStore.getState().setName('  Ana  ');
     const formData = usePersonaStore.getState().buildPersonaFormData();
-    expect(formData.has('personaMode')).toBe(false);
-    expect(formData.has('faceMixPercent')).toBe(false);
-    expect(formData.get('avatarUrl')).toBe('data:image/png;base64,IA');
-    expect(formData.get('voiceId')).toBe('calm');
+    expect(formData.get('name')).toBe('Ana');
+    expect(formData.has('photo')).toBe(false);
+    expect([...formData.keys()].sort()).toEqual(['aiLabel', 'name', 'publishingAccounts']);
   });
 
-  it('buildPersonaFormData sends the photo when one is staged', () => {
-    const photo = new File(['img'], 'foto.png', { type: 'image/png' });
-    const s = usePersonaStore.getState();
-    s.setName('Zé Persona');
-    s.setPhoto(photo);
-    s.setAvatarUrl('data:image/png;base64,IA');
-    s.setVoiceId('calm');
-
-    const formData = usePersonaStore.getState().buildPersonaFormData();
-    expect(formData.get('photo')).toBe(photo);
-    expect(formData.has('avatarUrl')).toBe(false);
+  it('buildPersonaFormData and buildPersonaEditFormData send the staged photo', () => {
+    const photo = new File([new Uint8Array([1])], 'ana.png', { type: 'image/png' });
+    usePersonaStore.getState().setName('Ana');
+    usePersonaStore.getState().setPhoto(photo);
+    expect(usePersonaStore.getState().buildPersonaFormData().get('photo')).toBeInstanceOf(File);
+    const edit = usePersonaStore.getState().buildPersonaEditFormData();
+    expect(edit.get('photo')).toBeInstanceOf(File);
+    expect(edit.has('publishingAccounts')).toBe(false);
   });
 
   it('resetForm returns to the initial state', () => {
     const s = usePersonaStore.getState();
-    s.setName('Alguém');
-    s.setResult({ success: true, personaId: 'p-9' });
-
+    s.setName('Ana');
+    s.setPhoto(new File([new Uint8Array([1])], 'ana.png', { type: 'image/png' }));
+    s.setStoredPhotoUrl('https://example.com/a.png');
+    s.setSubmitting(true);
     usePersonaStore.getState().resetForm();
-
-    const reset = usePersonaStore.getState();
-    expect(reset.name).toBe('');
-    expect(reset.result).toBeNull();
-  });
-
-  it('starts with ok quality', () => {
-    expect(usePersonaStore.getState().faceQuality).toBe('ok');
-  });
-
-  it('setFaceQuality altera a qualidade da face', () => {
-    const s = usePersonaStore.getState();
-    s.setFaceQuality('very_good');
-    expect(usePersonaStore.getState().faceQuality).toBe('very_good');
-  });
-
-  it('buildPersonaFormData sends faceQuality', () => {
-    const s = usePersonaStore.getState();
-    s.setName('Zé Persona');
-    s.setFaceQuality('very_good');
-    s.setAvatarUrl('data:image/png;base64,IA');
-    s.setVoiceId('calm');
-
-    const formData = usePersonaStore.getState().buildPersonaFormData();
-    expect(formData.get('faceQuality')).toBe('very_good');
-  });
-
-  it('buildPersonaEditFormData sends the stored faceQuality on edit', () => {
-    const s = usePersonaStore.getState();
-    s.setName('Zé Persona');
-    s.setFaceQuality('ok');
-    s.setAvatarUrl('data:image/png;base64,IA');
-    s.setVoiceId('calm');
-
-    const formData = usePersonaStore.getState().buildPersonaEditFormData();
-    expect(formData.get('faceQuality')).toBe('ok');
-    expect(formData.get('name')).toBe('Zé Persona');
-  });
-
-  it('resetForm volta à qualidade ok', () => {
-    const s = usePersonaStore.getState();
-    s.setFaceQuality('very_good');
-    usePersonaStore.getState().resetForm();
-
-    expect(usePersonaStore.getState().faceQuality).toBe('ok');
-  });
-
-  it('buildPersonaFormData sends the niche when set and omits it when empty', () => {
-    const s = usePersonaStore.getState();
-    s.setName('Zé Persona');
-    s.setNiche('  finanças pessoais  ');
-
-    let formData = usePersonaStore.getState().buildPersonaFormData();
-    expect(formData.get('niche')).toBe('finanças pessoais');
-
-    usePersonaStore.getState().setNiche('   ');
-    formData = usePersonaStore.getState().buildPersonaFormData();
-    expect(formData.has('niche')).toBe(false);
-  });
-
-  it('buildPersonaFormData sends the niche as the video subject', () => {
-    const s = usePersonaStore.getState();
-    s.setNiche('  finanças  ');
-    s.setScriptPrompt('Estilo curto');
-
-    const formData = usePersonaStore.getState().buildPersonaFormData();
-    expect(formData.get('video_subject')).toBe('finanças');
-  });
-
-  it('setVideoLayout updates the layout and buildPersonaFormData sends it', () => {
-    const s = usePersonaStore.getState();
-    s.setVideoLayout('react');
-
-    expect(usePersonaStore.getState().videoLayout).toBe('react');
-    const formData = usePersonaStore.getState().buildPersonaFormData();
-    expect(formData.get('videoLayout')).toBe('react');
-  });
-
-  it('sends hookPanel on create and edit, true by default and false once turned off', () => {
-    expect(usePersonaStore.getState().buildPersonaFormData().get('hookPanel')).toBe('true');
-    usePersonaStore.getState().setHookPanel(false);
-    expect(usePersonaStore.getState().hookPanel).toBe(false);
-    expect(usePersonaStore.getState().buildPersonaFormData().get('hookPanel')).toBe('false');
-    expect(usePersonaStore.getState().buildPersonaEditFormData().get('hookPanel')).toBe('false');
-    usePersonaStore.getState().resetForm();
-    expect(usePersonaStore.getState().hookPanel).toBe(true);
-  });
-
-  it('buildPersonaFormData omits videoLayout when it is empty', () => {
-    const s = usePersonaStore.getState();
-    s.setVideoLayout('');
-
-    const formData = usePersonaStore.getState().buildPersonaFormData();
-    expect(formData.has('videoLayout')).toBe(false);
+    const after = usePersonaStore.getState();
+    expect(after.name).toBe('');
+    expect(after.photo).toBeNull();
+    expect(after.storedPhotoUrl).toBeNull();
+    expect(after.isSubmitting).toBe(false);
   });
 
   it('holds no scheduling state', () => {
@@ -297,56 +105,5 @@ describe('usePersonaStore', () => {
   it('buildPersonaFormData sends an empty binding when none is picked', () => {
     const formData = usePersonaStore.getState().buildPersonaFormData();
     expect(JSON.parse(String(formData.get('publishingAccounts')))).toEqual(emptyPersonaDefaultAccounts());
-  });
-
-  describe('photo staging', () => {
-    const png = (name: string) => new File(['x'], name, { type: 'image/png' });
-
-    it('addPhotos appends and promotes the first to primary', () => {
-      usePersonaStore.getState().addPhotos([png('a.png'), png('b.png')]);
-      usePersonaStore.getState().addPhotos([png('c.png')]);
-      const state = usePersonaStore.getState();
-      expect(state.photo?.name).toBe('a.png');
-      expect(state.extraPhotos.map((file) => file.name)).toEqual(['b.png', 'c.png']);
-    });
-
-    it('addPhotos caps the total at 10', () => {
-      usePersonaStore.getState().addPhotos(Array.from({ length: 12 }, (_, i) => png(`${i}.png`)));
-      const state = usePersonaStore.getState();
-      expect(1 + state.extraPhotos.length).toBe(10);
-    });
-
-    it('removePhoto of the primary promotes the next; of the last empties the form', () => {
-      usePersonaStore.getState().addPhotos([png('a.png'), png('b.png')]);
-      usePersonaStore.getState().removePhoto(0);
-      expect(usePersonaStore.getState().photo?.name).toBe('b.png');
-      usePersonaStore.getState().removePhoto(0);
-      expect(usePersonaStore.getState().photo).toBeNull();
-      expect(usePersonaStore.getState().extraPhotos).toEqual([]);
-    });
-
-    it('addPhotos at exactly the cap keeps all 10, removePhoto of a middle index keeps the primary', () => {
-      usePersonaStore.getState().addPhotos(Array.from({ length: 10 }, (_, i) => png(`${i}.png`)));
-      expect(1 + usePersonaStore.getState().extraPhotos.length).toBe(10);
-      usePersonaStore.getState().removePhoto(3);
-      const state = usePersonaStore.getState();
-      expect(state.photo?.name).toBe('0.png');
-      expect(state.extraPhotos.map((file) => file.name)).not.toContain('3.png');
-      expect(1 + state.extraPhotos.length).toBe(9);
-    });
-
-    it('buildPersonaFormData sends no images without a photo', () => {
-      usePersonaStore.getState().setAvatarUrl('/caracter-samples/x.png');
-      expect(usePersonaStore.getState().buildPersonaFormData().getAll('images')).toEqual([]);
-    });
-
-    it('buildPersonaFormData sends photo plus images and resetForm clears them', () => {
-      usePersonaStore.getState().addPhotos([png('a.png'), png('b.png'), png('c.png')]);
-      const formData = usePersonaStore.getState().buildPersonaFormData();
-      expect((formData.get('photo') as File).name).toBe('a.png');
-      expect(formData.getAll('images').map((file) => (file as File).name)).toEqual(['b.png', 'c.png']);
-      usePersonaStore.getState().resetForm();
-      expect(usePersonaStore.getState().extraPhotos).toEqual([]);
-    });
   });
 });

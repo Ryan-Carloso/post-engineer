@@ -1,20 +1,12 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest';
-import { THREADS_POST_MAX_CHARS, checkPublish } from '@/lib/draft-scoring';
 import { accountOption, scheduleAccountIds } from '@/lib/account-options';
 import { resolvePublishLinks } from '@/lib/publish-links';
 import { threadsCounters } from '@/lib/metrics/provider-counters';
-import { THREADS_TEXT_MAX_CHARS } from '@/lib/threads';
 
 describe('Threads across the shared surfaces', () => {
   it('maps replies to comments and leaves saves unknown', () => {
     expect(threadsCounters({ views: 10, likes: 3, replies: 2 })).toEqual({ views: 10, likes: 3, comments: 2, saves: null });
-  });
-
-  it('fails the publish check only past the character ceiling', () => {
-    expect(THREADS_POST_MAX_CHARS).toBe(THREADS_TEXT_MAX_CHARS);
-    expect(checkPublish('a'.repeat(THREADS_POST_MAX_CHARS), 'threads').failures).toEqual([]);
-    expect(checkPublish('a'.repeat(THREADS_POST_MAX_CHARS + 1), 'threads').failures[0]).toContain('Threads 500-character');
   });
 
   it('links the permalink and drops a failed publish', () => {

@@ -3,7 +3,6 @@ import 'server-only';
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { createGoogleOAuth2Client, uploadYouTubeVideo, createVideoMetadata } from '@/lib/youtube';
-import { isImageForShort, renderImageShort } from '@/lib/engine/image-short';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
 import { logger } from '@/lib/logger';
 import { ValidationError, UploadError, AuthError, InstagramApiError } from '@/lib/errors';
@@ -114,8 +113,8 @@ export async function handleYoutubeUpload(
   if (video.size > 2 * 1024 * 1024 * 1024) {
     throw new ValidationError('File too large. Maximum is 2GB', 'video');
   }
-  if (!video.type.startsWith('video/') && !isImageForShort(video)) {
-    throw new ValidationError('Invalid file. Must be a video, or a JPEG/PNG image to publish as a Short', 'video');
+  if (!video.type.startsWith('video/')) {
+    throw new ValidationError('Invalid file. Must be a video', 'video');
   }
 
   const parsedTags = tags.split(',').map((tag) => tag.trim()).filter((tag) => tag.length > 0);
@@ -140,8 +139,7 @@ export async function handleYoutubeUpload(
     aiLabel: aiLabelRaw === 'true',
   };
 
-  const media = isImageForShort(video) ? await renderImageShort(video, ownerUserId) : video;
-  const arrayBuffer = await media.arrayBuffer();
+  const arrayBuffer = await video.arrayBuffer();
   const videoBuffer = Buffer.from(arrayBuffer);
   const videoMetadata = createVideoMetadata(metadata);
 

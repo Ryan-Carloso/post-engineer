@@ -15,13 +15,6 @@ export interface ScheduleDetailRow {
     fanvue_account_ids: string[] | null;
     telegram_account_ids: string[] | null;
     timezone: string;
-    post_language: string | null;
-    post_voice_id: string | null;
-    post_video_aspect: string | null;
-    post_video_layout: string | null;
-    post_niche: string | null;
-    post_paragraph_number: number | null;
-    post_face_quality: string | null;
     publish_mode: string | null;
 }
 

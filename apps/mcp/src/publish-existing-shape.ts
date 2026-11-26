@@ -1,18 +1,13 @@
 import { z } from 'zod';
-import { MAX_SEGMENT_MEDIA_MB } from './limits.js';
+import { MAX_PUBLISH_IMAGE_MB } from './limits.js';
 import { PublishVideoDirectShape } from './publish-direct-shape.js';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const PublishExistingShape = {
   mediaKind: z
-    .enum(['task', 'upload', 'image'])
-    .describe('task = a finished generated video (taskId); upload = a completed signed upload, video or image (uploadId); image = a local JPEG/PNG (imagePath).'),
-  taskId: z
-    .string()
-    .min(1, 'taskId is required')
-    .optional()
-    .describe('mediaKind task: the task id of the finished video.'),
+    .enum(['upload', 'image'])
+    .describe('upload = a completed signed upload, video or image (uploadId); image = a local JPEG/PNG (imagePath).'),
   uploadId: z
     .string()
     .regex(UUID_PATTERN, 'uploadId must be a UUID')
@@ -22,7 +17,7 @@ export const PublishExistingShape = {
     .string()
     .min(1, 'imagePath is required')
     .optional()
-    .describe(`mediaKind image: local path of the JPEG or PNG (max ${MAX_SEGMENT_MEDIA_MB} MB).`),
+    .describe(`mediaKind image: local path of the JPEG or PNG (max ${MAX_PUBLISH_IMAGE_MB} MB).`),
   accounts: z
     .array(z.string().min(1))
     .min(1, 'Provide at least one account')
@@ -46,7 +41,7 @@ export const PublishExistingShape = {
   personaId: z
     .string()
     .optional()
-    .describe('The persona id. Omit for a voiceover post.'),
+    .describe('The persona id. Omit to publish without a persona.'),
   mode: z
     .enum(['asap', 'scheduled'])
     .describe("Required. 'asap' publishes now; 'scheduled' publishes once at publishAt."),
@@ -61,6 +56,11 @@ export const PublishExistingShape = {
   tags: PublishVideoDirectShape.tags.describe('YouTube only: required with mode asap (scheduled derives them from the title).'),
   privacyStatus: PublishVideoDirectShape.privacyStatus.describe('YouTube only: required with mode asap.'),
   boardId: PublishVideoDirectShape.boardId,
+  promptVersionId: z
+    .string()
+    .regex(UUID_PATTERN, 'promptVersionId must be a UUID')
+    .optional()
+    .describe('mode scheduled only: the versionId of the prompt the post was written from (prompts (action: get)), so experiments (action: results) can compare prompts.'),
   idempotencyKey: z
     .string()
     .min(1)
@@ -72,7 +72,7 @@ const { imagePath: _imagePath, mediaKind: _mediaKind, ...remoteFields } = Publis
 
 export const PublishExistingRemoteShape = {
   mediaKind: PublishExistingShape.mediaKind.describe(
-    'task = a finished generated video (taskId); upload = a completed signed upload, video or image (uploadId); image is not offered on a remote server — send the image through create_upload → PUT → complete_upload and publish it as mediaKind upload.',
+    'upload = a completed signed upload, video or image (uploadId); image is not offered on a remote server — send the image through create_upload → PUT → complete_upload and publish it as mediaKind upload.',
   ),
   ...remoteFields,
 };
@@ -80,9 +80,6 @@ export const PublishExistingRemoteShape = {
 export const PublishExistingLocalShape = PublishExistingShape;
 
 export const PublishExistingSchema = z.object(PublishExistingShape).strict().superRefine((value, ctx) => {
-  if (value.mediaKind === 'task' && value.taskId === undefined) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['taskId'], message: 'taskId is required when mediaKind is task.' });
-  }
   if (value.mediaKind === 'upload' && value.uploadId === undefined) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['uploadId'], message: 'uploadId is required when mediaKind is upload.' });
   }

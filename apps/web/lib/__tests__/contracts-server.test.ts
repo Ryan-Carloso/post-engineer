@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readBody } from '@/lib/contracts-server';
 import { createUserPrompt } from '@/lib/contracts/prompts';
-import { generateAndSchedule } from '@/lib/contracts/videos';
+import { renderPersonaIdentityPrompt } from '@/lib/contracts/persona-identity-card';
 
 const VALID = { slug: 'hook-test', title: 'Hook test', prompt: 'Write a hook.', visibility: 'private' };
 
@@ -49,12 +49,12 @@ describe('readBody', () => {
   });
 
   it('joins a nested path with dots', async () => {
-    const body = { title: 'T', description: 'D', publishing: { providers: ['youtube', 1] } };
-    const result = await readBody(generateAndSchedule, postRequest(body), { logMessage: 'Invalid video request.' });
+    const body = { personaId: 'p1', scene: { lighting: 1 } };
+    const result = await readBody(renderPersonaIdentityPrompt, postRequest(body), { logMessage: 'Invalid render request.' });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       const json = await result.response.json() as { field: string; error: string };
-      expect(json.field).toBe('publishing.providers.1');
+      expect(json.field).toBe('scene.lighting');
     }
   });
 

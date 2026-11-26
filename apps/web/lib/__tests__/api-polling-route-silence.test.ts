@@ -7,8 +7,6 @@ const here = dirname(fileURLToPath(import.meta.url));
 const apiDir = join(here, '..', '..', 'app', 'api');
 
 const POLLING_ROUTE_LABELS = new Set([
-  'GET /api/persona/video-generations',
-  'GET /api/persona/video-status/[taskId]',
   'GET /api/posts/[id]',
   'GET /api/schedule/slots/[slotId]',
   'GET /api/schedule/status',

@@ -3,12 +3,9 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { isScopedApiKey } from '@/lib/api-keys';
 import { logger } from '@/lib/logger';
-import { describeImageSource, toSameOriginAssetPath } from '@/lib/image-source';
+import { toSameOriginAssetPath } from '@/lib/image-source';
+import { PERSONA_PHOTO_BUCKET } from '@/lib/persona-photo';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
-import {
-  pickLibraryDisplayImage,
-  type LibraryDisplayImage,
-} from '@/lib/persona-library-display';
 import {
   emptyPersonaDefaultAccounts,
   getPersonaDefaultAccountsForPersonas,
@@ -32,9 +29,7 @@ async function getHandler(request: Request): Promise<NextResponse> {
   const supabase = createSupabaseServiceClient();
   let query = supabase
     .from('personas')
-    .select(
-      'id, name, photo_path, avatar_url, voice_id, voice_audio_path, created_at, language, video_aspect, video_layout, hook_panel, ai_label, script_prompt, cta_type, cta_url, cta_instruction, paragraph_number, niche, face_quality',
-    )
+    .select('id, name, photo_path, avatar_url, created_at, ai_label')
     .eq('user_id', auth.userId);
 
   const scopedIds = auth.personaIds;
@@ -53,23 +48,7 @@ async function getHandler(request: Request): Promise<NextResponse> {
   }
 
   const records = data === null || data === undefined ? [] : data;
-  const personaIds = records.map((record) => record.id as string);
-  let libraryRows: LibraryDisplayImage[] = [];
-  if (personaIds.length > 0) {
-    const { data: images, error: imagesError } = await supabase
-      .from('persona_images')
-      .select('id, persona_id, image_path, is_primary, created_at')
-      .in('persona_id', personaIds)
-      .eq('user_id', auth.userId);
-    if (imagesError) {
-      logger.error('[api/persona/list] persona_images query failed', imagesError.message);
-      return NextResponse.json(
-        { success: false, error: 'Failed to list personas.' },
-        { status: 500 },
-      );
-    }
-    libraryRows = (images ?? []) as LibraryDisplayImage[];
-  }
+  const personaIds = records.map((record) => record.id);
 
   let bindingsByPersona: Map<string, PersonaDefaultAccounts> = new Map();
   if (personaIds.length > 0) {
@@ -88,113 +67,33 @@ async function getHandler(request: Request): Promise<NextResponse> {
   }
 
   const personas = await Promise.all(
-    records.map(async (record) => {
-      const chosen = pickLibraryDisplayImage(libraryRows, record.id as string);
-      const libraryUrl = chosen
-        ? await signedLibraryUrl(supabase, chosen.image_path, record.id as string)
-        : undefined;
-      const avatarUrl = toSameOriginAssetPath(record.avatar_url as string | null) ?? undefined;
-      const photoUrl = await signedUrl(supabase, record.photo_path as string | null, 'photo');
-      const voiceId = (record.voice_id as string | null) ?? undefined;
-      const voiceAudioUrl = await signedUrl(supabase, record.voice_audio_path as string | null, 'voice');
-      const language = (record.language as string | null) ?? undefined;
-      const videoAspect = (record.video_aspect as string | null) ?? undefined;
-      const videoLayout = (record.video_layout as string | null) ?? undefined;
-      const scriptPrompt = (record.script_prompt as string | null) ?? undefined;
-      const ctaType = (record.cta_type as string | null) ?? undefined;
-      const ctaUrl = (record.cta_url as string | null) ?? undefined;
-      const ctaInstruction = (record.cta_instruction as string | null) ?? undefined;
-      const paragraphNumber = (record.paragraph_number as number | null) ?? undefined;
-      const niche = (record.niche as string | null) ?? undefined;
-      const faceQuality = (record.face_quality as string | null) ?? undefined;
-      const boundAccounts =
-        bindingsByPersona.get(record.id as string) ?? emptyPersonaDefaultAccounts();
-      return {
-        id: record.id as string,
-        name: record.name as string,
-        createdAt: record.created_at as string,
-        avatarUrl,
-        photoUrl,
-        libraryUrl,
-        voiceId,
-        voiceAudioUrl,
-        language,
-        videoAspect,
-        videoLayout,
-        hookPanel: record.hook_panel !== false,
-        aiLabel: record.ai_label === true,
-        scriptPrompt,
-        ctaType,
-        ctaUrl,
-        ctaInstruction,
-        paragraphNumber,
-        niche,
-        faceQuality,
-        boundAccounts,
-      };
-    }),
+    records.map(async (record) => ({
+      id: record.id,
+      name: record.name,
+      createdAt: record.created_at,
+      avatarUrl: toSameOriginAssetPath(record.avatar_url) ?? undefined,
+      photoUrl: await signedPhotoUrl(supabase, record.photo_path),
+      aiLabel: record.ai_label === true,
+      boundAccounts: bindingsByPersona.get(record.id) ?? emptyPersonaDefaultAccounts(),
+    })),
   );
-
-  for (const persona of personas) {
-    const avatarSource = describeImageSource(persona.avatarUrl);
-    const hasPhoto = persona.photoUrl !== undefined;
-    const hasLibrary = persona.libraryUrl !== undefined;
-    if (avatarSource === null && !hasPhoto && !hasLibrary) {
-      logger.warn('[api/persona/list] persona has no avatar source', {
-        personaId: persona.id,
-        name: persona.name,
-      });
-      continue;
-    }
-    logger.debug('[api/persona/list] persona avatar source', {
-      personaId: persona.id,
-      avatarSource,
-      hasPhoto,
-      hasLibrary,
-    });
-  }
-  const withFace = personas.filter(
-    (persona) =>
-      persona.avatarUrl !== undefined ||
-      persona.photoUrl !== undefined ||
-      persona.libraryUrl !== undefined,
-  ).length;
-  logger.info('[api/persona/list] listed personas', {
-    total: personas.length,
-    withFace,
-    withoutFace: personas.length - withFace,
-  });
 
   return NextResponse.json({ authenticated: true, personas });
 }
 
-async function signedUrl(
+async function signedPhotoUrl(
   supabase: ReturnType<typeof createSupabaseServiceClient>,
   path: string | null,
-  kind: 'photo' | 'voice' | 'library',
-  metadata?: Record<string, unknown>,
 ): Promise<string | undefined> {
-  if (!path) return undefined;
+  if (path === null || path === '') return undefined;
   const { data, error } = await supabase.storage
-    .from('personas')
+    .from(PERSONA_PHOTO_BUCKET)
     .createSignedUrl(path, SIGNED_URL_EXPIRES_SECONDS);
   if (error || data === null || data === undefined || !data.signedUrl) {
-    logger.error(
-      `[api/persona/list] ${kind} sign failed`,
-      error?.message ?? 'missing signedUrl',
-      metadata,
-    );
+    logger.error('[api/persona/list] photo sign failed', error?.message ?? 'missing signedUrl');
     return undefined;
   }
   return data.signedUrl;
-}
-
-async function signedLibraryUrl(
-  supabase: ReturnType<typeof createSupabaseServiceClient>,
-  path: string,
-  personaId: string,
-): Promise<string | undefined> {
-  return signedUrl(supabase, path, 'library', { personaId });
 }
 
 export const GET = withApiErrorReporting('GET /api/persona/list', getHandler, { getUserId: resolveReportingUserId });

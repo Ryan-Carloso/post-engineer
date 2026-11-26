@@ -1,7 +1,6 @@
 import Link from 'next/link';
 import { PROVIDER_LABELS } from '@/lib/account-options';
 import { localize, type DocBlock, type DocLocale, type DocPage, type LocalizedText } from '@/lib/docs/types';
-import { VIDEO_TYPES, computeVideoTokens, type FaceQuality } from '@/lib/tokens';
 import { TOOL_DESCRIPTIONS } from '@/scripts/llms-full-content.mjs';
 
 function DocLink({ href, text, locale }: { href: LocalizedText; text: string; locale: DocLocale }) {
@@ -91,41 +90,7 @@ function renderBlock(block: DocBlock, locale: DocLocale, key: string) {
       </ul>
     );
   }
-  const rows: Array<{ type: string; quality: string; tokens: number }> = [];
-  for (const videoType of VIDEO_TYPES) {
-    if (videoType === 'voiceover') {
-      rows.push({ type: videoType, quality: 'any', tokens: computeVideoTokens(videoType, 'ok') });
-      continue;
-    }
-    const qualities: FaceQuality[] = ['ok', 'very_good'];
-    for (const quality of qualities) {
-      rows.push({ type: videoType, quality, tokens: computeVideoTokens(videoType, quality) });
-    }
-  }
-  return (
-    <table key={key} className="mt-4 w-full text-left text-sm text-ink-soft">
-      <thead>
-        <tr className="border-b border-hairline text-ink">
-          <th className="py-2 pr-4">Video type</th>
-          <th className="py-2 pr-4">Face quality</th>
-          <th className="py-2">Tokens</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row) => (
-          <tr key={`${row.type}-${row.quality}`} className="border-b border-hairline">
-            <td className="py-2 pr-4">
-              <code>{row.type}</code>
-            </td>
-            <td className="py-2 pr-4">
-              <code>{row.quality}</code>
-            </td>
-            <td className="py-2">{row.tokens}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
+  return null;
 }
 
 export default function DocArticle({ page, locale }: { page: DocPage; locale: DocLocale }) {

@@ -8,7 +8,7 @@ export const useCasesGuide: DocPage = {
     en: 'What agents build with Post Engineer: daily videos, series and scheduled campaigns.',
   },
   updatedAt: '2026-11-26',
-  contentHash: '3de6f516adb70ecb0383b9d2fde4f27bc13b87572a4bcb8257fa01d86e01cb61',
+  contentHash: 'd782d60c5e7873510687113d8b4814ca85992476a6e11f772c1a4380d5a2c799',
   blocks: [
     {
       kind: 'paragraph',
@@ -20,7 +20,7 @@ export const useCasesGuide: DocPage = {
     {
       kind: 'paragraph',
       text: {
-        en: 'A persona publishes one short video a day in its niche: the agent writes the script, generates the video and schedules it for the next morning.',
+        en: 'A persona publishes one short video a day in its niche: the agent makes the video in its own tool, uploads it and schedules it for the next morning.',
       },
     },
     { kind: 'heading', level: 2, text: { en: 'Series' } },
@@ -34,7 +34,7 @@ export const useCasesGuide: DocPage = {
     {
       kind: 'paragraph',
       text: {
-        en: 'A campaign is a batch of videos spread over days: the agent generates them all at once and each one goes out at its slot.',
+        en: 'A campaign is a batch of videos spread over days: the agent uploads them all at once and each one goes out at its slot.',
       },
     },
   ],

@@ -16,8 +16,7 @@ export type DocBlock =
   | { kind: 'code'; language: string; code: string }
   | { kind: 'link'; href: LocalizedText; text: LocalizedText }
   | { kind: 'toolList' }
-  | { kind: 'providerList'; providers: readonly SocialProvider[] }
-  | { kind: 'tokenCostTable' };
+  | { kind: 'providerList'; providers: readonly SocialProvider[] };
 
 export interface DocPage {
   section: 'docs' | 'help';

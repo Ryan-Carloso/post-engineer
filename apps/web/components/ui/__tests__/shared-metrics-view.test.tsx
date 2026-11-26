@@ -21,7 +21,7 @@ function viewWith(overrides: Partial<ShareView> = {}): ShareView {
     metricsTruncated: false,
     posts: [
       { title: 'Morning routine', slotAt: '2026-11-18T09:00:00.000Z', status: 'published', providers: ['youtube', 'instagram'] },
-      { title: null, slotAt: '2026-11-19T09:00:00.000Z', status: 'pending', providers: ['bluesky'] },
+      { title: null, slotAt: '2026-11-19T09:00:00.000Z', status: 'ready', providers: ['bluesky'] },
       { title: 'Broken one', slotAt: '2026-11-20T09:00:00.000Z', status: 'failed', providers: [] },
     ],
     postsTruncated: false,

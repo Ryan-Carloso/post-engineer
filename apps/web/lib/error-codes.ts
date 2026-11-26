@@ -1,5 +1,3 @@
-import { HOOK_TITLE_CODES, hookTitleMessage } from '@/lib/generation/hook-title';
-
 export const ERROR_CODES = {
   PERSONA_NOT_FOUND: 'PERSONA_NOT_FOUND',
   PERSONA_ACCESS_DENIED: 'PERSONA_ACCESS_DENIED',
@@ -9,18 +7,9 @@ export const ERROR_CODES = {
   NO_CONNECTED_ACCOUNTS: 'NO_CONNECTED_ACCOUNTS',
   ACCOUNT_NOT_BOUND_TO_PERSONA: 'ACCOUNT_NOT_BOUND_TO_PERSONA',
   PERSONA_NO_BOUND_ACCOUNTS: 'PERSONA_NO_BOUND_ACCOUNTS',
-  PERSONA_ALREADY_SCHEDULED: 'PERSONA_ALREADY_SCHEDULED',
-  TOPICS_REQUIRED: 'TOPICS_REQUIRED',
-  TOPICS_LIMIT_EXCEEDED: 'TOPICS_LIMIT_EXCEEDED',
-  INVALID_SCHEDULE_TIME: 'INVALID_SCHEDULE_TIME',
   SCHEDULE_OUT_OF_RANGE: 'SCHEDULE_OUT_OF_RANGE',
-  INSUFFICIENT_TOKENS: 'INSUFFICIENT_TOKENS',
-  RATE_LIMIT_EXCEEDED: 'RATE_LIMIT_EXCEEDED',
   VALIDATION_FAILED: 'VALIDATION_FAILED',
-  HOOK_TITLE_EMPTY: HOOK_TITLE_CODES.empty,
-  HOOK_TITLE_TOO_MANY_WORDS: HOOK_TITLE_CODES.tooManyWords,
-  HOOK_TITLE_TOO_LONG: HOOK_TITLE_CODES.tooLong,
-  HOOK_TITLE_INVALID_CHARS: HOOK_TITLE_CODES.invalidChars,
+  TRIAL_EXPIRED: 'TRIAL_EXPIRED',
   BLUESKY_CREDENTIAL_REJECTED: 'BLUESKY_CREDENTIAL_REJECTED',
   THREESPEAK_CREDENTIAL_REJECTED: 'THREESPEAK_CREDENTIAL_REJECTED',
   TELEGRAM_TOKEN_REJECTED: 'TELEGRAM_TOKEN_REJECTED',
@@ -28,11 +17,7 @@ export const ERROR_CODES = {
   TELEGRAM_CHAT_KIND_MISMATCH: 'TELEGRAM_CHAT_KIND_MISMATCH',
   TELEGRAM_BOT_NOT_MEMBER: 'TELEGRAM_BOT_NOT_MEMBER',
   TELEGRAM_BOT_CANNOT_POST: 'TELEGRAM_BOT_CANNOT_POST',
-  VOICE_UNAVAILABLE: 'VOICE_UNAVAILABLE',
-  UNKNOWN_VOICE: 'UNKNOWN_VOICE',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
-  ENGINE_UNAVAILABLE: 'ENGINE_UNAVAILABLE',
-  ENGINE_REJECTED: 'ENGINE_REJECTED',
   IMAGE_PROVIDER_UNSUPPORTED: 'IMAGE_PROVIDER_UNSUPPORTED',
   VIDEO_UPLOAD_CONSUMED: 'VIDEO_UPLOAD_CONSUMED',
   IDEMPOTENCY_KEY_CONSUMED: 'IDEMPOTENCY_KEY_CONSUMED',
@@ -42,8 +27,6 @@ export const ERROR_CODES = {
   PROMPT_SLUG_TAKEN: 'PROMPT_SLUG_TAKEN',
   PROMPT_VERSION_NOT_FOUND: 'PROMPT_VERSION_NOT_FOUND',
   PROMPT_VERSION_CONFLICT: 'PROMPT_VERSION_CONFLICT',
-  QUOTE_CHANGED: 'QUOTE_CHANGED',
-  QUOTE_EXPIRED: 'QUOTE_EXPIRED',
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
@@ -57,19 +40,9 @@ const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
   NO_CONNECTED_ACCOUNTS: 'No connected {provider} account found.',
   ACCOUNT_NOT_BOUND_TO_PERSONA: 'Selected {provider} account is not bound to this persona.',
   PERSONA_NO_BOUND_ACCOUNTS: 'This persona has no accounts bound. Bind at least one account before scheduling.',
-  PERSONA_ALREADY_SCHEDULED:
-    'This persona already has a publishing schedule. Cancel it before scheduling new videos for it.',
-  TOPICS_REQUIRED: 'At least one video idea is required.',
-  TOPICS_LIMIT_EXCEEDED: 'You can generate up to 10 videos per request.',
-  INVALID_SCHEDULE_TIME: 'One or more publishing times are invalid.',
   SCHEDULE_OUT_OF_RANGE: 'Publishing must be scheduled between {minHours} hours and {maxDays} days from now.',
-  INSUFFICIENT_TOKENS: 'You need {need} tokens, but only have {have}.',
-  RATE_LIMIT_EXCEEDED: 'Too many video generation requests. Please try again later.',
   VALIDATION_FAILED: 'Request validation failed.',
-  HOOK_TITLE_EMPTY: hookTitleMessage(HOOK_TITLE_CODES.empty),
-  HOOK_TITLE_TOO_MANY_WORDS: hookTitleMessage(HOOK_TITLE_CODES.tooManyWords),
-  HOOK_TITLE_TOO_LONG: hookTitleMessage(HOOK_TITLE_CODES.tooLong),
-  HOOK_TITLE_INVALID_CHARS: hookTitleMessage(HOOK_TITLE_CODES.invalidChars),
+  TRIAL_EXPIRED: 'Your free trial has ended. Contact us to keep scheduling and publishing.',
   BLUESKY_CREDENTIAL_REJECTED: 'Invalid Bluesky handle or app password.',
   THREESPEAK_CREDENTIAL_REJECTED: 'Invalid Hive username or posting key.',
   TELEGRAM_TOKEN_REJECTED: 'Telegram rejected the bot token. Copy a fresh token from @BotFather and try again.',
@@ -78,13 +51,7 @@ const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
   TELEGRAM_BOT_NOT_MEMBER: 'The bot is not a member of that chat. Add it in Telegram first, then try again.',
   TELEGRAM_BOT_CANNOT_POST:
     'The bot cannot post there yet. Make it an administrator who can post (channel) or allow it to send messages (group), then try again.',
-  VOICE_UNAVAILABLE: 'The persona’s voice is unavailable and there is no default voice for its language. Update the persona.',
-  UNKNOWN_VOICE:
-    'Unknown voice "{attempt}". Not a house voice and not one of your clones. Pick one from GET /api/persona/voices.',
   INTERNAL_ERROR: 'Something went wrong. Please try again later.',
-  ENGINE_UNAVAILABLE: 'Video generation is temporarily unavailable. Please try again later.',
-  ENGINE_REJECTED:
-    'The video service rejected this request. Check the video settings before trying again.',
   IMAGE_PROVIDER_UNSUPPORTED: 'Images can only be published to Instagram, Bluesky, LinkedIn, Threads, Facebook, Pinterest and Telegram.',
   VIDEO_UPLOAD_CONSUMED: 'This video upload was already used. Upload it again to publish.',
   IDEMPOTENCY_KEY_CONSUMED:
@@ -96,8 +63,6 @@ const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
   PROMPT_SLUG_TAKEN: 'You already have a prompt with this slug, or another public prompt uses it.',
   PROMPT_VERSION_NOT_FOUND: 'Unknown prompt version.',
   PROMPT_VERSION_CONFLICT: 'The prompt changed since you loaded it. Reload and try again.',
-  QUOTE_CHANGED: 'The price or the plan changed since the quote. Ask for a new quote and confirm that one.',
-  QUOTE_EXPIRED: 'The quote expired. Ask for a new quote and confirm that one.',
 };
 
 export function errorMessage(code: ErrorCode): string {

@@ -2,7 +2,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
-import { FACEBOOK_POST_MAX_CHARS, PUBLISH_NETWORKS, checkPublish } from '@/lib/draft-scoring';
 import { PROVIDER_LABELS, accountOption, scheduleAccountIds } from '@/lib/account-options';
 import { resolvePublishLinks } from '@/lib/publish-links';
 import { facebookCounters } from '@/lib/metrics/provider-counters';
@@ -20,19 +19,9 @@ describe('Facebook Pages across the shared surfaces', () => {
     expect(facebookCounters({})).toEqual({ views: null, likes: null, comments: null, saves: null });
   });
 
-  it('fails the publish check only past the character ceiling', () => {
-    expect(PUBLISH_NETWORKS).toContain('facebook');
-    expect(FACEBOOK_POST_MAX_CHARS).toBe(FACEBOOK_TEXT_MAX_CHARS);
-    expect(checkPublish('a'.repeat(FACEBOOK_POST_MAX_CHARS), 'facebook').failures).toEqual([]);
-    expect(checkPublish('a'.repeat(FACEBOOK_POST_MAX_CHARS + 1), 'facebook').failures[0]).toContain('Facebook 63206-character');
-  });
-
-  it('pins the caption ceiling to the engine publisher and its request model', () => {
+  it('pins the caption ceiling to the engine publisher', () => {
     const publisher = readFileSync(join(repoRoot, 'apps/engine/app/services/publish_facebook.py'), 'utf8');
     expect(publisher).toContain(`FACEBOOK_CAPTION_MAX_LENGTH: int = ${FACEBOOK_TEXT_MAX_CHARS}`);
-    const models = readFileSync(join(repoRoot, 'apps/engine/app/models/publish.py'), 'utf8');
-    const facebookModel = models.slice(models.indexOf('class FacebookPublish'), models.indexOf('class PublishParams'));
-    expect(facebookModel).toContain(`max_length=${FACEBOOK_TEXT_MAX_CHARS}`);
   });
 
   it('links the https permalink and drops a failed publish or a non-https link', () => {

@@ -7,26 +7,12 @@ import { usePersonaStore } from '@/lib/store';
 export const PersonaFormSync = () => {
   const { formState: { dirtyFields } } = useFormContext();
   const name = useWatch({ name: 'name' });
-  const niche = useWatch({ name: 'niche' });
-  const scriptPrompt = useWatch({ name: 'scriptPrompt' });
 
   useEffect(() => {
     if (dirtyFields.name && typeof name === 'string') {
       usePersonaStore.getState().setName(name);
     }
   }, [name, dirtyFields.name]);
-
-  useEffect(() => {
-    if (dirtyFields.niche && typeof niche === 'string') {
-      usePersonaStore.getState().setNiche(niche);
-    }
-  }, [niche, dirtyFields.niche]);
-
-  useEffect(() => {
-    if (dirtyFields.scriptPrompt && typeof scriptPrompt === 'string') {
-      usePersonaStore.getState().setScriptPrompt(scriptPrompt);
-    }
-  }, [scriptPrompt, dirtyFields.scriptPrompt]);
 
   return null;
 };

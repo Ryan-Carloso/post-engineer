@@ -27,7 +27,6 @@ from app.services.fill_schedule.publish_existing_media import (
     claimed_upload_cleanup,
     cleanup_existing_media,
     image_cleanup,
-    r2_reader,
     resolve_existing_media,
 )
 from app.services.fill_schedule.publish_events import (
@@ -36,16 +35,9 @@ from app.services.fill_schedule.publish_events import (
     publish_failed_properties,
     publish_tracking_context,
 )
-from app.services.fill_schedule.publish_results import merge_prior_published
 from app.services.owner_alert import notify_owner_async, notify_publish_failed, notify_publish_partial
 from app.services.fill_schedule.store import ScheduleStore
-from app.services.fill_schedule.support import (
-    notify_safe,
-    slot_refund_amount,
-    slot_user_id,
-    track_refund_issued,
-)
-from app.services.state import persist_state_update
+from app.services.fill_schedule.support import notify_safe, slot_user_id
 
 
 def _failed_outcomes(
@@ -72,12 +64,10 @@ class BatchPublisher:
     def __init__(
         self,
         store: ScheduleStore,
-        task_state: Any,
         publish_video: Any = upload_publisher.publish_video,
         notify: Any = notify_module.send_discord,
     ) -> None:
         self.store = store
-        self.task_state = task_state
         self.publish_video = publish_video
         self.notify = notify
         self.base_url = os.getenv("MPT_UPLOAD_API_BASE_URL", "").rstrip("/")
@@ -138,8 +128,7 @@ class BatchPublisher:
                     slot,
                     schedule,
                     str(exc),
-                    "Publish blocked by the persona binding check; video refunded",
-                )
+                                    )
                 cleanup_existing_media(self.store, slot, media_cleanup)
                 return 0
             except (RuntimeError, ValueError) as exc:
@@ -147,67 +136,22 @@ class BatchPublisher:
                     slot,
                     schedule,
                     str(exc),
-                    "Publish plan failed validation; video refunded",
-                )
+                                    )
                 cleanup_existing_media(self.store, slot, media_cleanup)
                 return 0
         if not resumed:
             track_event("video_publish_started", publish_tracking_context(slot, schedule))
-        if not slot.get("task_id") and slot.get("media_kind") in ("upload", "image"):
-            fail = partial(self._fail_slot_permanently, slot, schedule)
-            resolved = resolve_existing_media(self.store, fail, slot, now, resumed)
-            if resolved is None:
-                return 0
-            videos, video_reader, content_type, upload_cleanup = resolved
-            media_cleanup = upload_cleanup or media_cleanup
-            task = object_path = None
-        else:
-            task = self.task_state.get_task(str(slot["task_id"]))
-            videos = (task or {}).get("videos") or []
-            object_path = (task or {}).get("video_storage_path")
-            if not videos:
-                self.store.update_slot(
-                    slot["id"], status=SLOT_FAILED,
-                    error="task has no finished videos",
-                )
-                track_event(
-                    "video_publish_failed",
-                    publish_failed_properties(
-                        slot, schedule, "task has no finished videos", retryable=False
-                    ),
-                )
-                notify_owner_async(
-                    notify_publish_failed,
-                    slot_user_id(slot),
-                    slot_id=str(slot["id"]),
-                    title=str(slot.get("title") or ""),
-                    reason="task has no finished videos",
-                    persona=persona_name,
-                )
-                return 0
-            if not isinstance(object_path, str) or not object_path:
-                self._fail_slot_permanently(
-                    slot,
-                    schedule,
-                    "task has no verified R2 video archive",
-                    "Publish failed: video was generated before the R2 archive; video refunded",
-                )
-                return 0
-            video_reader = r2_reader(object_path)
-            content_type = "video/mp4"
+        if slot.get("media_kind") not in ("upload", "image"):
+            self._fail_slot_permanently(slot, schedule, "slot has no uploaded media")
+            return 0
+        fail = partial(self._fail_slot_permanently, slot, schedule)
+        resolved = resolve_existing_media(self.store, fail, slot, now, resumed)
+        if resolved is None:
+            return 0
+        videos, video_reader, content_type, upload_cleanup = resolved
+        media_cleanup = upload_cleanup or media_cleanup
         if not resumed:
             self.store.update_slot(slot["id"], publish_not_before=lease_iso(now))
-        prior_results = (task or {}).get("publish_results")
-
-        def record_results(entries: list[dict[str, Any]]) -> bool:
-            if not slot.get("task_id"):
-                return True
-            return persist_state_update(
-                self.task_state,
-                str(slot["task_id"]),
-                publish_results=merge_prior_published(prior_results, entries),
-            )
-
         def persist_outcomes(saved: list[dict[str, Any]], fields: dict[str, Any]) -> None:
             self.store.update_slot(
                 slot["id"],
@@ -227,9 +171,7 @@ class BatchPublisher:
             api_secret=self.api_secret,
             publish_video=self.publish_video,
             persist_outcomes=persist_outcomes,
-            record_results=record_results,
             content_type=content_type,
-            video_object_path=object_path,
         )
         if account_result.transport_error is not None:
             logger.warning(
@@ -249,13 +191,6 @@ class BatchPublisher:
             )
         for notice in account_result.new_user_notices:
             notify_safe(self.notify, notify_module.user_action_msg(notice))
-        if account_result.state_write_failed and account_result.any_published:
-            track_event(
-                "video_publish_partial_failure",
-                partial_failure_properties(
-                    slot, schedule, ["state-write"], account_result.published_providers, "state-write",
-                ),
-            )
         outcome_fields = {
             "publish_outcomes": [dict(item) for item in account_result.outcomes],
             "publish_attempts": account_result.max_attempts,
@@ -334,13 +269,9 @@ class BatchPublisher:
             schedule,
             f"publish failed after {account_result.max_attempts} attempts: "
             f"{scrub_error_text(account_result.failure_reason, max_chars=200)}",
-            f"Publish failed after {account_result.max_attempts} attempts; video refunded",
             attempts=account_result.max_attempts,
             emit_failed_event=False,
             outcomes=account_result.outcomes,
-            refund=not any(
-                outcome.get("code") == "publish_unknown" for outcome in account_result.outcomes
-            ),
         )
         cleanup_existing_media(self.store, slot, media_cleanup)
         track_event(
@@ -380,25 +311,11 @@ class BatchPublisher:
         slot: dict[str, Any],
         schedule: dict[str, Any],
         error: str,
-        refund_reason: str,
         attempts: int | None = None,
         emit_failed_event: bool = True,
         outcomes: list[dict[str, Any]] | None = None,
-        refund: bool = True,
     ) -> None:
-        """Auto-cancel a slot that can never publish and refund its token.
-
-        Mirrors the reconciler's per-slot refund convention: the unified
-        generate+schedule flow prepays under ``batch:{scheduleId}`` and each
-        slot refunds with its own idempotent key (the ``:publish`` suffix keeps
-        it distinct from a generation-failure refund of the same slot). A
-        refund RPC failure never kills the tick — the slot is already
-        terminal, and the loud log line is the recovery trail.
-
-        ``refund=False`` is only for an unknown publish outcome
-        (``publish_unknown``): the post may already be live, so the token
-        stays charged until a human verifies the provider — money never
-        moves on an unknown outcome.
+        """Mark a slot that can never publish as failed and alert its owner.
 
         Every permanent abort emits ``video_publish_failed`` with the reason,
         so the analytics funnel never ends at ``video_publish_started``.
@@ -411,45 +328,6 @@ class BatchPublisher:
                 publish_failed_properties(slot, schedule, error, retryable=False),
             )
         user_id = slot_user_id(slot)
-        schedule_id = schedule.get("id")
-        if refund and user_id and isinstance(schedule_id, str) and schedule_id:
-            cost = slot_refund_amount(slot)
-            if cost is not None:
-                batch_generation_id = f"batch:{schedule_id}"
-                engine_task_id = str(slot["task_id"]) if slot.get("task_id") else None
-                try:
-                    refunded = self.store.refund_batch_tokens(
-                        user_id,
-                        batch_generation_id,
-                        f"{batch_generation_id}:slot:{slot['id']}:publish",
-                        cost,
-                        refund_reason,
-                        engine_task_id=engine_task_id,
-                    )
-                except Exception as exc:
-                    logger.error(
-                        f"fill_schedule: refund failed for publish-failed slot {slot['id']}: {exc}"
-                    )
-                else:
-                    if refunded:
-                        track_refund_issued(
-                            user_id=user_id,
-                            amount=cost,
-                            reason=refund_reason,
-                            batch_generation_id=batch_generation_id,
-                            slot_id=str(slot["id"]),
-                            engine_task_id=engine_task_id,
-                        )
-                    if not refunded:
-                        logger.error(
-                            f"fill_schedule: refund not applied for publish-failed "
-                            f"slot {slot['id']}: rpc returned not-refunded"
-                        )
-        elif refund:
-            logger.error(
-                "fill_schedule: cannot refund publish-failed slot without user_id/schedule_id",
-                slot_id=slot.get("id"),
-            )
         fields: dict[str, Any] = {
             "status": SLOT_FAILED,
             "error": scrub_error_text(error, max_chars=200),

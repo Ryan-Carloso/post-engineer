@@ -2,7 +2,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
-import { PUBLISH_NETWORKS, checkPublish } from '@/lib/draft-scoring';
 import { PROVIDER_LABELS, accountOption, scheduleAccountIds } from '@/lib/account-options';
 import { resolvePublishLinks } from '@/lib/publish-links';
 import { COUNTER_FETCHERS } from '@/lib/metrics/provider-counters';
@@ -22,18 +21,9 @@ describe('Rumble across the shared surfaces', () => {
     ).toEqual({ views: null, likes: null, comments: null, saves: null });
   });
 
-  it('passes the publish check with no ceiling (only the title limit, enforced at publish time)', () => {
-    expect(PUBLISH_NETWORKS).toContain('rumble');
-    expect(RUMBLE_TITLE_MAX_LENGTH).toBe(100);
-    expect(checkPublish('a'.repeat(100000), 'rumble').failures).toEqual([]);
-  });
-
-  it('pins the title ceiling to the engine publisher and its request model', () => {
+  it('pins the title ceiling to the engine publisher', () => {
     const publisher = readFileSync(join(repoRoot, 'apps/engine/app/services/publish_rumble.py'), 'utf8');
     expect(publisher).toContain(`RUMBLE_TITLE_MAX_LENGTH: int = ${RUMBLE_TITLE_MAX_LENGTH}`);
-    const models = readFileSync(join(repoRoot, 'apps/engine/app/models/publish.py'), 'utf8');
-    const rumbleModel = models.slice(models.indexOf('class RumblePublish'), models.indexOf('class PublishParams'));
-    expect(rumbleModel).toContain(`max_length=${RUMBLE_TITLE_MAX_LENGTH}`);
   });
 
   it('links the https permalink and drops a failed publish or a non-https link', () => {

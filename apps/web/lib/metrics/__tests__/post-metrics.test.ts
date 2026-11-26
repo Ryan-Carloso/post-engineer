@@ -28,16 +28,6 @@ import { InstagramApiError } from '@/lib/errors';
 const COUNTERS = { views: 1200, likes: 80, comments: 9, saves: null };
 const NO_PROMPT = { promptVersionId: null };
 
-function duePost(overrides: Partial<DuePost> = {}): DuePost {
-  return {
-    id: 'post-1',
-    userId: 'user-1',
-    taskId: 'task-1',
-    window: '24h',
-    collectedKeys: new Set(),
-    ...overrides,
-  };
-}
 
 const YT_ENTRY = {
   provider: 'youtube',
@@ -47,10 +37,20 @@ const YT_ENTRY = {
 };
 const IG_ENTRY = { provider: 'instagram', status: 'published', accountId: 'ig-acct', postId: 'media-9' };
 
+function duePost(overrides: Partial<DuePost> = {}): DuePost {
+  return {
+    id: 'post-1',
+    userId: 'user-1',
+    publishOutcomes: [YT_ENTRY, IG_ENTRY],
+    window: '24h',
+    collectedKeys: new Set(),
+    ...overrides,
+  };
+}
+
 function deps(overrides: Partial<PostMetricsDeps> = {}): PostMetricsDeps {
   return {
     listDuePosts: vi.fn(async () => [duePost()]),
-    fetchTaskSource: vi.fn(async () => ({ publishResults: [YT_ENTRY, IG_ENTRY], scriptAngle: 'myth' })),
     fetchCounters: vi.fn(async () => COUNTERS),
     resolveTarget: vi.fn(async (_userId: string, target: MetricsTarget) => target),
     saveMetrics: vi.fn(async () => NO_PROMPT),
@@ -151,13 +151,12 @@ describe('post_metrics provider check (migrations 034, 049, 050 and 052)', () =>
 });
 
 describe('collectPostMetrics', () => {
-  it('snapshots every published video of a due post and tracks it with the task id', async () => {
+  it('snapshots every published video of a due post and tracks it', async () => {
     const d = deps();
     const report = await collectPostMetrics(d);
 
     expect(report).toEqual({ checked: 1, recorded: 2, errors: [], truncated: false });
     expect(d.listDuePosts).toHaveBeenCalledWith(new Date('2026-10-21T12:00:00.000Z'), MAX_POSTS_PER_RUN + 1);
-    expect(d.fetchTaskSource).toHaveBeenCalledWith('task-1', 'user-1');
     expect(d.saveMetrics).toHaveBeenCalledWith({
       postId: 'post-1',
       userId: 'user-1',
@@ -165,13 +164,10 @@ describe('collectPostMetrics', () => {
       provider: 'youtube',
       accountId: 'yt-acct',
       externalId: 'abc123',
-      scriptAngle: 'myth',
       ...COUNTERS,
     });
     expect(d.track).toHaveBeenCalledWith('post_metrics_collected', {
-      task_id: 'task-1',
       post_id: 'post-1',
-      script_angle: 'myth',
       user_id: 'user-1',
       provider: 'instagram',
       window: '24h',
@@ -214,12 +210,12 @@ describe('collectPostMetrics', () => {
   });
 
   it('reports an unknown provider as an error and still snapshots the known ones', async () => {
-    const d = deps({ fetchTaskSource: vi.fn(async () => ({ publishResults: [YT_ENTRY, { provider: 'tiktok', status: 'published', accountId: 'a', postId: 'p' }], scriptAngle: null })) });
+    const d = deps({ listDuePosts: vi.fn(async () => [duePost({ publishOutcomes: [YT_ENTRY, { provider: 'tiktok', status: 'published', accountId: 'a', postId: 'p' }] })]) });
     const report = await collectPostMetrics(d);
 
     expect(report.recorded).toBe(1);
     expect(report.errors).toEqual(['post-1/tiktok: unknown provider']);
-    expect(logger.warn).toHaveBeenCalledWith('[post-metrics] unknown provider in publish results', { postId: 'post-1', provider: 'tiktok' });
+    expect(logger.warn).toHaveBeenCalledWith('[post-metrics] unknown provider in publish outcomes', { postId: 'post-1', provider: 'tiktok' });
   });
 
   it('marks the post done for the window once every video is in', async () => {
@@ -247,7 +243,7 @@ describe('collectPostMetrics', () => {
   });
 
   it('marks a post with nothing to measure done so it stops coming back', async () => {
-    const d = deps({ fetchTaskSource: vi.fn(async () => ({ publishResults: [], scriptAngle: null })) });
+    const d = deps({ listDuePosts: vi.fn(async () => [duePost({ publishOutcomes: [] })]) });
     const report = await collectPostMetrics(d);
     expect(report.recorded).toBe(0);
     expect(d.markDone).toHaveBeenCalledWith('post-1', '24h');
@@ -257,12 +253,6 @@ describe('collectPostMetrics', () => {
     const d = deps({ fetchCounters: vi.fn().mockRejectedValueOnce(new Error('403')).mockResolvedValueOnce(COUNTERS) });
     await collectPostMetrics(d);
     expect(d.saveMetrics).toHaveBeenCalledTimes(1);
-    expect(d.markDone).not.toHaveBeenCalled();
-  });
-
-  it('keeps the post open when publish results are unavailable', async () => {
-    const d = deps({ fetchTaskSource: vi.fn(async () => { throw new Error('engine down'); }) });
-    await collectPostMetrics(d);
     expect(d.markDone).not.toHaveBeenCalled();
   });
 
@@ -280,7 +270,7 @@ describe('collectPostMetrics', () => {
   it('resolves a placeholder YouTube account to the real account before fetching', async () => {
     const resolved: MetricsTarget = { provider: 'youtube', accountId: 'UC-real', externalId: 'abc123' };
     const d = deps({
-      fetchTaskSource: vi.fn(async () => ({ publishResults: [{ ...YT_ENTRY, accountId: 'unknown' }], scriptAngle: null })),
+      listDuePosts: vi.fn(async () => [duePost({ publishOutcomes: [{ ...YT_ENTRY, accountId: 'unknown' }] })]),
       resolveTarget: vi.fn(async () => resolved),
     });
     await collectPostMetrics(d);
@@ -293,7 +283,7 @@ describe('collectPostMetrics', () => {
 
   it('skips a target that resolves to nothing and still closes the window', async () => {
     const d = deps({
-      fetchTaskSource: vi.fn(async () => ({ publishResults: [{ ...YT_ENTRY, accountId: 'unknown' }], scriptAngle: null })),
+      listDuePosts: vi.fn(async () => [duePost({ publishOutcomes: [{ ...YT_ENTRY, accountId: 'unknown' }] })]),
       resolveTarget: vi.fn(async () => null),
     });
     const report = await collectPostMetrics(d);
@@ -312,7 +302,7 @@ describe('collectPostMetrics', () => {
 
   it('collects the real videos and closes the window when a placeholder target is skipped', async () => {
     const d = deps({
-      fetchTaskSource: vi.fn(async () => ({ publishResults: [{ ...YT_ENTRY, accountId: 'unknown' }, IG_ENTRY], scriptAngle: null })),
+      listDuePosts: vi.fn(async () => [duePost({ publishOutcomes: [{ ...YT_ENTRY, accountId: 'unknown' }, IG_ENTRY] })]),
       resolveTarget: vi.fn(async (_userId: string, target: MetricsTarget) => (target.provider === 'youtube' ? null : target)),
     });
     const report = await collectPostMetrics(d);
@@ -384,7 +374,7 @@ describe('collectPostMetrics', () => {
       190,
     );
     const d = deps({
-      fetchTaskSource: vi.fn(async () => ({ publishResults: [IG_ENTRY], scriptAngle: null })),
+      listDuePosts: vi.fn(async () => [duePost({ publishOutcomes: [IG_ENTRY] })]),
       fetchCounters: vi.fn(async () => { throw deadToken; }),
     });
     const report = await collectPostMetrics(d);
@@ -410,7 +400,7 @@ describe('collectPostMetrics', () => {
       33,
     );
     const d = deps({
-      fetchTaskSource: vi.fn(async () => ({ publishResults: [IG_ENTRY], scriptAngle: null })),
+      listDuePosts: vi.fn(async () => [duePost({ publishOutcomes: [IG_ENTRY] })]),
       fetchCounters: vi.fn(async () => { throw gone; }),
     });
     const report = await collectPostMetrics(d);
@@ -431,7 +421,7 @@ describe('collectPostMetrics', () => {
   it('retries a transient Instagram failure and logs status with meta code', async () => {
     const invalidParam = new InstagramApiError('Invalid parameter', 400, undefined, 100);
     const d = deps({
-      fetchTaskSource: vi.fn(async () => ({ publishResults: [IG_ENTRY], scriptAngle: null })),
+      listDuePosts: vi.fn(async () => [duePost({ publishOutcomes: [IG_ENTRY] })]),
       fetchCounters: vi.fn(async () => { throw invalidParam; }),
     });
     const report = await collectPostMetrics(d);
@@ -448,25 +438,9 @@ describe('collectPostMetrics', () => {
     expect(d.markDone).not.toHaveBeenCalled();
   });
 
-  it('reports an unreachable engine per post without stopping the run', async () => {
-    const fetchTaskSource = vi
-      .fn()
-      .mockRejectedValueOnce(new Error('engine down'))
-      .mockResolvedValueOnce({ publishResults: [YT_ENTRY], scriptAngle: null });
-    const d = deps({
-      listDuePosts: vi.fn(async () => [duePost(), duePost({ id: 'post-2', taskId: 'task-2' })]),
-      fetchTaskSource,
-    });
-    const report = await collectPostMetrics(d);
-
-    expect(report.checked).toBe(2);
-    expect(report.recorded).toBe(1);
-    expect(report.errors).toEqual(['post-1: publish results unavailable']);
-  });
-
   it('caps the run at MAX_POSTS_PER_RUN and flags truncation', async () => {
     const posts = Array.from({ length: MAX_POSTS_PER_RUN + 1 }, (_, i) => duePost({ id: `post-${i}` }));
-    const d = deps({ listDuePosts: vi.fn(async () => posts), fetchTaskSource: vi.fn(async () => ({ publishResults: [], scriptAngle: null })) });
+    const d = deps({ listDuePosts: vi.fn(async () => posts.map((post) => ({ ...post, publishOutcomes: [] }))) });
     const report = await collectPostMetrics(d);
 
     expect(report.checked).toBe(MAX_POSTS_PER_RUN);
@@ -503,7 +477,6 @@ describe('createPostMetricsStore', () => {
     return {
       id: 'post-1',
       user_id: 'user-1',
-      task_id: 'task-1',
       status: 'published',
       published_at: '2026-10-20T12:00:00.000Z',
       publish_outcomes: [YT_ENTRY, IG_ENTRY],
@@ -517,13 +490,13 @@ describe('createPostMetricsStore', () => {
         {
           post_id: 'post-1',
           user_id: 'user-1',
-          task_id: 'task-1',
           published_at: '2026-10-20T10:00:00.000Z',
+          publish_outcomes: [YT_ENTRY],
           metrics_window: '24h',
           collected_keys: ['youtube:abc123'],
         },
-        { post_id: 'post-2', user_id: 'user-1', task_id: 'task-2', metrics_window: '28d', collected_keys: [] },
-        { post_id: 'bad', user_id: 'user-1', task_id: 'task-x', metrics_window: '30d', collected_keys: [] },
+        { post_id: 'post-2', user_id: 'user-1', publish_outcomes: 'junk', metrics_window: '28d', collected_keys: [] },
+        { post_id: 'bad', user_id: 'user-1', publish_outcomes: [], metrics_window: '30d', collected_keys: [] },
       ],
       error: null,
     }));
@@ -535,8 +508,8 @@ describe('createPostMetricsStore', () => {
       p_limit: 51,
     });
     expect(posts).toEqual([
-      { id: 'post-1', userId: 'user-1', taskId: 'task-1', window: '24h', collectedKeys: new Set(['youtube:abc123']) },
-      { id: 'post-2', userId: 'user-1', taskId: 'task-2', window: '28d', collectedKeys: new Set() },
+      { id: 'post-1', userId: 'user-1', publishOutcomes: [YT_ENTRY], window: '24h', collectedKeys: new Set(['youtube:abc123']) },
+      { id: 'post-2', userId: 'user-1', publishOutcomes: [], window: '28d', collectedKeys: new Set() },
     ]);
   });
 
@@ -561,7 +534,7 @@ describe('createPostMetricsStore', () => {
     const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
 
     expect(posts).toEqual([{
-      id: 'post-1', userId: 'user-1', taskId: 'task-1', window: '24h',
+      id: 'post-1', userId: 'user-1', publishOutcomes: [YT_ENTRY, IG_ENTRY], window: '24h',
       collectedKeys: new Set(['youtube:abc123']),
     }]);
   });
@@ -580,7 +553,7 @@ describe('createPostMetricsStore', () => {
     } as unknown as SupabaseClient);
     const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
     expect(posts).toEqual([{
-      id: 'post-1', userId: 'user-1', taskId: 'task-1', window: '24h',
+      id: 'post-1', userId: 'user-1', publishOutcomes: [YT_ENTRY, IG_ENTRY], window: '24h',
       collectedKeys: new Set(),
     }]);
   });
@@ -599,7 +572,7 @@ describe('createPostMetricsStore', () => {
     } as unknown as SupabaseClient);
     const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
     expect(posts).toEqual([{
-      id: 'post-1', userId: 'user-1', taskId: 'task-1', window: '24h',
+      id: 'post-1', userId: 'user-1', publishOutcomes: [YT_ENTRY, IG_ENTRY], window: '24h',
       collectedKeys: new Set(),
     }]);
   });
@@ -618,7 +591,7 @@ describe('createPostMetricsStore', () => {
     } as unknown as SupabaseClient);
     const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
     expect(posts).toEqual([{
-      id: 'post-1', userId: 'user-1', taskId: 'task-1', window: '24h',
+      id: 'post-1', userId: 'user-1', publishOutcomes: [YT_ENTRY, IG_ENTRY], window: '24h',
       collectedKeys: new Set(['youtube:abc123']),
     }]);
   });
@@ -637,7 +610,7 @@ describe('createPostMetricsStore', () => {
     } as unknown as SupabaseClient);
     const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
     expect(posts).toEqual([{
-      id: 'post-1', userId: 'user-1', taskId: 'task-1', window: '24h',
+      id: 'post-1', userId: 'user-1', publishOutcomes: [YT_ENTRY, IG_ENTRY], window: '24h',
       collectedKeys: new Set(['instagram:media-9']),
     }]);
   });
@@ -671,7 +644,7 @@ describe('createPostMetricsStore', () => {
     } as unknown as SupabaseClient);
     const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
     expect(posts).toEqual([{
-      id: 'post-1', userId: 'user-1', taskId: 'task-1', window: '7d', collectedKeys: new Set(),
+      id: 'post-1', userId: 'user-1', publishOutcomes: [YT_ENTRY, IG_ENTRY], window: '7d', collectedKeys: new Set(),
     }]);
   });
 
@@ -689,7 +662,7 @@ describe('createPostMetricsStore', () => {
 
   it('never collects the same post and window twice in one run', async () => {
     const rpc = vi.fn(async () => ({
-      data: [{ post_id: 'post-1', user_id: 'user-1', task_id: 'task-1', metrics_window: '24h', collected_keys: [] }],
+      data: [{ post_id: 'post-1', user_id: 'user-1', metrics_window: '24h', collected_keys: [] }],
       error: null,
     }));
     const store = createPostMetricsStore({
@@ -706,7 +679,7 @@ describe('createPostMetricsStore', () => {
 
   it('keeps the RPC posts when the re-open scan fails', async () => {
     const rpc = vi.fn(async () => ({
-      data: [{ post_id: 'post-1', user_id: 'user-1', task_id: 'task-1', metrics_window: '24h', collected_keys: [] }],
+      data: [{ post_id: 'post-1', user_id: 'user-1', metrics_window: '24h', collected_keys: [] }],
       error: null,
     }));
     const store = createPostMetricsStore({
@@ -741,7 +714,7 @@ describe('createPostMetricsStore', () => {
   it('caps the re-opened posts at the remaining run budget', async () => {
     const rpc = vi.fn(async () => ({
       data: Array.from({ length: 49 }, (_, index) => ({
-        post_id: `post-${index}`, user_id: 'user-1', task_id: `task-${index}`, metrics_window: '24h', collected_keys: [],
+        post_id: `post-${index}`, user_id: 'user-1', metrics_window: '24h', collected_keys: [],
       })),
       error: null,
     }));
@@ -750,8 +723,8 @@ describe('createPostMetricsStore', () => {
       from: fakeFrom({
         scheduled_posts: {
           data: [
-            scannedPost({ id: 'post-99', task_id: 'task-99' }),
-            scannedPost({ id: 'post-98', task_id: 'task-98' }),
+            scannedPost({ id: 'post-99' }),
+            scannedPost({ id: 'post-98' }),
           ],
           error: null,
         },
@@ -766,7 +739,7 @@ describe('createPostMetricsStore', () => {
   it('skips the re-open scan when the RPC already filled the run budget', async () => {
     const rpc = vi.fn(async () => ({
       data: Array.from({ length: 51 }, (_, index) => ({
-        post_id: `post-${index}`, user_id: 'user-1', task_id: `task-${index}`, metrics_window: '24h', collected_keys: [],
+        post_id: `post-${index}`, user_id: 'user-1', metrics_window: '24h', collected_keys: [],
       })),
       error: null,
     }));
@@ -778,7 +751,7 @@ describe('createPostMetricsStore', () => {
 
     const rpc50 = vi.fn(async () => ({
       data: Array.from({ length: 50 }, (_, index) => ({
-        post_id: `post-${index}`, user_id: 'user-1', task_id: `task-${index}`, metrics_window: '24h', collected_keys: [],
+        post_id: `post-${index}`, user_id: 'user-1', metrics_window: '24h', collected_keys: [],
       })),
       error: null,
     }));
@@ -791,7 +764,7 @@ describe('createPostMetricsStore', () => {
 
   it('keeps the RPC posts when the re-open rows lookup fails', async () => {
     const rpc = vi.fn(async () => ({
-      data: [{ post_id: 'post-1', user_id: 'user-1', task_id: 'task-1', metrics_window: '24h', collected_keys: [] }],
+      data: [{ post_id: 'post-1', user_id: 'user-1', metrics_window: '24h', collected_keys: [] }],
       error: null,
     }));
     const store = createPostMetricsStore({
@@ -823,7 +796,7 @@ describe('createPostMetricsStore', () => {
     } as unknown as SupabaseClient);
     const posts = await noRows.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
     expect(posts).toEqual([{
-      id: 'post-1', userId: 'user-1', taskId: 'task-1', window: '24h',
+      id: 'post-1', userId: 'user-1', publishOutcomes: [YT_ENTRY, IG_ENTRY], window: '24h',
       collectedKeys: new Set(),
     }]);
   });
@@ -839,7 +812,6 @@ describe('createPostMetricsStore', () => {
             scannedPost({ id: 'post-bad-date', published_at: 'not-a-date' }),
             scannedPost({ id: 'post-no-outcomes', publish_outcomes: 'junk' }),
             scannedPost({ id: 'post-no-targets', publish_outcomes: [{ provider: 'instagram', accountId: 'ig1', status: 'failed' }] }),
-            scannedPost({ id: 'post-no-task', task_id: 123 }),
             scannedPost(),
           ],
           error: null,
@@ -856,7 +828,7 @@ describe('createPostMetricsStore', () => {
     } as unknown as SupabaseClient);
     const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
     expect(posts).toEqual([{
-      id: 'post-1', userId: 'user-1', taskId: 'task-1', window: '24h',
+      id: 'post-1', userId: 'user-1', publishOutcomes: [YT_ENTRY, IG_ENTRY], window: '24h',
       collectedKeys: new Set(['youtube:abc123']),
     }]);
   });
@@ -869,7 +841,7 @@ describe('createPostMetricsStore', () => {
         scheduled_posts: {
           data: [
             scannedPost({ publish_outcomes: [IG_ENTRY, { provider: 'tiktok', status: 'published', accountId: 'tt1', postId: 'v9' }] }),
-            scannedPost({ id: 'post-2', task_id: 'task-2', publish_outcomes: [{ provider: 'tiktok', status: 'published', accountId: 'tt1', postId: 'v9' }] }),
+            scannedPost({ id: 'post-2', publish_outcomes: [{ provider: 'tiktok', status: 'published', accountId: 'tt1', postId: 'v9' }] }),
           ],
           error: null,
         },
@@ -878,7 +850,7 @@ describe('createPostMetricsStore', () => {
     } as unknown as SupabaseClient);
     const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
     expect(posts).toEqual([{
-      id: 'post-1', userId: 'user-1', taskId: 'task-1', window: '24h',
+      id: 'post-1', userId: 'user-1', publishOutcomes: [IG_ENTRY, { provider: 'tiktok', status: 'published', accountId: 'tt1', postId: 'v9' }], window: '24h',
       collectedKeys: new Set(),
     }]);
     expect(logger.warn).toHaveBeenCalledWith('[post-metrics] unknown provider in re-opened publish outcomes', { postId: 'post-1', provider: 'tiktok' });
@@ -898,7 +870,6 @@ describe('createPostMetricsStore', () => {
       accountId: 'yt-acct',
       externalId: 'abc123',
       window: '7d',
-      scriptAngle: 'myth',
       ...COUNTERS,
     });
 
@@ -915,7 +886,6 @@ describe('createPostMetricsStore', () => {
         likes: 80,
         comments: 9,
         saves: null,
-        script_angle: 'myth',
         analytics_status: null,
         analytics_views: null,
         engaged_views: null,
@@ -933,7 +903,7 @@ describe('createPostMetricsStore', () => {
     single.mockResolvedValueOnce({ data: null, error: { message: 'denied' } } as never);
     await expect(
       store.saveMetrics({
-        postId: 'post-1', userId: 'user-1', provider: 'youtube', accountId: 'a', externalId: 'b', window: '7d', scriptAngle: null, ...COUNTERS,
+        postId: 'post-1', userId: 'user-1', provider: 'youtube', accountId: 'a', externalId: 'b', window: '7d', ...COUNTERS,
       }),
     ).rejects.toThrow('metrics write failed: denied');
   });
@@ -980,7 +950,6 @@ describe('createPostMetricsStore', () => {
       join(findRepoRoot(import.meta.url), 'supabase', 'migrations', '026_post-metrics-dimensions.sql'),
       'utf8',
     );
-    expect(sql026).toContain('add column if not exists script_angle');
     expect(sql026).toContain('add column if not exists persona_id');
     expect(sql).toContain('unique (post_id, provider, external_id, metrics_window)');
   });
@@ -989,9 +958,10 @@ describe('createPostMetricsStore', () => {
 describe('migration 026 (post metrics dimensions)', () => {
   const sql = readFileSync(join(findRepoRoot(import.meta.url), 'supabase', 'migrations', '026_post-metrics-dimensions.sql'), 'utf8');
 
-  it('adds the persona_id and script_angle columns the web reads and writes', () => {
+  it('adds the persona_id column the web reads, while 086 drops the generation-only script_angle', () => {
     expect(sql.includes('add column if not exists persona_id uuid')).toBe(true);
-    expect(sql.includes('add column if not exists script_angle text')).toBe(true);
+    const sql086 = readFileSync(join(findRepoRoot(import.meta.url), 'supabase', 'migrations', '087_remove-generation-and-tokens.sql'), 'utf8');
+    expect(sql086).toContain('alter table public.post_metrics drop column if exists script_angle;');
   });
 
   it('fills persona_id on insert from the post schedule', () => {
@@ -1014,7 +984,7 @@ describe('migration 039 (post metrics retention + 28d window)', () => {
     const upsert = vi.fn((_row: unknown, _options: unknown) => ({ select: () => ({ single }) }));
     const store = createPostMetricsStore({ from: vi.fn(() => ({ upsert })) } as unknown as SupabaseClient);
     await store.saveMetrics({
-      postId: 'p', userId: 'u', provider: 'youtube', accountId: 'a', externalId: 'v', window: '28d', scriptAngle: null,
+      postId: 'p', userId: 'u', provider: 'youtube', accountId: 'a', externalId: 'v', window: '28d',
       ...COUNTERS,
       retention: {
         status: 'ok', analyticsViews: 1000, engagedViews: 640, averageViewDurationSeconds: 21.4,

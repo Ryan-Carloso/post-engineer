@@ -26,7 +26,7 @@ describe('app/docs — server-rendered docs pages', () => {
     const element = await DocSlugPage({ params: Promise.resolve({ slug: 'mcp' }) });
     const markup = renderToStaticMarkup(element);
     expect(markup).toContain('MCP server');
-    expect(markup).toContain('generate_video');
+    expect(markup).toContain('publish_video');
   });
 
   it('statically generates every docs slug', () => {

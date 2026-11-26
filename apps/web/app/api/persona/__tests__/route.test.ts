@@ -32,9 +32,6 @@ vi.mock('@/lib/rate-limit', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/rate-limit')>();
   return { ...actual, applyRateLimit: vi.fn(async () => null) };
 });
-vi.mock('@/lib/voice-catalog-fetch', () => ({
-  fetchPersonaVoiceCatalogIds: vi.fn(async () => undefined),
-}));
 const posthogMock = vi.hoisted(() => ({
   capture: vi.fn(),
   captureAs: vi.fn(),
@@ -46,18 +43,14 @@ vi.mock('@/lib/posthog-server', () => ({
 }));
 
 import { POST, PATCH, DELETE } from '../route';
-import { CreatePersonaResponseSchema, DeletePersonaResponseSchema, UpdatePersonaResponseSchema } from '@/lib/contracts/personas';
-import { fetchPersonaVoiceCatalogIds } from '@/lib/voice-catalog-fetch';
+import { CreatePersonaResponseSchema, UpdatePersonaResponseSchema } from '@/lib/contracts/personas';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { trackApiEvent } from '@/lib/analytics';
 import { logger } from '@/lib/logger';
-import { restorePinnedHttp, stubPinnedHttp } from '@/test/stub-pinned-http';
-import { REMOTE_FACE_ERROR } from '@/lib/persona-remote-face';
 
 const warnSpy = vi.spyOn(logger, 'warn');
-const errorSpy = vi.spyOn(logger, 'error');
 function loggedWarnings(): string[] {
   return warnSpy.mock.calls.map((call) => String(call[0]));
 }
@@ -166,221 +159,17 @@ function formRequest(fields: Record<string, string>, files: File[] = [], opts: {
     formData.append(key, value);
   }
   for (const file of files) {
-    formData.append(file.type.startsWith('audio/') ? 'voiceAudio' : 'photo', file);
+    formData.append('photo', file);
   }
   return new Request('http://localhost/api/persona', { method: 'POST', body: formData });
 }
 
 const photo = () => new File(['png'], 'foto.png', { type: 'image/png' });
-const PNG_BYTES = Uint8Array.from([
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
-]);
 
-function stubPngFetch() {
-  stubPinnedHttp(200, PNG_BYTES);
-}
-
-function stubFetchResponse(response: Response) {
-  stubPinnedHttp(
-    response.status,
-    new Uint8Array(),
-    response.headers.get('content-type') ?? 'text/plain',
-  );
-}
-
-describe('POST /api/persona — toda persona tem rosto', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.unstubAllGlobals();
-    restorePinnedHttp();
-  });
-
-  it('cria persona com avatarUrl (sem foto) e a voz da casa', async () => {
-    const { uploaded, inserted } = mockSupabase();
-
-    const res = await POST(
-      formRequest({
-        name: 'Canal Ninja',
-        avatarUrl: 'data:image/png;base64,IA',
-        voiceId: 'chatterbox:kokoro_af_heart',
-      }),
-    );
-    const body = (await res.json()) as { success: boolean; personaId?: string };
-
-    expect(res.status).toBe(200);
-    expect(CreatePersonaResponseSchema.safeParse(body).success).toBe(true);
-    expect(body.success).toBe(true);
-    expect(uploaded).toHaveLength(0);
-    expect(inserted[0]).toMatchObject({
-      user_id: USER_ID,
-      name: 'Canal Ninja',
-      photo_path: null,
-      avatar_url: 'data:image/png;base64,IA',
-      voice_id: 'chatterbox:kokoro_af_heart',
-    });
-  });
-
-  it('never stores a face mix (the column was dropped in migration 007)', async () => {
-    const { inserted } = mockSupabase();
-
-    const res = await POST(
-      formRequest({
-        name: 'Canal Ninja',
-        avatarUrl: 'data:image/png;base64,IA',
-        voiceId: 'chatterbox:kokoro_af_heart',
-      }),
-    );
-
-    expect(res.status).toBe(200);
-    expect(inserted[0]).not.toHaveProperty('face_mix_percent');
-  });
-
-  it('rejects a persona with no visual identity (neither photo nor avatarUrl)', async () => {
-    mockSupabase();
-
-    const res = await POST(formRequest({ name: 'Canal Ninja', voiceId: 'chatterbox:kokoro_af_heart' }));
-
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { success: boolean; error: string };
-    expect(body.success).toBe(false);
-    expect(body.error).toContain('exactly one');
-  });
-
-  it('includes recent_image_ids in the insert (supplies the NOT NULL column explicitly, independent of the DB default)', async () => {
-    const { inserted } = mockSupabase();
-
-    const res = await POST(
-      formRequest({
-        name: 'Canal Ninja',
-        avatarUrl: 'data:image/png;base64,IA',
-        voiceId: 'chatterbox:kokoro_af_heart',
-      }),
-    );
-
-    expect(res.status).toBe(200);
-    expect(inserted[0]).toHaveProperty('recent_image_ids');
-    expect(inserted[0].recent_image_ids).toEqual([]);
-  });
-
-  it('persona insert payload stays in sync with public.personas (both directions)', async () => {
-    const { readFileSync, readdirSync } = await import('node:fs');
-    const { join } = await import('node:path');
-    const migrationsDir = join(findRepoRoot(import.meta.url), 'supabase', 'migrations');
-    const sql = readFileSync(join(migrationsDir, '001_schema.sql'), 'utf8');
-    const tableMatch = sql.match(
-      /create table if not exists public\.personas \(([\s\S]*?)\n\);/i,
-    );
-    expect(tableMatch).not.toBeNull();
-    const columnBlock = tableMatch?.[1] ?? '';
-    const constraintKeywords = new Set([
-      'primary',
-      'unique',
-      'foreign',
-      'check',
-      'constraint',
-      'exclude',
-    ]);
-    const columns = new Map<string, boolean>();
-    for (const line of columnBlock.split('\n')) {
-      const trimmed = line.trim();
-      const name = trimmed.split(/\s+/)[0]?.replace(/["`,]/g, '');
-      if (!name || name.startsWith('--') || constraintKeywords.has(name)) {
-        continue;
-      }
-      const definition = trimmed.replace(/--.*$/, '');
-      const notNull =
-        /\bnot null\b/i.test(definition) ||
-        /\bprimary key\b/i.test(definition);
-      columns.set(name, notNull && !/\bdefault\b/i.test(definition));
-    }
-    for (const file of readdirSync(migrationsDir).sort()) {
-      if (!file.endsWith('.sql') || file === '001_schema.sql') continue;
-      const later = readFileSync(join(migrationsDir, file), 'utf8');
-      const additions = later.matchAll(
-        /alter\s+table\s+(?:if\s+exists\s+)?public\.personas\s+add\s+column\s+(?:if\s+not\s+exists\s+)?([\w"]+)/gi,
-      );
-      for (const addition of additions) {
-        const name = (addition[1] ?? '').replace(/"/g, '');
-        if (name) columns.set(name, false);
-      }
-    }
-    expect(columns.has('recent_image_ids')).toBe(true);
-    expect(columns.get('user_id')).toBe(true);
-    expect(columns.get('created_at')).toBe(false);
-    expect(columns.get('recent_image_ids')).toBe(false);
-
-    const { inserted } = mockSupabase();
-    const res = await POST(
-      formRequest({
-        name: 'Canal Ninja',
-        avatarUrl: 'data:image/png;base64,IA',
-        voiceId: 'chatterbox:kokoro_af_heart',
-      }),
-    );
-
-    expect(res.status).toBe(200);
-    const payload = inserted[0];
-    expect(payload).toBeDefined();
-
-    for (const key of Object.keys(payload)) {
-      expect(
-        columns.has(key),
-        `insert key "${key}" is not a public.personas column`,
-      ).toBe(true);
-    }
-    for (const [name, required] of columns) {
-      if (required) {
-        expect(payload).toHaveProperty(name);
-      }
-    }
-  });
-
-  it("keeps the recent_image_ids '{}' default literal in sync across SQL files", async () => {
-    const { readFileSync } = await import('node:fs');
-    const { join } = await import('node:path');
-    const supabaseDir = join(findRepoRoot(import.meta.url), 'supabase');
-    const expectations: Array<[string, string]> = [
-      [join('migrations', '001_schema.sql'), `recent_image_ids uuid[] not null default '{}'`],
-      [
-        join('migrations', '002_persona-images.sql'),
-        `recent_image_ids uuid[] not null default '{}'`,
-      ],
-      [
-        'fix-recent-image-ids-default.sql',
-        `alter column recent_image_ids set default '{}'`,
-      ],
-    ];
-    for (const [file, literal] of expectations) {
-      const sql = readFileSync(join(supabaseDir, file), 'utf8');
-      expect(
-        sql.includes(literal),
-        `${file} drifted from the recent_image_ids '{}' default`,
-      ).toBe(true);
-    }
-  });
-
-  it('persists the face quality on an avatar persona (no photo upload)', async () => {
-    const { inserted } = mockSupabase();
-
-    const res = await POST(
-      formRequest({
-        name: 'Ana',
-        avatarUrl: 'data:image/png;base64,IA',
-        voiceId: 'chatterbox:kokoro_af_heart',
-        faceQuality: 'very_good',
-      }),
-    );
-
-    expect(res.status).toBe(200);
-    expect(inserted[0]).toMatchObject({ face_quality: 'very_good' });
-  });
-});
 
 describe('POST /api/persona — account binding (issue #572)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.unstubAllGlobals();
-    restorePinnedHttp();
   });
 
   const validFields = {
@@ -451,46 +240,150 @@ describe('POST /api/persona', () => {
   });
 
   it('returns 401 without a session', async () => {
-    mockSupabase({ user: null });
+    mockSupabase();
     vi.mocked(requireSupabaseSession).mockResolvedValue({
       auth: null,
       error: NextResponse.json({ success: false }, { status: 401 }),
     });
-
-    const res = await POST(formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart' }, [photo()]));
-    const body = (await res.json()) as { success: boolean };
-
+    const res = await POST(formRequest({ name: 'Ana' }));
     expect(res.status).toBe(401);
-    expect(body.success).toBe(false);
   });
 
-  it('retorna 400 sem nome', async () => {
-    mockSupabase();
-
-    const res = await POST(formRequest({ voiceId: 'chatterbox:kokoro_af_heart' }, [photo()]));
-
+  it('returns 400 without a name', async () => {
+    const { inserted } = mockSupabase();
+    const res = await POST(formRequest({}));
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { success: boolean; error: string; code?: string; field?: string };
-    expect(body.success).toBe(false);
-    expect(body.error).toBe('Persona name is required.');
-    expect(body.code).toBe('VALIDATION_FAILED');
-    expect(body.field).toBeUndefined();
-    expect(loggedWarnings()).toContain('[POST /api/persona] 400 Persona name is required.');
+    expect(((await res.json()) as { code?: string }).code).toBe('VALIDATION_FAILED');
+    expect(inserted).toEqual([]);
   });
 
-  it('retorna 400 sem identidade visual (nem foto nem avatarUrl)', async () => {
-    mockSupabase();
+  it('creates a persona with no photo: no upload, photo_path null', async () => {
+    const { inserted, uploaded } = mockSupabase();
+    const res = await POST(formRequest({ name: '  Ana  ' }));
+    const body = (await res.json()) as { success: boolean; personaId: string };
+    expect(res.status).toBe(200);
+    expect(CreatePersonaResponseSchema.safeParse(body).success).toBe(true);
+    expect(body).toEqual({ success: true, personaId: inserted[0]?.id });
+    expect(inserted[0]?.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(uploaded).toEqual([]);
+    expect(inserted[0]).toMatchObject({ user_id: USER_ID, name: 'Ana', photo_path: null });
+    expect(Object.keys(inserted[0] ?? {}).sort()).toEqual(['ai_label', 'id', 'identity_card', 'name', 'photo_path', 'user_id']);
+  });
 
-    const res = await POST(formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart' }));
+  it('creates a persona with an uploaded photo: uploads to Storage and inserts the path', async () => {
+    const { inserted, uploaded } = mockSupabase();
+    const res = await POST(formRequest({ name: 'Ana' }, [photo()]));
+    expect(res.status).toBe(200);
+    expect(uploaded).toHaveLength(1);
+    expect(uploaded[0]?.options.contentType).toBe('image/png');
+    expect(inserted[0]?.photo_path).toBe(uploaded[0]?.path);
+  });
 
+  it('returns 400 with an unsupported photo format', async () => {
+    const { inserted, uploaded } = mockSupabase();
+    const res = await POST(formRequest({ name: 'Ana' }, [new File(['gif'], 'a.gif', { type: 'image/gif' })]));
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string; code?: string; field?: string };
-    expect(body.error).toBe('Provide exactly one of: photo file or avatarUrl.');
-    expect(body.code).toBe('VALIDATION_FAILED');
-    expect(body.field).toBeUndefined();
-    expect(loggedWarnings()).toContain(
-      '[POST /api/persona] 400 Provide exactly one of: photo file or avatarUrl.',
+    expect(uploaded).toEqual([]);
+    expect(inserted).toEqual([]);
+  });
+
+  it('tracks persona_created on success and not on failure', async () => {
+    const { inserted } = mockSupabase();
+    await POST(formRequest({ name: 'Ana' }));
+    expect(trackApiEvent).toHaveBeenCalledWith('persona_created', { personaId: inserted[0]?.id });
+    vi.mocked(trackApiEvent).mockClear();
+    mockSupabase({ insertError: { message: 'boom' } });
+    await POST(formRequest({ name: 'Ana' }));
+    expect(trackApiEvent).not.toHaveBeenCalled();
+  });
+
+  it('returns 500 when the Storage upload fails', async () => {
+    const { inserted } = mockSupabase({ uploadError: { message: 'down' } });
+    const res = await POST(formRequest({ name: 'Ana' }, [photo()]));
+    expect(res.status).toBe(500);
+    expect(inserted).toEqual([]);
+  });
+
+  it('returns 500 when the insert fails', async () => {
+    mockSupabase({ insertError: { message: 'boom' } });
+    const res = await POST(formRequest({ name: 'Ana' }));
+    expect(res.status).toBe(500);
+  });
+
+  it('persona insert payload stays in sync with public.personas (both directions)', async () => {
+    const { readFileSync, readdirSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const migrationsDir = join(findRepoRoot(import.meta.url), 'supabase', 'migrations');
+    const sql = readFileSync(join(migrationsDir, '001_schema.sql'), 'utf8');
+    const tableMatch = sql.match(
+      /create table if not exists public\.personas \(([\s\S]*?)\n\);/i,
     );
+    expect(tableMatch).not.toBeNull();
+    const columnBlock = tableMatch?.[1] ?? '';
+    const constraintKeywords = new Set([
+      'primary',
+      'unique',
+      'foreign',
+      'check',
+      'constraint',
+      'exclude',
+    ]);
+    const columns = new Map<string, boolean>();
+    for (const line of columnBlock.split('\n')) {
+      const trimmed = line.trim();
+      const name = trimmed.split(/\s+/)[0]?.replace(/["`,]/g, '');
+      if (!name || name.startsWith('--') || constraintKeywords.has(name)) {
+        continue;
+      }
+      const definition = trimmed.replace(/--.*$/, '');
+      const notNull =
+        /\bnot null\b/i.test(definition) ||
+        /\bprimary key\b/i.test(definition);
+      columns.set(name, notNull && !/\bdefault\b/i.test(definition));
+    }
+    for (const file of readdirSync(migrationsDir).sort()) {
+      if (!file.endsWith('.sql') || file === '001_schema.sql') continue;
+      const later = readFileSync(join(migrationsDir, file), 'utf8');
+      const additions = later.matchAll(
+        /alter\s+table\s+(?:if\s+exists\s+)?public\.personas\s+add\s+column\s+(?:if\s+not\s+exists\s+)?([\w"]+)/gi,
+      );
+      for (const addition of additions) {
+        const name = (addition[1] ?? '').replace(/"/g, '');
+        if (name) columns.set(name, false);
+      }
+      const drops = later.matchAll(
+        /alter\s+table\s+(?:if\s+exists\s+)?public\.personas\s+drop\s+column\s+(?:if\s+exists\s+)?([\w"]+)/gi,
+      );
+      for (const drop of drops) {
+        const name = (drop[1] ?? '').replace(/"/g, '');
+        if (name) columns.delete(name);
+      }
+    }
+    expect(columns.has('voice_id')).toBe(false);
+    expect(columns.has('identity_card')).toBe(true);
+    expect(columns.get('user_id')).toBe(true);
+    expect(columns.get('created_at')).toBe(false);
+
+    const { inserted } = mockSupabase();
+    const res = await POST(
+      formRequest({ name: 'Canal Ninja' }),
+    );
+
+    expect(res.status).toBe(200);
+    const payload = inserted[0];
+    expect(payload).toBeDefined();
+
+    for (const key of Object.keys(payload)) {
+      expect(
+        columns.has(key),
+        `insert key "${key}" is not a public.personas column`,
+      ).toBe(true);
+    }
+    for (const [name, required] of columns) {
+      if (required) {
+        expect(payload).toHaveProperty(name);
+      }
+    }
   });
 
   it('returns 400 with an invalid multipart payload', async () => {
@@ -508,453 +401,8 @@ describe('POST /api/persona', () => {
     expect(loggedWarnings()).toContain('[POST /api/persona] 400 Invalid multipart payload.');
   });
 
-  it('returns 400 without a voice (missing voiceId)', async () => {
-    mockSupabase();
-
-    const res = await POST(formRequest({ name: 'Ana' }, [photo()]));
-
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string; code?: string; field?: string };
-    expect(body.error).toBe('Provide voiceId.');
-    expect(body.code).toBe('VALIDATION_FAILED');
-    expect(body.field).toBeUndefined();
-    expect(loggedWarnings()).toContain('[POST /api/persona] 400 Provide voiceId.');
-  });
-
-  it('rejeita uma voz desconhecida com 400 antes de upload ou insert (issue #353)', async () => {
-    const { uploaded, inserted } = mockSupabase();
-    posthogMock.capture.mockClear();
-    posthogMock.captureAs.mockClear();
-
-    const res = await POST(formRequest({ name: 'Ana', voiceId: 'energetic' }, [photo()]));
-
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { success: boolean; error: string; code?: string };
-    expect(body.success).toBe(false);
-    expect(body.error).toBe(
-      'Unknown voice "energetic". Not a house voice and not one of your clones. Pick one from GET /api/persona/voices.',
-    );
-    expect(body.code).toBe('UNKNOWN_VOICE');
-    expect(uploaded).toEqual([]);
-    expect(inserted).toEqual([]);
-    await vi.waitFor(() => expect(posthogMock.captureAs).toHaveBeenCalledTimes(1));
-    const [userId, event, properties] = posthogMock.captureAs.mock.calls[0] as [
-      string,
-      string,
-      Record<string, unknown>,
-    ];
-    expect(userId).toBe(USER_ID);
-    expect(event).toBe('persona_created_rejected');
-    expect(properties).toMatchObject({
-      code: 'UNKNOWN_VOICE',
-      voice: 'energetic',
-      route: 'POST /api/persona',
-      status: 400,
-    });
-    expect(posthogMock.capture).not.toHaveBeenCalled();
-    expect(posthogMock.captureException).not.toHaveBeenCalled();
-  });
-
-  it('returns 400 with an unsupported photo format', async () => {
-    mockSupabase();
-    const gif = new File(['gif'], 'foto.gif', { type: 'image/gif' });
-
-    const res = await POST(formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart' }, [gif]));
-
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string; code?: string; field?: string };
-    expect(body.error).toBe('Unsupported photo format: image/gif');
-    expect(body.code).toBe('VALIDATION_FAILED');
-    expect(body.field).toBeUndefined();
-    expect(loggedWarnings()).toContain('[POST /api/persona] 400 Unsupported photo format: image/gif');
-  });
-
-  it('creates a persona with an uploaded photo: uploads to Storage and inserts the row', async () => {
-    const { uploaded, inserted } = mockSupabase();
-
-    const res = await POST(formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart' }, [photo()]));
-    const body = (await res.json()) as { success: boolean; personaId?: string };
-
-    expect(res.status).toBe(200);
-    expect(body.success).toBe(true);
-    expect(body.personaId).toMatch(/^[0-9a-f-]{36}$/);
-    expect(uploaded).toHaveLength(1);
-    expect(uploaded[0].path).toBe(`${USER_ID}/${body.personaId}/photo.png`);
-    expect(uploaded[0].options.contentType).toBe('image/png');
-    expect(inserted[0]).toMatchObject({
-      id: body.personaId,
-      user_id: USER_ID,
-      name: 'Ana',
-      photo_path: `${USER_ID}/${body.personaId}/photo.png`,
-      voice_id: 'chatterbox:kokoro_af_heart',
-    });
-  });
-
-  it('creates a persona with an AI avatar (avatarUrl instead of photo)', async () => {
-    const { uploaded, inserted } = mockSupabase();
-
-    const res = await POST(
-      formRequest({
-        name: 'Robo',
-        avatarUrl: 'data:image/png;base64,IA',
-        voiceId: 'chatterbox:kokoro_af_heart',
-      }),
-    );
-    const body = (await res.json()) as { success: boolean };
-
-    expect(res.status).toBe(200);
-    expect(body.success).toBe(true);
-    expect(uploaded).toHaveLength(0);
-    expect(inserted[0]).toMatchObject({
-      name: 'Robo',
-      avatar_url: 'data:image/png;base64,IA',
-      voice_id: 'chatterbox:kokoro_af_heart',
-    });
-  });
-
-  it('tracks persona_created on success (2xx product analytics)', async () => {
-    mockSupabase();
-
-    const res = await POST(formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart' }, [photo()]));
-    const body = (await res.json()) as { success: boolean; personaId?: string };
-
-    expect(res.status).toBe(200);
-    expect(body.success).toBe(true);
-    expect(trackApiEvent).toHaveBeenCalledWith(
-      'persona_created',
-      expect.objectContaining({ personaId: body.personaId }),
-    );
-  });
-
-  it('does not track persona_created when creation fails', async () => {
-    mockSupabase({ insertError: { message: 'db down' } });
-
-    const res = await POST(formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart' }, [photo()]));
-
-    expect(res.status).toBe(500);
-    expect(trackApiEvent).not.toHaveBeenCalled();
-  });
-
-  it('retorna 500 quando o upload no Storage falha', async () => {
-    mockSupabase({ uploadError: { message: 'bucket down' } });
-
-    const res = await POST(formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart' }, [photo()]));
-
-    expect(res.status).toBe(500);
-    const body = (await res.json()) as { success: boolean; error: string };
-    expect(body.success).toBe(false);
-    expect(body.error).toBeTruthy();
-    expect(errorSpy).toHaveBeenCalledWith(
-      '[api/persona] storage upload failed',
-      expect.objectContaining({ message: 'bucket down' }),
-      expect.objectContaining({ path: expect.stringContaining('/photo.png') }),
-    );
-  });
-
-  it('retorna 500 quando o insert na tabela falha', async () => {
-    mockSupabase({ insertError: { message: 'check violation' } });
-
-    const res = await POST(formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart' }, [photo()]));
-
-    expect(res.status).toBe(500);
-    const body = (await res.json()) as { success: boolean; error: string };
-    expect(body.success).toBe(false);
-  });
-
-  it('creates a persona with full content preferences', async () => {
-    const { inserted } = mockSupabase();
-
-    const res = await POST(
-      formRequest({
-        name: 'Ana',
-        voiceId: 'chatterbox:kokoro_af_heart',
-        language: 'en',
-        videoAspect: '16:9',
-        scriptPrompt: 'Storytelling com hook forte.',
-        ctaType: 'link',
-        ctaUrl: 'https://example.com/course',
-        paragraphNumber: '3',
-      }, [photo()]),
-    );
-
-    expect(res.status).toBe(200);
-    expect(inserted[0]).toMatchObject({
-      language: 'en',
-      video_aspect: '16:9',
-      script_prompt: 'Storytelling com hook forte.',
-      cta_type: 'link',
-      cta_url: 'https://example.com/course',
-      cta_instruction: null,
-      paragraph_number: 3,
-    });
-  });
-
-  it('rejects a persona with a non-English language (English-only launch)', async () => {
-    const { inserted } = mockSupabase();
-
-    const res = await POST(
-      formRequest({
-        name: 'Ana',
-        voiceId: 'chatterbox:kokoro_af_heart',
-        language: 'pt',
-      }, [photo()]),
-    );
-
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { success: boolean; error: string };
-    expect(body.success).toBe(false);
-    expect(body.error).toBe('Only English videos are supported for now.');
-    expect(inserted).toHaveLength(0);
-  });
-
-  it('creates a persona without preferences: columns stay null (house default)', async () => {
-    const { inserted } = mockSupabase();
-
-    const res = await POST(formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart' }, [photo()]));
-
-    expect(res.status).toBe(200);
-    expect(inserted[0]).toMatchObject({
-      language: null,
-      video_aspect: null,
-      script_prompt: null,
-      cta_type: 'follow',
-      cta_url: null,
-      cta_instruction: null,
-      paragraph_number: null,
-    });
-  });
-
-  it('returns 400 when a link CTA has no URL on create', async () => {
-    const { inserted } = mockSupabase();
-
-    const res = await POST(formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart', ctaType: 'link' }, [photo()]));
-
-    expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toBe('A link CTA needs a URL.');
-    expect(inserted).toHaveLength(0);
-  });
-
-  it('returns 400 when an other CTA has no instruction on create', async () => {
-    const { inserted } = mockSupabase();
-
-    const res = await POST(formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart', ctaType: 'other' }, [photo()]));
-
-    expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toBe('An other CTA needs an instruction.');
-    expect(inserted).toHaveLength(0);
-  });
-
-  it('returns 400 when a CTA URL is over 2048 characters on create', async () => {
-    const { inserted } = mockSupabase();
-
-    const res = await POST(formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart', ctaType: 'link', ctaUrl: `https://example.com/${'a'.repeat(2048)}` }, [photo()]));
-
-    expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toBe('Invalid ctaUrl: use a valid URL of at most 2048 characters.');
-    expect(inserted).toHaveLength(0);
-  });
-
-  it('returns 400 when a CTA instruction is over 500 characters on create', async () => {
-    const { inserted } = mockSupabase();
-
-    const res = await POST(formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart', ctaType: 'other', ctaInstruction: 'a'.repeat(501) }, [photo()]));
-
-    expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toBe('Invalid ctaInstruction: use at most 500 characters.');
-    expect(inserted).toHaveLength(0);
-  });
-
-  it('returns 400 with an invalid videoAspect', async () => {
-    mockSupabase();
-
-    const res = await POST(
-      formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart', videoAspect: '4:3' }, [photo()]),
-    );
-
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toContain('videoAspect');
-  });
-
-  it('creates a persona with a react videoLayout: video_layout is stored', async () => {
-    const { inserted } = mockSupabase();
-
-    const res = await POST(
-      formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart', videoLayout: 'react' }, [photo()]),
-    );
-
-    expect(res.status).toBe(200);
-    expect(inserted[0]).toMatchObject({ video_layout: 'react' });
-  });
-
-  it('cria persona com nicho', async () => {
-    const { inserted } = mockSupabase();
-
-    const res = await POST(
-      formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart', niche: 'finanças pessoais' }, [photo()]),
-    );
-
-    expect(res.status).toBe(200);
-    expect(inserted[0]).toMatchObject({ niche: 'finanças pessoais' });
-  });
-
-  it('cria persona sem nicho: coluna fica null', async () => {
-    const { inserted } = mockSupabase();
-
-    const res = await POST(formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart' }, [photo()]));
-
-    expect(res.status).toBe(200);
-    expect(inserted[0]).toMatchObject({ niche: null });
-  });
-
-  it('retorna 400 com niche acima de 300 caracteres', async () => {
-    mockSupabase();
-
-    const res = await POST(
-      formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart', niche: 'x'.repeat(301) }, [photo()]),
-    );
-
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toContain('niche');
-  });
-
-  it('retorna 400 com paragraphNumber fora de 1–10', async () => {
-    mockSupabase();
-
-    const res = await POST(
-      formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart', paragraphNumber: '11' }, [photo()]),
-    );
-
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toContain('paragraphNumber');
-  });
-
-  it('returns 400 with a non-numeric paragraphNumber', async () => {
-    mockSupabase();
-
-    const res = await POST(
-      formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart', paragraphNumber: 'muito' }, [photo()]),
-    );
-
-    expect(res.status).toBe(400);
-  });
 });
 
-describe('POST /api/persona — face quality (no mix, no mode)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('persists the face quality (the only face choice a persona has)', async () => {
-    const { inserted } = mockSupabase();
-
-    const res = await POST(
-      formRequest({
-        name: 'Ana',
-        voiceId: 'chatterbox:kokoro_af_heart',
-        faceQuality: 'very_good',
-      }, [photo()]),
-    );
-
-    expect(res.status).toBe(200);
-    expect(inserted[0]).toMatchObject({ face_quality: 'very_good' });
-  });
-
-  it('returns 400 with an invalid faceQuality', async () => {
-    mockSupabase();
-
-    const res = await POST(
-      formRequest({
-        name: 'Ana',
-        voiceId: 'chatterbox:kokoro_af_heart',
-        faceQuality: 'ultra',
-      }, [photo()]),
-    );
-
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toContain('faceQuality');
-  });
-
-  it('https PNG avatar is stored as photo_path with avatar_url null', async () => {
-    const { uploaded, inserted } = mockSupabase();
-    stubPngFetch();
-    const res = await POST(
-      formRequest({
-        name: 'Remote',
-        avatarUrl: 'https://cdn.example/face.png',
-        voiceId: 'chatterbox:kokoro_af_heart',
-      }),
-    );
-    const body = (await res.json()) as { success: boolean; personaId?: string };
-    expect(res.status).toBe(200);
-    expect(uploaded).toHaveLength(1);
-    expect(uploaded[0].path).toBe(`${USER_ID}/${body.personaId}/photo.png`);
-    expect(inserted[0]).toMatchObject({
-      photo_path: `${USER_ID}/${body.personaId}/photo.png`,
-      avatar_url: null,
-    });
-    vi.unstubAllGlobals();
-  });
-
-  it('keeps caracter-samples on avatar_url and does not download', async () => {
-    const { uploaded, inserted } = mockSupabase();
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
-    const res = await POST(
-      formRequest({
-        name: 'Sample',
-        avatarUrl: '/caracter-samples/file-3.png',
-        voiceId: 'chatterbox:kokoro_af_heart',
-      }),
-    );
-    expect(res.status).toBe(200);
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(uploaded).toHaveLength(0);
-    expect(inserted[0]).toMatchObject({
-      photo_path: null,
-      avatar_url: '/caracter-samples/file-3.png',
-    });
-    vi.unstubAllGlobals();
-  });
-
-  it.each([
-    '//169.254.169.254/latest/meta-data/',
-    '/\\169.254.169.254/x',
-  ])('rejects the protocol-relative avatarUrl %s with a 400 and no insert', async (avatarUrl) => {
-    const { uploaded, inserted } = mockSupabase();
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
-    const res = await POST(
-      formRequest({ name: 'Probe', avatarUrl, voiceId: 'chatterbox:kokoro_af_heart' }),
-    );
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe(REMOTE_FACE_ERROR);
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(inserted).toHaveLength(0);
-    expect(uploaded).toHaveLength(0);
-    vi.unstubAllGlobals();
-  });
-
-  it('404 remote avatar fails the save without inserting', async () => {
-    const { uploaded, inserted } = mockSupabase();
-    stubFetchResponse(new Response('gone', { status: 404, headers: { 'content-type': 'text/plain' } }));
-    const res = await POST(
-      formRequest({
-        name: 'Dead',
-        avatarUrl: 'https://muse.ai/missing.jpg',
-        voiceId: 'chatterbox:kokoro_af_heart',
-      }),
-    );
-    expect(res.status).toBe(400);
-    expect(inserted).toHaveLength(0);
-    expect(uploaded).toHaveLength(0);
-    vi.unstubAllGlobals();
-  });
-});
 
 interface PatchOverrides {
   user?: { id: string } | null;
@@ -981,7 +429,7 @@ function mockSupabaseForDelete(deleteError: { code?: string; message: string } |
               limit: vi.fn(async () => ({ data: [], error: null, count: 0 })),
             })),
             single: vi.fn(async () => ({
-              data: { id: 'persona-uuid-1', photo_path: null, voice_audio_path: null },
+              data: { id: 'persona-uuid-1', photo_path: null },
               error: null,
             })),
             then: (resolve: (v: unknown) => void) => {
@@ -1017,8 +465,6 @@ function mockSupabaseForPatch(overrides: PatchOverrides = {}) {
         name: 'Antiga',
         photo_path: `${USER_ID}/foto-antiga.png`,
         avatar_url: null,
-        voice_id: 'voz-antiga',
-        voice_audio_path: null,
       }
       : overrides.existing;
 
@@ -1081,7 +527,7 @@ function patchRequest(
     formData.append(key, value);
   }
   for (const file of files) {
-    formData.append(file.type.startsWith('audio/') ? 'voiceAudio' : 'photo', file);
+    formData.append('photo', file);
   }
   return new Request(`http://localhost/api/persona?personaId=${personaId}`, {
     method: 'PATCH',
@@ -1092,8 +538,6 @@ function patchRequest(
 describe('PATCH /api/persona', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.unstubAllGlobals();
-    restorePinnedHttp();
   });
 
   it('retorna 401 quando não há sessão', async () => {
@@ -1157,51 +601,6 @@ describe('PATCH /api/persona', () => {
     expect(updated[0]).toMatchObject({ name: 'Novo Nome' });
   });
 
-  it('updates the videoLayout', async () => {
-    const { updated } = mockSupabaseForPatch();
-
-    const res = await PATCH(patchRequest('persona-uuid-1', { videoLayout: 'react' }));
-
-    expect(res.status).toBe(200);
-    expect(updated[0]).toMatchObject({ video_layout: 'react' });
-  });
-
-  it('updates face_quality alone, without recreating the persona', async () => {
-    const { updated } = mockSupabaseForPatch();
-
-    const res = await PATCH(patchRequest('persona-uuid-1', { faceQuality: 'ok' }));
-
-    expect(res.status).toBe(200);
-    expect((await res.json()) as { success: boolean }).toEqual({ success: true });
-    expect(updated[0]).toMatchObject({ face_quality: 'ok' });
-  });
-
-  it('returns 400 with an invalid faceQuality', async () => {
-    mockSupabaseForPatch();
-
-    const res = await PATCH(patchRequest('persona-uuid-1', { faceQuality: 'ultra' }));
-
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string; code?: string };
-    expect(body.error).toBe('Invalid faceQuality: ultra. Use one of ok, very_good.');
-    expect(body.code).toBe('VALIDATION_FAILED');
-  });
-
-  it('returns 400 with an invalid videoLayout', async () => {
-    mockSupabaseForPatch();
-
-    const res = await PATCH(patchRequest('persona-uuid-1', { videoLayout: 'cinematic' }));
-
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string; code?: string; field?: string };
-    expect(body.error).toBe("Invalid videoLayout: cinematic. Use one of standard, react.");
-    expect(body.code).toBe('VALIDATION_FAILED');
-    expect(body.field).toBeUndefined();
-    expect(loggedWarnings()).toContain(
-      '[PATCH /api/persona] 400 Invalid videoLayout. Use one of standard, react.',
-    );
-  });
-
   it('nova foto substitui a antiga: sobe arquivo novo e remove o antigo', async () => {
     const { uploaded, removed, updated } = mockSupabaseForPatch();
 
@@ -1211,170 +610,6 @@ describe('PATCH /api/persona', () => {
     expect(uploaded[0].path).toBe(`${USER_ID}/persona-uuid-1/photo.png`);
     expect(updated[0]).toMatchObject({ photo_path: uploaded[0].path });
     expect(removed).toContain(`${USER_ID}/foto-antiga.png`);
-  });
-
-  it('rejects an unknown voice before uploading a new photo: no orphan in Storage, no write', async () => {
-    const { uploaded, updated } = mockSupabaseForPatch();
-
-    const res = await PATCH(
-      patchRequest('persona-uuid-1', { voiceId: 'energetic' }, [photo()]),
-    );
-
-    expect(res.status).toBe(400);
-    expect(uploaded).toEqual([]);
-    expect(updated).toEqual([]);
-  });
-
-  it('trocar de foto para personagem limpa photo_path no MESMO update', async () => {
-    const { updated, removed } = mockSupabaseForPatch({
-      existing: {
-        id: 'persona-uuid-1',
-        user_id: USER_ID,
-        name: 'Com Foto',
-        photo_path: `${USER_ID}/foto-antiga.png`,
-        avatar_url: null,
-        voice_id: 'voz',
-        voice_audio_path: null,
-      },
-    });
-
-    const res = await PATCH(
-      patchRequest('persona-uuid-1', { avatarUrl: '/caracter-samples/file-3.png' }),
-    );
-
-    expect(res.status).toBe(200);
-    expect(updated[0]).toMatchObject({
-      avatar_url: '/caracter-samples/file-3.png',
-      photo_path: null,
-    });
-    expect(removed).toContain(`${USER_ID}/foto-antiga.png`);
-  });
-
-  it('PATCH https PNG stores photo_path and clears avatar_url in the same update', async () => {
-    const { uploaded, updated } = mockSupabaseForPatch();
-    stubPngFetch();
-    const res = await PATCH(
-      patchRequest('persona-uuid-1', { avatarUrl: 'https://cdn.example/face.png' }),
-    );
-    expect(res.status).toBe(200);
-    expect(uploaded[0].path).toBe(`${USER_ID}/persona-uuid-1/photo.png`);
-    expect(updated[0]).toMatchObject({
-      photo_path: `${USER_ID}/persona-uuid-1/photo.png`,
-      avatar_url: null,
-    });
-    vi.unstubAllGlobals();
-  });
-
-  it('PATCH rejects a protocol-relative avatarUrl with a 400 and no update', async () => {
-    const { uploaded, updated } = mockSupabaseForPatch();
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
-    const res = await PATCH(
-      patchRequest('persona-uuid-1', { avatarUrl: '//169.254.169.254/latest/meta-data/' }),
-    );
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe(REMOTE_FACE_ERROR);
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(uploaded).toEqual([]);
-    expect(updated).toEqual([]);
-    vi.unstubAllGlobals();
-  });
-
-  it('PATCH 404 remote avatar does not set both columns', async () => {
-    const { uploaded, updated } = mockSupabaseForPatch();
-    stubFetchResponse(new Response('gone', { status: 404, headers: { 'content-type': 'text/plain' } }));
-    const res = await PATCH(
-      patchRequest('persona-uuid-1', { avatarUrl: 'https://muse.ai/missing.jpg' }),
-    );
-    expect(res.status).toBe(400);
-    expect(uploaded).toEqual([]);
-    expect(updated).toEqual([]);
-    vi.unstubAllGlobals();
-  });
-
-  it('trocar para voz da casa grava voice_id e limpa voice_audio_path', async () => {
-    const { updated, removed } = mockSupabaseForPatch({
-      existing: {
-        id: 'persona-uuid-1',
-        user_id: USER_ID,
-        name: 'Antiga',
-        photo_path: null,
-        avatar_url: null,
-        voice_id: null,
-        voice_audio_path: `${USER_ID}/voz-antiga.mp3`,
-      },
-    });
-
-    const res = await PATCH(patchRequest('persona-uuid-1', { voiceId: 'chatterbox:kokoro_af_heart' }));
-
-    expect(res.status).toBe(200);
-    expect(updated[0]).toMatchObject({ voice_id: 'chatterbox:kokoro_af_heart', voice_audio_path: null });
-    expect(removed).toContain(`${USER_ID}/voz-antiga.mp3`);
-  });
-
-  it('rejeita uma voz nova desconhecida com 400 sem gravar nada (#353)', async () => {
-    const { updated, removed } = mockSupabaseForPatch({
-      existing: {
-        id: 'persona-uuid-1',
-        user_id: USER_ID,
-        name: 'Antiga',
-        photo_path: null,
-        avatar_url: null,
-        voice_id: null,
-        voice_audio_path: null,
-      },
-    });
-    posthogMock.capture.mockClear();
-    posthogMock.captureAs.mockClear();
-
-    const res = await PATCH(patchRequest('persona-uuid-1', { voiceId: 'energetic' }));
-
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { success: boolean; error: string; code?: string };
-    expect(body.error).toBe(
-      'Unknown voice "energetic". Not a house voice and not one of your clones. Pick one from GET /api/persona/voices.',
-    );
-    expect(body.code).toBe('UNKNOWN_VOICE');
-    await vi.waitFor(() => expect(posthogMock.captureAs).toHaveBeenCalledTimes(1));
-    const [userId, event, properties] = posthogMock.captureAs.mock.calls[0] as [
-      string,
-      string,
-      Record<string, unknown>,
-    ];
-    expect(userId).toBe(USER_ID);
-    expect(event).toBe('persona_updated_rejected');
-    expect(properties).toMatchObject({
-      code: 'UNKNOWN_VOICE',
-      voice: 'energetic',
-      route: 'PATCH /api/persona',
-      status: 400,
-    });
-    expect(posthogMock.capture).not.toHaveBeenCalled();
-    expect(updated).toEqual([]);
-    expect(removed).toEqual([]);
-  });
-
-  it('edita um persona que guarda nome Bare legacy sem revalidar a voz (#353)', async () => {
-    const { updated } = mockSupabaseForPatch({
-      existing: {
-        id: 'persona-uuid-1',
-        user_id: USER_ID,
-        name: 'Antiga',
-        photo_path: null,
-        avatar_url: null,
-        voice_id: 'energetic',
-        voice_audio_path: null,
-      },
-    });
-
-    const res = await PATCH(
-      patchRequest('persona-uuid-1', { name: 'Nova', voiceId: 'energetic' }),
-    );
-
-    expect(res.status).toBe(200);
-    expect(updated[0]).toMatchObject({ name: 'Nova' });
-    expect(vi.mocked(fetchPersonaVoiceCatalogIds)).not.toHaveBeenCalled();
   });
 
   it('returns 400 with an unsupported photo format', async () => {
@@ -1406,54 +641,7 @@ describe('PATCH /api/persona', () => {
       name: 'Ana Original',
       photo_path: `${USER_ID}/foto-original.png`,
       avatar_url: null,
-      voice_id: 'voz-original',
-      voice_audio_path: null,
     };
-
-    it('changing only the name preserves photo and voice: update contains only name', async () => {
-      const { updated, removed } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
-
-      const res = await PATCH(patchRequest('persona-uuid-1', { name: 'Só Nome' }));
-
-      expect(res.status).toBe(200);
-      expect(Object.keys(updated[0]).sort()).toEqual(['name']);
-      expect(updated[0].name).toBe('Só Nome');
-      expect(removed).toEqual([]);
-    });
-
-    it('changing only the voice preserves name and photo: update omits photo fields', async () => {
-      const { updated, removed } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
-
-      const res = await PATCH(patchRequest('persona-uuid-1', { voiceId: 'chatterbox:kokoro_af_heart' }));
-
-      expect(res.status).toBe(200);
-      expect(Object.keys(updated[0]).sort()).toEqual(['voice_audio_path', 'voice_id']);
-      expect(updated[0].voice_id).toBe('chatterbox:kokoro_af_heart');
-      expect(removed).toEqual([]);
-    });
-
-    it('changing only the photo preserves name and voice: update omits voice fields', async () => {
-      const { updated, removed } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
-
-      const res = await PATCH(patchRequest('persona-uuid-1', {}, [photo()]));
-
-      expect(res.status).toBe(200);
-      expect(Object.keys(updated[0]).sort()).toEqual(['avatar_url', 'photo_path']);
-      expect(removed).toEqual([`${USER_ID}/foto-original.png`]);
-    });
-
-    it('mudar nome e voz junto preserva a foto original', async () => {
-      const { uploaded, updated, removed } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
-
-      const res = await PATCH(
-        patchRequest('persona-uuid-1', { name: 'Ana Editada', voiceId: 'chatterbox:kokoro_af_heart' }),
-      );
-
-      expect(res.status).toBe(200);
-      expect(Object.keys(updated[0]).sort()).toEqual(['name', 'voice_audio_path', 'voice_id']);
-      expect(uploaded).toEqual([]);
-      expect(removed).toEqual([]);
-    });
 
     it('changing only the name uploads no new file', async () => {
       const { uploaded } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
@@ -1463,250 +651,6 @@ describe('PATCH /api/persona', () => {
       expect(uploaded).toEqual([]);
     });
 
-    it('preferences: updating language updates only language', async () => {
-      const { updated } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
-
-      const res = await PATCH(patchRequest('persona-uuid-1', { language: 'en' }));
-
-      expect(res.status).toBe(200);
-      expect(Object.keys(updated[0])).toEqual(['language']);
-      expect(updated[0].language).toBe('en');
-    });
-
-    it('preferences: updates videoAspect, scriptPrompt and paragraphNumber together', async () => {
-      const { updated } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
-
-      const res = await PATCH(
-        patchRequest('persona-uuid-1', {
-          videoAspect: '1:1',
-          scriptPrompt: 'Direto ao ponto.',
-          paragraphNumber: '2',
-        }),
-      );
-
-      expect(res.status).toBe(200);
-      expect(Object.keys(updated[0]).sort()).toEqual(['paragraph_number', 'script_prompt', 'video_aspect']);
-      expect(updated[0]).toMatchObject({
-        video_aspect: '1:1',
-        script_prompt: 'Direto ao ponto.',
-        paragraph_number: 2,
-      });
-    });
-
-    it('ctaType: updates only the call to action type', async () => {
-      const { updated } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
-
-      const res = await PATCH(patchRequest('persona-uuid-1', { ctaType: 'comment' }));
-
-      expect(res.status).toBe(200);
-      expect(updated[0]).toEqual({ cta_type: 'comment' });
-    });
-
-    it('ctaType: switching a link persona to comment clears the stored URL', async () => {
-      const { updated } = mockSupabaseForPatch({
-        existing: { ...PERSONA_COMPLETA, cta_type: 'link', cta_url: 'https://example.com/course', cta_instruction: null },
-      });
-
-      const res = await PATCH(patchRequest('persona-uuid-1', { ctaType: 'comment' }));
-
-      expect(res.status).toBe(200);
-      expect(updated[0]).toEqual({ cta_type: 'comment', cta_url: null });
-    });
-
-    it('ctaType: switching an other persona to follow clears the stored instruction', async () => {
-      const { updated } = mockSupabaseForPatch({
-        existing: { ...PERSONA_COMPLETA, cta_type: 'other', cta_url: null, cta_instruction: 'Invite to the WhatsApp group' },
-      });
-
-      const res = await PATCH(patchRequest('persona-uuid-1', { ctaType: 'follow' }));
-
-      expect(res.status).toBe(200);
-      expect(updated[0]).toEqual({ cta_type: 'follow', cta_instruction: null });
-    });
-
-    it('ctaType: switching to link without a URL returns 400 and stores nothing', async () => {
-      const { updated } = mockSupabaseForPatch({
-        existing: { ...PERSONA_COMPLETA, cta_type: 'follow', cta_url: null, cta_instruction: null },
-      });
-
-      const res = await PATCH(patchRequest('persona-uuid-1', { ctaType: 'link' }));
-
-      expect(res.status).toBe(400);
-      expect(updated).toHaveLength(0);
-    });
-
-    it('ctaType: an incoherent CTA with a photo returns 400 and uploads nothing', async () => {
-      const { updated, uploaded } = mockSupabaseForPatch({
-        existing: { ...PERSONA_COMPLETA, cta_type: 'follow', cta_url: null, cta_instruction: null },
-      });
-
-      const res = await PATCH(patchRequest('persona-uuid-1', { ctaType: 'link' }, [photo()]));
-
-      expect(res.status).toBe(400);
-      expect(updated).toHaveLength(0);
-      expect(uploaded).toHaveLength(0);
-    });
-
-    it('ctaType: switching link to buy keeps the stored URL', async () => {
-      const { updated } = mockSupabaseForPatch({
-        existing: { ...PERSONA_COMPLETA, cta_type: 'link', cta_url: 'https://example.com/course', cta_instruction: null },
-      });
-
-      const res = await PATCH(patchRequest('persona-uuid-1', { ctaType: 'buy' }));
-
-      expect(res.status).toBe(200);
-      expect(updated[0]).toEqual({ cta_type: 'buy' });
-    });
-
-    it('ctaUrl: updating only the URL is checked against the stored link type', async () => {
-      const { updated } = mockSupabaseForPatch({
-        existing: { ...PERSONA_COMPLETA, cta_type: 'link', cta_url: 'https://example.com/old', cta_instruction: null },
-      });
-
-      const res = await PATCH(patchRequest('persona-uuid-1', { ctaUrl: 'https://example.com/new' }));
-
-      expect(res.status).toBe(200);
-      expect(updated[0]).toEqual({ cta_url: 'https://example.com/new' });
-    });
-
-    it('ctaUrl: a URL on a follow persona returns 400', async () => {
-      const { updated } = mockSupabaseForPatch({
-        existing: { ...PERSONA_COMPLETA, cta_type: 'follow', cta_url: null, cta_instruction: null },
-      });
-
-      const res = await PATCH(patchRequest('persona-uuid-1', { ctaUrl: 'https://example.com/course' }));
-
-      expect(res.status).toBe(400);
-      expect(updated).toHaveLength(0);
-    });
-
-    it('ctaType: returns 400 for an unknown type', async () => {
-      const { updated } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
-
-      const res = await PATCH(patchRequest('persona-uuid-1', { ctaType: 'subscribe' }));
-
-      expect(res.status).toBe(400);
-      expect(updated).toHaveLength(0);
-    });
-
-    it('ctaUrl: returns 400 when not a URL', async () => {
-      const { updated } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
-
-      const res = await PATCH(patchRequest('persona-uuid-1', { ctaUrl: 'not-a-url' }));
-
-      expect(res.status).toBe(400);
-      expect(updated).toHaveLength(0);
-    });
-
-    it('ctaUrl: returns 400 when over 2048 characters', async () => {
-      const { updated } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
-
-      const res = await PATCH(patchRequest('persona-uuid-1', { ctaUrl: `https://example.com/${'a'.repeat(2048)}` }));
-
-      expect(res.status).toBe(400);
-      expect(updated).toHaveLength(0);
-    });
-
-    it('ctaUrl: a blank value clears the stored URL', async () => {
-      const { updated } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
-
-      const res = await PATCH(patchRequest('persona-uuid-1', { ctaUrl: '' }));
-
-      expect(res.status).toBe(200);
-      expect(updated[0]).toEqual({ cta_url: null });
-    });
-
-    it('ctaInstruction: a blank value clears the stored instruction', async () => {
-      const { updated } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
-
-      const res = await PATCH(patchRequest('persona-uuid-1', { ctaInstruction: '' }));
-
-      expect(res.status).toBe(200);
-      expect(updated[0]).toEqual({ cta_instruction: null });
-    });
-
-    it('ctaType: an absent field leaves the stored call to action untouched', async () => {
-      const { updated } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
-
-      const res = await PATCH(patchRequest('persona-uuid-1', { name: 'Ana Maria' }));
-
-      expect(res.status).toBe(200);
-      expect(updated[0]).toEqual({ name: 'Ana Maria' });
-    });
-
-    it('niche: updates only the niche', async () => {
-      const { updated } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
-
-      const res = await PATCH(patchRequest('persona-uuid-1', { niche: 'viagens de motorhome' }));
-
-      expect(res.status).toBe(200);
-      expect(Object.keys(updated[0])).toEqual(['niche']);
-      expect(updated[0].niche).toBe('viagens de motorhome');
-    });
-
-    it('niche: an empty string is treated as a missing field', async () => {
-      mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
-
-      const res = await PATCH(patchRequest('persona-uuid-1', { niche: '' }));
-
-      expect(res.status).toBe(400);
-      const body = (await res.json()) as { error: string };
-      expect(body.error).toContain('Nothing to update');
-    });
-
-    it('nicho: retorna 400 acima de 300 caracteres no PATCH', async () => {
-      mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
-
-      const res = await PATCH(patchRequest('persona-uuid-1', { niche: 'x'.repeat(301) }));
-
-      expect(res.status).toBe(400);
-      const body = (await res.json()) as { error: string };
-      expect(body.error).toContain('niche');
-    });
-
-    it('preferences: updating language preserves photo and voice intact', async () => {
-      const { uploaded, removed, updated } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
-
-      await PATCH(patchRequest('persona-uuid-1', { language: 'en-GB' }));
-
-      expect(Object.keys(updated[0])).toEqual(['language']);
-      expect(uploaded).toEqual([]);
-      expect(removed).toEqual([]);
-    });
-
-    it('preferences: rejects a non-English language (English-only launch)', async () => {
-      const { updated } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
-
-      const res = await PATCH(patchRequest('persona-uuid-1', { language: 'pt' }));
-
-      expect(res.status).toBe(400);
-      const body = (await res.json()) as { error: string };
-      expect(body.error).toBe('Only English videos are supported for now.');
-      expect(updated).toHaveLength(0);
-    });
-
-    it('preferences: returns 400 with an invalid videoAspect on PATCH', async () => {
-      mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
-
-      const res = await PATCH(patchRequest('persona-uuid-1', { videoAspect: '21:9' }));
-
-      expect(res.status).toBe(400);
-      const body = (await res.json()) as { error: string; code?: string; field?: string };
-      expect(body.error).toBe('Invalid videoAspect: 21:9. Use one of 9:16, 16:9, 1:1.');
-      expect(body.code).toBe('VALIDATION_FAILED');
-      expect(body.field).toBeUndefined();
-      expect(loggedWarnings()).toContain(
-        '[PATCH /api/persona] 400 Invalid videoAspect. Use one of 9:16, 16:9, 1:1.',
-      );
-    });
-
-    it('preferences: returns 400 with an invalid paragraphNumber on PATCH', async () => {
-      mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
-
-      const res = await PATCH(patchRequest('persona-uuid-1', { paragraphNumber: '0' }));
-
-      expect(res.status).toBe(400);
-    });
   });
 });
 
@@ -1730,129 +674,4 @@ describe('DELETE /api/persona', () => {
     expect(body.success).toBe(false);
   });
 
-  it('inclui os image_paths da biblioteca na limpeza do storage', async () => {
-    const removed: string[][] = [];
-    const client = {
-      auth: {
-        getUser: vi.fn(async () => ({ data: { user: { id: USER_ID } }, error: null })),
-      },
-      storage: {
-        from: vi.fn(() => ({
-          remove: vi.fn(async (paths: string[]) => {
-            removed.push(paths);
-            return { error: null };
-          }),
-        })),
-      },
-      from: vi.fn((table: string) => {
-        if (table === 'persona_images') {
-          return {
-            select: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                eq: vi.fn(async () => ({
-                  data: [{ image_path: 'uid/img1.png' }, { image_path: 'uid/img2.png' }],
-                  error: null,
-                })),
-              })),
-            })),
-          };
-        }
-        return {
-          select: vi.fn(() => ({
-            eq: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                order: vi.fn(() => ({
-                  limit: vi.fn(async () => ({ data: [], error: null, count: 0 })),
-                })),
-                single: vi.fn(async () => ({
-                  data: { id: 'persona-uuid-1', photo_path: null, voice_audio_path: null },
-                  error: null,
-                })),
-                then: (resolve: (v: unknown) => void) => {
-                  resolve({ data: [], error: null });
-                },
-              })),
-            })),
-          })),
-          delete: vi.fn(() => ({
-            eq: vi.fn(() => ({
-              eq: vi.fn(async () => ({ error: null })),
-            })),
-          })),
-        };
-      }),
-    };
-    vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
-    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
-    vi.mocked(requireSupabaseSession).mockResolvedValue({
-      auth: { userId: USER_ID, accessToken: 'cookie-token' },
-      error: null,
-    });
-
-    const res = await DELETE(
-      new Request('http://localhost/api/persona?personaId=persona-uuid-1', { method: 'DELETE' }),
-    );
-    const body = (await res.json()) as { success: boolean };
-
-    expect(res.status).toBe(200);
-    expect(DeletePersonaResponseSchema.safeParse(body).success).toBe(true);
-    expect(body.success).toBe(true);
-    expect(removed).toHaveLength(1);
-    expect(removed[0]).toEqual(['uid/img1.png', 'uid/img2.png']);
-  });
-
-  it('retorna 500 quando a leitura da biblioteca falha', async () => {
-    const client = {
-      auth: {
-        getUser: vi.fn(async () => ({ data: { user: { id: USER_ID } }, error: null })),
-      },
-      storage: { from: vi.fn(() => ({ remove: vi.fn(async () => ({ error: null })) })) },
-      from: vi.fn((table: string) => {
-        if (table === 'persona_images') {
-          return {
-            select: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                eq: vi.fn(async () => ({ data: null, error: { message: 'db down' } })),
-              })),
-            })),
-          };
-        }
-        return {
-          select: vi.fn(() => ({
-            eq: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                order: vi.fn(() => ({
-                  limit: vi.fn(async () => ({ data: [], error: null, count: 0 })),
-                })),
-                single: vi.fn(async () => ({
-                  data: { id: 'persona-uuid-1', photo_path: null, voice_audio_path: null },
-                  error: null,
-                })),
-                then: (resolve: (v: unknown) => void) => {
-                  resolve({ data: [], error: null });
-                },
-              })),
-            })),
-          })),
-          delete: vi.fn(() => ({
-            eq: vi.fn(() => ({
-              eq: vi.fn(async () => ({ error: null })),
-            })),
-          })),
-        };
-      }),
-    };
-    vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
-    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
-    vi.mocked(requireSupabaseSession).mockResolvedValue({
-      auth: { userId: USER_ID, accessToken: 'cookie-token' },
-      error: null,
-    });
-
-    const res = await DELETE(
-      new Request('http://localhost/api/persona?personaId=persona-uuid-1', { method: 'DELETE' }),
-    );
-
-    expect(res.status).toBe(500);
-  });
 });

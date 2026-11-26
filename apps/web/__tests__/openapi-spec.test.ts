@@ -88,14 +88,10 @@ describe('public/openapi.json', () => {
   it('documents the route-specific statuses clients must handle', () => {
     const ops = spec.paths as unknown as Record<string, Record<string, { responses: Record<string, unknown> }>>;
     const statuses = (path: string, method: string): string[] => Object.keys(ops[path][method].responses);
-    expect(statuses('/api/videos/generate-and-schedule', 'post')).toEqual(expect.arrayContaining(['402', '409', '502']));
-    expect(statuses('/api/persona/video-status/{taskId}', 'get')).toEqual(expect.arrayContaining(['410', '502']));
-  });
-
-  it('documents the score-draft result fields, not just success', () => {
-    const ops = spec.paths as unknown as Record<string, Record<string, { responses: Record<string, { content: Record<string, { schema: { properties: Record<string, unknown> } }> }> }>>;
-    const props = ops['/api/videos/score-draft'].post.responses['200'].content['application/json'].schema.properties;
-    expect(Object.keys(props)).toEqual(expect.arrayContaining(['score', 'reasons', 'counts', 'baseline', 'publishCheck']));
+    expect(statuses('/api/media/publish-existing', 'post')).toEqual(expect.arrayContaining(['402', '409', '410', '502']));
+    expect(statuses('/api/videos/upload-url', 'post')).toEqual(expect.arrayContaining(['402', '413']));
+    expect(statuses('/api/videos/publish-by-id', 'post')).toEqual(expect.arrayContaining(['402', '409']));
+    expect(statuses('/api/upload-content', 'post')).toEqual(expect.arrayContaining(['402']));
   });
 
   it('uses unique operation ids and Bearer security on every operation', () => {

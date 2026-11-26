@@ -202,8 +202,6 @@ describe('literals shared with the engine and the schema', () => {
     const root = findRepoRoot(import.meta.url);
     const publisher = readFileSync(join(root, 'apps/engine/app/services/upload_publisher.py'), 'utf8');
     expect(publisher).toContain(`THREADS_CAPTION_MAX_LENGTH: int = ${THREADS_TEXT_MAX_CHARS}`);
-    const model = readFileSync(join(root, 'apps/engine/app/models/publish.py'), 'utf8');
-    expect(model).toContain(`caption: str = Field(min_length=1, max_length=${THREADS_TEXT_MAX_CHARS})`);
   });
 
   it('adds the account column and the metrics provider in the migration', () => {

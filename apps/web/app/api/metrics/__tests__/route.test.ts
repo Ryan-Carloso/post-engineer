@@ -21,7 +21,7 @@ const PERSONA = '11111111-2222-4333-8444-555555555555';
 function row(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     post_id: 'post-1', persona_id: PERSONA, provider: 'youtube', account_id: 'yt', external_id: 'v1',
-    script_angle: 'myth', views: 10, likes: 2, comments: 1, saves: null, collected_at: '2026-10-21T12:00:00Z',
+    views: 10, likes: 2, comments: 1, saves: null, collected_at: '2026-10-21T12:00:00Z',
     analytics_status: null, analytics_views: null, engaged_views: null, average_view_duration_seconds: null,
     average_view_percentage: null, content_type: null, analytics_end_date: null,
     ...overrides,
@@ -104,7 +104,7 @@ describe('GET /api/metrics', () => {
       asOf: '2026-10-21T12:00:00Z',
       rows: [{
         postId: 'post-1', personaId: PERSONA, provider: 'youtube', accountId: 'yt', externalId: 'v1',
-        scriptAngle: 'myth', publishedAt, views: 10, likes: 2, comments: 1, saves: null, collectedAt: '2026-10-21T12:00:00Z',
+        publishedAt, views: 10, likes: 2, comments: 1, saves: null, collectedAt: '2026-10-21T12:00:00Z',
         analyticsViews: null, engagedViews: null, stayedToWatchPct: null, averageViewDurationSeconds: null,
         averageViewPercentage: null, contentType: null, analyticsStatus: null, provisional: false,
       }],
@@ -162,20 +162,14 @@ describe('GET /api/metrics', () => {
 
   it('applies every filter, with the none sentinel mapping to null', async () => {
     const { calls } = mockQuery({ data: [], error: null });
-    await get(`?window=7d&persona=${PERSONA}&account=yt&provider=youtube&angle=myth`);
+    await get(`?window=7d&persona=${PERSONA}&account=yt&provider=youtube`);
     expect(calls).toContainEqual(['eq', 'persona_id', PERSONA]);
     expect(calls).toContainEqual(['eq', 'account_id', 'yt']);
     expect(calls).toContainEqual(['eq', 'provider', 'youtube']);
-    expect(calls).toContainEqual(['eq', 'script_angle', 'myth']);
 
     const second = mockQuery({ data: [], error: null });
-    await get(`?window=7d&persona=${encodeURIComponent(METRICS_NONE)}&angle=${encodeURIComponent(METRICS_NONE)}`);
+    await get(`?window=7d&persona=${encodeURIComponent(METRICS_NONE)}`);
     expect(second.calls).toContainEqual(['is', 'persona_id', null]);
-    expect(second.calls).toContainEqual(['is', 'script_angle', null]);
-
-    const third = mockQuery({ data: [], error: null });
-    await get('?window=7d&angle=none');
-    expect(third.calls).toContainEqual(['eq', 'script_angle', 'none']);
   });
 
   it('limits a persona-scoped API key to its personas plus persona-less rows', async () => {
@@ -207,10 +201,9 @@ describe('GET /api/metrics', () => {
       {
         scheduled_posts: {
           data: [
-            { id: 'post-own', schedule_id: 'sched-own', user_id: 'user-1', status: 'published', published_at: publishedAt, publish_outcomes: [youtube], voiceover: false },
-            { id: 'post-other', schedule_id: 'sched-other', user_id: 'user-1', status: 'published', published_at: publishedAt, publish_outcomes: [youtube], voiceover: false },
-            { id: 'post-orphan', schedule_id: 'sched-gone', user_id: 'user-1', status: 'published', published_at: publishedAt, publish_outcomes: [youtube], voiceover: false },
-            { id: 'post-voiceover', schedule_id: 'sched-gone', user_id: 'user-1', status: 'published', published_at: publishedAt, publish_outcomes: [youtube], voiceover: true },
+            { id: 'post-own', schedule_id: 'sched-own', user_id: 'user-1', status: 'published', published_at: publishedAt, publish_outcomes: [youtube] },
+            { id: 'post-other', schedule_id: 'sched-other', user_id: 'user-1', status: 'published', published_at: publishedAt, publish_outcomes: [youtube] },
+            { id: 'post-orphan', schedule_id: 'sched-gone', user_id: 'user-1', status: 'published', published_at: publishedAt, publish_outcomes: [youtube] },
           ],
           error: null,
         },
@@ -226,7 +219,7 @@ describe('GET /api/metrics', () => {
       },
     );
     const body = await (await get('?window=24h')).json();
-    expect(body.coverage.map((item: { postId: string }) => item.postId).sort()).toEqual(['post-own', 'post-voiceover']);
+    expect(body.coverage.map((item: { postId: string }) => item.postId).sort()).toEqual(['post-own']);
   });
 
   it('drops malformed stored persona ids before building the scope filter', async () => {

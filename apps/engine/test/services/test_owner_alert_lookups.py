@@ -12,7 +12,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from app.services.owner_alert_lookups import (
     PROVIDER_LABELS,
     lookup_account_names,
-    lookup_persona_name,
     provider_label,
 )
 
@@ -27,18 +26,15 @@ class _Response:
 
 
 class _Session:
-    def __init__(self, accounts=None, schedules=None, status=200):
+    def __init__(self, accounts=None, status=200):
         self.calls = []
         self.accounts = accounts if accounts is not None else []
-        self.schedules = schedules if schedules is not None else []
         self.status = status
 
     def request(self, method, url, **kwargs):
         self.calls.append((method, url, kwargs))
         if "/rest/v1/social_accounts" in url:
             return _Response(self.status, self.accounts)
-        if "/rest/v1/schedules" in url:
-            return _Response(self.status, self.schedules)
         raise AssertionError(url)
 
     def close(self):
@@ -147,61 +143,6 @@ class LookupAccountNamesTests(unittest.TestCase):
         ):
             self.assertEqual(lookup_account_names(session, "user-1"), {})
         self.assertEqual(session.calls, [])
-
-
-class LookupPersonaNameTests(unittest.TestCase):
-    def test_reads_the_embedded_persona(self):
-        session = _Session(schedules=[{"personas": {"name": "Bicuda"}}])
-        with patch.dict(os.environ, ENV, clear=False):
-            self.assertEqual(lookup_persona_name(session, "schedule-1"), "Bicuda")
-
-    def test_none_when_the_persona_is_gone(self):
-        for schedules in ([{"personas": None}], [{"personas": {"name": "  "}}], [], "nope"):
-            session = _Session(schedules=schedules)
-            with patch.dict(os.environ, ENV, clear=False):
-                self.assertIsNone(lookup_persona_name(session, "schedule-1"))
-
-    def test_none_for_an_empty_schedule_id(self):
-        session = _Session()
-        with patch.dict(os.environ, ENV, clear=False):
-            self.assertIsNone(lookup_persona_name(session, ""))
-        self.assertEqual(session.calls, [])
-
-    def test_none_when_the_first_row_is_not_a_dict(self):
-        session = _Session(schedules=["junk"])
-        with patch.dict(os.environ, ENV, clear=False):
-            self.assertIsNone(lookup_persona_name(session, "schedule-1"))
-
-    def test_none_when_the_request_raises(self):
-        with patch.dict(os.environ, ENV, clear=False):
-            self.assertIsNone(lookup_persona_name(_RaisingSession(), "schedule-1"))
-
-    def test_none_when_supabase_is_not_configured(self):
-        session = _Session()
-        with patch.dict(
-            os.environ, {"SUPABASE_URL": "", "SUPABASE_SERVICE_ROLE_KEY": ""}, clear=False
-        ):
-            self.assertIsNone(lookup_persona_name(session, "schedule-1"))
-        self.assertEqual(session.calls, [])
-
-    def test_opens_its_own_session_outside_the_test_suite(self):
-        session = _Session(schedules=[{"personas": {"name": "Bicuda"}}])
-        with (
-            patch("app.services.owner_alert_lookups.running_under_test", return_value=False),
-            patch("requests.Session", return_value=session),
-            patch.dict(os.environ, ENV, clear=False),
-        ):
-            self.assertEqual(lookup_persona_name(None, "schedule-1"), "Bicuda")
-        self.assertIn(("close", "", {}), session.calls)
-
-    def test_none_when_supabase_errors(self):
-        session = _Session(status=500)
-        with patch.dict(os.environ, ENV, clear=False):
-            self.assertIsNone(lookup_persona_name(session, "schedule-1"))
-
-    def test_no_http_without_a_session_under_the_test_suite(self):
-        with patch("requests.Session", side_effect=AssertionError("opened")):
-            self.assertIsNone(lookup_persona_name(None, "schedule-1"))
 
 
 if __name__ == "__main__":

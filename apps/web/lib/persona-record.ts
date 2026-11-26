@@ -6,20 +6,6 @@ export interface PersonaRecord {
   createdAt: string;
   avatarUrl?: string;
   photoUrl?: string;
-  libraryUrl?: string;
-  voiceId?: string;
-  voiceAudioUrl?: string;
-  language?: string;
-  videoAspect?: string;
-  videoLayout?: string;
-  hookPanel?: boolean;
-  aiLabel?: boolean;
-  scriptPrompt?: string;
-  ctaType?: string;
-  ctaUrl?: string;
-  ctaInstruction?: string;
-  paragraphNumber?: number;
-  niche?: string;
-  faceQuality?: string;
+  aiLabel: boolean;
   boundAccounts?: PersonaDefaultAccounts;
 }

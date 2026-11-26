@@ -88,8 +88,8 @@ order by pv.version desc limit 1;
 
 insert into public.schedules (id, user_id, providers, youtube_account_ids, instagram_account_ids, times, linkedin_account_ids, bluesky_account_ids)
 values ('dddddddd-dddd-dddd-dddd-dddddddddd03', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', array['youtube'], array[]::text[], array[]::text[], array[]::text[], array[]::text[], array[]::text[]);
-insert into public.scheduled_posts (id, schedule_id, user_id, slot_at, charged_tokens, prompt_version_id)
-select 'dddddddd-dddd-dddd-dddd-dddddddddd02', 'dddddddd-dddd-dddd-dddd-dddddddddd03', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', now(), 1, id
+insert into public.scheduled_posts (id, schedule_id, user_id, slot_at, prompt_version_id)
+select 'dddddddd-dddd-dddd-dddd-dddddddddd02', 'dddddddd-dddd-dddd-dddd-dddddddddd03', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', now(), id
 from kept_version;
 insert into public.post_metrics (post_id, user_id, provider, account_id, external_id, metrics_window)
 values ('dddddddd-dddd-dddd-dddd-dddddddddd02', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'youtube', 'acc', 'ext', '7d');

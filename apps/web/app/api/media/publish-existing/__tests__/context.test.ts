@@ -6,7 +6,7 @@ import type { PublishExistingRequest } from '../schema';
 
 function request(overrides: Partial<PublishExistingRequest> = {}): PublishExistingRequest {
   return {
-    media: { kind: 'task', taskId: '11111111-1111-4111-8111-111111111111' },
+    media: { kind: 'upload', uploadId: '11111111-1111-4111-8111-111111111111' },
     title: 'Porto walk',
     description: 'Walking the riverside at sunset.',
     personaId: null,
@@ -20,6 +20,7 @@ function request(overrides: Partial<PublishExistingRequest> = {}): PublishExisti
     tags: ['porto'],
     privacyStatus: 'public',
     caption: undefined,
+    promptVersionId: undefined,
     idempotencyKey: undefined,
     ...overrides,
   };

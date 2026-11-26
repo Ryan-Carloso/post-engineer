@@ -6,23 +6,21 @@
 
 [🇧🇷🇵🇹 Leia em Português](README.pt-BR.md)
 
-Create AI video personas that generate and publish short videos on autopilot.
+Schedule and auto-publish the videos and images you make, to every network at
+once.
 
-Give a persona a niche and a voice; Post Engineer writes the script, generates the
-voiceover, assembles the video, and publishes it to your social accounts on a
-schedule. Manage everything from the web dashboard, drive it programmatically
-through the API, or let your AI agent run it through the MCP server — all from
-this one monorepo.
+Make the media with your own tools, upload it once, and Post Engineer
+publishes it to your social accounts now or at the time you pick, retries a
+failed account, and measures how each post performs. Personas group the
+publishing accounts of one brand or character. Manage everything from the web
+dashboard, drive it programmatically through the API, or let your AI agent run
+it through the MCP server — all from this one monorepo. Post Engineer does not
+generate media.
 
 Post Engineer is open source under the [Apache License, Version 2.0](LICENSE).
 Self-host the whole platform on your own VPS following
-[docs/SELF_HOSTING.md](docs/SELF_HOSTING.md), or use the hosted version and
-buy tokens. Lip sync (LongCat) runs on [Modal.com](https://modal.com):
-Modal's Starter plan includes $30/month in compute credits (see
-[modal.com/pricing](https://modal.com/pricing)). We are not Modal: this
-free-credit offer is theirs and can end at any time. Light self-hosted usage
-can fit inside the free credits while it lasts — usage beyond that is billed
-by Modal.
+[docs/SELF_HOSTING.md](docs/SELF_HOSTING.md), or use the hosted version: new
+accounts get a 7-day free trial.
 
 > Prefer the hosted version? The same platform runs at
 > [post-engineer.com](https://post-engineer.com) — you can skip the local
@@ -31,21 +29,19 @@ by Modal.
 
 ## What it does
 
-- **AI personas** — persistent characters with a voice, face, language, and niche.
-  Optional lip-synced intro clips for a human-like presenter, plus a persona
-  image library for face consistency across videos.
-- **Automatic video generation** — topic in, HD short video out: script (LLM),
-  voiceover (TTS), subtitles, stock footage, and background music, assembled
-  into a finished video.
+- **Personas** — group the publishing accounts of one brand or character, with
+  an optional identity card that renders image prompts for your own image tool.
 - **Scheduling & publishing** — queue posts for YouTube, Instagram, LinkedIn,
   Bluesky, Threads, Facebook, Pinterest, 3Speak, Rumble, Fanvue, and Telegram
   (channels and groups); track
   upcoming and past posts with per-account status.
-- **Dashboard** — personas, posts history, connected social accounts, API keys,
-  and token billing in one Next.js app.
+- **Metrics and experiments** — per-post views and engagement, YouTube
+  retention, and prompt comparisons per account.
+- **Dashboard** — personas, posts calendar and history, connected social
+  accounts, metrics and API keys in one Next.js app.
 - **Agent control** — an MCP server ([`apps/mcp/`](apps/mcp/)) exposes the same
-  capabilities to AI agents (Claude, Cursor, Codex, OpenCode): create personas,
-  generate videos, check status, and schedule posts.
+  capabilities to AI agents (Claude, Cursor, Codex, OpenCode): upload and
+  publish media, schedule posts, manage personas and read metrics.
 
 ## Repository layout
 
@@ -53,22 +49,22 @@ This is a pnpm/Nx monorepo — web, engine, and MCP live together:
 
 ```text
 apps/web/       Next.js 15 dashboard + API routes (TypeScript)
-apps/engine/    Python/FastAPI video-generation engine
+apps/engine/    Python/FastAPI publish worker
 apps/mcp/       MCP server for AI agents (npm package: post-engineer-mcp)
 ```
 
-The web app owns authentication, personas, scheduling, OAuth, billing, and the
-API. It calls the engine over HTTP (authenticated with a shared secret,
-`MONEYPRINT_API_SECRET`) for video generation, TTS, and publishing. The MCP
-server talks to the web API with a user API key. Postgres (via Supabase) is
-the system of record: personas, schedules, OAuth tokens (encrypted at rest),
-API keys, and token balances.
+The web app owns authentication, personas, scheduling, uploads, OAuth, the
+free trial and the API. The engine is the publish worker: every minute it
+publishes the scheduled slots that are due, posting each one back through the
+web upload API (authenticated with a shared secret, `MONEYPRINT_API_SECRET`).
+The MCP server talks to the web API with a user API key. Postgres (via
+Supabase) is the system of record: personas, schedules, uploads, OAuth tokens
+(encrypted at rest) and API keys.
 
 ## Prerequisites
 
 - **Node.js** 20+ and **pnpm** 10 (`npm install -g pnpm` or via corepack)
 - **Python** 3.11–3.12 and **uv** (`curl -LsSf astral.sh/uv/install.sh | sh`)
-- **ffmpeg** on `PATH` (the engine shells out to it via moviepy)
 - A **Supabase** project (hosted at [supabase.com](https://supabase.com), or
   self-hosted) with a Postgres database
 - API keys for the external services you plan to use (see the table below)
@@ -110,8 +106,8 @@ cp apps/engine/config.example.toml apps/engine/config.toml
 | File | Purpose | Key variables |
 |---|---|---|
 | `apps/web/.env` | Web app + API routes | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (server-only), `R2_ACCOUNT_ID` + `R2_ACCESS_KEY_ID` + `R2_SECRET_ACCESS_KEY` (same as the engine; Instagram/Threads/Facebook fetch the video from a presigned R2 URL), `TOKEN_ENCRYPTION_KEY` (generate: `openssl rand -base64 32`), `MONEYPRINT_API_SECRET`, `MONEYPRINT_API_URL`, OAuth client ids/secrets + redirect URIs, Stripe keys, `MCP_OAUTH_PRIVATE_KEY_PEM` |
-| `apps/engine/.env` | Engine runtime | `MONEYPRINT_API_SECRET` (must be **identical** to the web value), `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (for the in-process fill scheduler), mandatory `R2_ACCOUNT_ID` + `R2_ACCESS_KEY_ID` + `R2_SECRET_ACCESS_KEY` (final-video archive), optional `DISCORD_WEBHOOK_URL`, optional `POSTHOG_API_KEY` (error tracking, analytics funnel, AI observability traces) |
-| `apps/engine/config.toml` | Engine behavior config | LLM/TTS provider keys (OpenAI-compatible), `listen_port` (default `8080`) |
+| `apps/engine/.env` | Engine runtime | `MONEYPRINT_API_SECRET` (must be **identical** to the web value), `MPT_UPLOAD_API_BASE_URL` (the web URL the publisher posts to), `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (the in-process publish scheduler), optional `DISCORD_WEBHOOK_URL`, optional `RESEND_API_KEY` + `ACCOUNT_BREAK_FROM` (owner failure email), optional `POSTHOG_API_KEY` |
+| `apps/engine/config.toml` | Engine server config | `listen_host`, `listen_port` (default `8080`), `log_level` |
 
 The app fails fast on missing variables (no silent fallbacks) — see
 `apps/web/.env.example` for the full documented list.
@@ -166,17 +162,7 @@ To connect YouTube, Instagram, or LinkedIn accounts you need OAuth apps whose
   bot's permission in that chat. No OAuth, no env vars. The cloud Bot API
   caps uploads at 50 MB and captions at 1,024 characters.
 
-### 5. Stripe setup (token billing)
-
-1. Create a [Stripe](https://stripe.com) account and get the secret +
-   publishable keys (`STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`).
-2. Create the token-pack products and put the price IDs in
-   `STRIPE_PRICE_PACK_10` / `_50` / `_100`.
-3. Add a webhook endpoint pointing at `/api/billing/webhook` and store the
-   signing secret in `STRIPE_WEBHOOK_SECRET`. The webhook handler verifies the
-   signature and is idempotent.
-
-### 6. Generate the self-managed secrets
+### 5. Generate the self-managed secrets
 
 These are yours to create — nothing to register:
 
@@ -216,8 +202,8 @@ Per-app details: [apps/web/README.md](apps/web/README.md),
 
 The MCP server ([`apps/mcp/`](apps/mcp/), npm package
 [`post-engineer-mcp`](https://www.npmjs.com/package/post-engineer-mcp)) lets AI
-agents create personas, generate videos, check generation status, and schedule
-posts on your account. You don't need to clone this repo to use it against the
+agents upload and publish media, schedule posts, manage personas and read
+metrics on your account. You don't need to clone this repo to use it against the
 hosted platform:
 
 ```json
@@ -250,13 +236,11 @@ full tool list, OpenCode timeout tips, and local development).
 | Google OAuth app | For YouTube publishing | OAuth client id/secret | Google Cloud Console |
 | Instagram (Meta) app | For Instagram publishing | OAuth client id/secret | developers.facebook.com |
 | LinkedIn app | For LinkedIn publishing | OAuth client id/secret | developer.linkedin.com |
-| Stripe | For token billing | Secret/publishable keys, price IDs, webhook secret | stripe.com |
-| LLM provider key **or** Ollama | For script generation | OpenAI-compatible key, or run Ollama locally | Your provider / ollama.com |
 | `MONEYPRINT_API_SECRET` | **Yes** | Web ↔ engine auth | Generate yourself (`openssl rand -hex 32`) |
 | `TOKEN_ENCRYPTION_KEY` | **Yes** | Encrypts OAuth tokens at rest | Generate yourself (`openssl rand -base64 32`) |
 | `MCP_OAUTH_PRIVATE_KEY_PEM` | For MCP server OAuth | Signs MCP tokens | Generate yourself (EC key, see above) |
 | PostHog | Optional | Error tracking + product analytics | `NEXT_PUBLIC_POSTHOG_KEY` (browser), `POSTHOG_API_KEY` (server), `NEXT_PUBLIC_POSTHOG_HOST` — see `apps/web/.env.example` |
-| Discord webhook | Optional | Fill-schedule notifications | Discord channel settings |
+| Discord webhook | Optional | Publish scheduler notifications | Discord channel settings |
 | `ZAI_API_KEY` | CI only | AI code-review workflow | Not a runtime dependency |
 
 ## Support & Contact
@@ -273,6 +257,5 @@ Licensed under the [Apache License, Version 2.0](LICENSE) — see
 
 ## Credits
 
-Video engine derived from [MoneyPrinterTurbo](https://github.com/harry0703/MoneyPrinterTurbo)
-(MIT © 2024 Harry), extended with persona lip-sync, background-music catalog,
-batch queue, scheduling, and publishing.
+The engine is derived from [MoneyPrinterTurbo](https://github.com/harry0703/MoneyPrinterTurbo)
+(MIT © 2024 Harry). It now only schedules and publishes.

@@ -1,32 +1,13 @@
-import { FACE_QUALITIES, PERSONA_CTA_INSTRUCTION_MAX_LENGTH, PERSONA_CTA_TYPES, PERSONA_CTA_URL_MAX_LENGTH, photoExtensionOf, VALID_VIDEO_ASPECTS, VIDEO_LAYOUTS } from '@/lib/persona-schema';
-import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from '@/lib/language-gate';
-import { isFileLike } from '@/lib/persona-images';
-import { invalidHookPanelMessage, parseHookPanelFormValue } from '@/lib/hook-panel-form';
 import { invalidAiLabelMessage, parseAiLabelFormValue } from '@/lib/ai-label-form';
+import { photoExtensionOf } from '@/lib/persona-schema';
+import { isFileLike } from '@/lib/persona-photo';
 import { parseIdentityCardField, type IdentityCardField } from './identity-card-field';
-
-function isVideoLayout(value: string): value is (typeof VIDEO_LAYOUTS)[number] {
-  return (VIDEO_LAYOUTS as readonly string[]).includes(value);
-}
 
 export interface PersonaPatchBody {
   name: string | null;
+  aiLabel: boolean | null;
   photo: File | null;
   photoExtension: string | null;
-  avatarUrl: string | null;
-  voiceId: string | null;
-  language: string | null;
-  videoAspect: string | null;
-  videoLayout: (typeof VIDEO_LAYOUTS)[number] | null;
-  hookPanel: boolean | null;
-  aiLabel: boolean | null;
-  scriptPrompt: string | null;
-  ctaType: (typeof PERSONA_CTA_TYPES)[number] | null;
-  ctaUrl: string | null;
-  ctaInstruction: string | null;
-  paragraphNumber: number | null;
-  niche: string | null;
-  faceQuality: (typeof FACE_QUALITIES)[number] | null;
   identityCard: IdentityCardField;
 }
 
@@ -45,10 +26,8 @@ export async function parsePatchBody(request: Request): Promise<ParsePatchResult
   const rawName = formData.get('name');
   const name = typeof rawName === 'string' && rawName.trim().length > 0 ? rawName : null;
 
-  const avatarUrl = optionalString(formData.get('avatarUrl'));
-  const voiceId = optionalString(formData.get('voiceId'));
-
-  const photo = asFile(formData.get('photo'));
+  const rawPhoto = formData.get('photo');
+  const photo = isFileLike(rawPhoto) ? rawPhoto : null;
   const photoExtension = photoExtensionOf(photo);
   if (photo && !photoExtension) {
     return {
@@ -58,81 +37,10 @@ export async function parsePatchBody(request: Request): Promise<ParsePatchResult
     };
   }
 
-  const language = optionalString(formData.get('language'));
-  const videoAspect = optionalString(formData.get('videoAspect'));
-  if (videoAspect !== null && !VALID_VIDEO_ASPECTS.includes(videoAspect as (typeof VALID_VIDEO_ASPECTS)[number])) {
-    return {
-      ok: false,
-      error: `Invalid videoAspect: ${videoAspect}. Use one of ${VALID_VIDEO_ASPECTS.join(', ')}.`,
-      logMessage: `Invalid videoAspect. Use one of ${VALID_VIDEO_ASPECTS.join(', ')}.`,
-    };
-  }
-  const videoLayout = optionalString(formData.get('videoLayout'));
-  if (videoLayout !== null && !isVideoLayout(videoLayout)) {
-    return {
-      ok: false,
-      error: `Invalid videoLayout: ${videoLayout}. Use one of ${VIDEO_LAYOUTS.join(', ')}.`,
-      logMessage: `Invalid videoLayout. Use one of ${VIDEO_LAYOUTS.join(', ')}.`,
-    };
-  }
-  const rawHookPanel = optionalString(formData.get('hookPanel'));
-  const hookPanel = parseHookPanelFormValue(rawHookPanel);
-  if (!hookPanel.ok) {
-    return { ok: false, error: invalidHookPanelMessage(rawHookPanel), logMessage: 'Invalid hookPanel. Use true or false.' };
-  }
-  const rawAiLabel = optionalString(formData.get('aiLabel'));
-  const aiLabel = parseAiLabelFormValue(rawAiLabel);
+  const rawAiLabel = formData.get('aiLabel');
+  const aiLabel = parseAiLabelFormValue(typeof rawAiLabel === 'string' ? rawAiLabel : null);
   if (!aiLabel.ok) {
     return { ok: false, error: invalidAiLabelMessage(rawAiLabel), logMessage: 'Invalid aiLabel. Use true or false.' };
-  }
-  const scriptPrompt = optionalString(formData.get('scriptPrompt'));
-  const ctaType = optionalString(formData.get('ctaType'));
-  if (ctaType !== null && !(PERSONA_CTA_TYPES as readonly string[]).includes(ctaType)) {
-    return {
-      ok: false,
-      error: `Invalid ctaType: ${ctaType}. Use one of ${PERSONA_CTA_TYPES.join(', ')}.`,
-      logMessage: `Invalid ctaType. Use one of ${PERSONA_CTA_TYPES.join(', ')}.`,
-    };
-  }
-  const rawCtaUrl = formData.get('ctaUrl');
-  const ctaUrl =
-    typeof rawCtaUrl === 'string' ? (rawCtaUrl.trim().length === 0 ? '' : rawCtaUrl) : null;
-  if (ctaUrl !== null && ctaUrl.length > 0) {
-    if (ctaUrl.length > PERSONA_CTA_URL_MAX_LENGTH) {
-      return { ok: false, error: `Invalid ctaUrl: use at most ${PERSONA_CTA_URL_MAX_LENGTH} characters.` };
-    }
-    try {
-      new URL(ctaUrl);
-    } catch {
-      return { ok: false, error: 'Invalid ctaUrl: use a valid URL.' };
-    }
-  }
-  const rawCtaInstruction = formData.get('ctaInstruction');
-  const ctaInstruction =
-    typeof rawCtaInstruction === 'string' ? (rawCtaInstruction.trim().length === 0 ? '' : rawCtaInstruction) : null;
-  if (ctaInstruction !== null && ctaInstruction.length > PERSONA_CTA_INSTRUCTION_MAX_LENGTH) {
-    return { ok: false, error: `Invalid ctaInstruction: use at most ${PERSONA_CTA_INSTRUCTION_MAX_LENGTH} characters.` };
-  }
-  const niche = optionalString(formData.get('niche'));
-  if (niche !== null && niche.length > 300) {
-    return { ok: false, error: 'Invalid niche: use at most 300 characters.' };
-  }
-  const paragraphNumberRaw = optionalString(formData.get('paragraphNumber'));
-  let paragraphNumber: number | null = null;
-  if (paragraphNumberRaw !== null) {
-    const parsedNumber = Number.parseInt(paragraphNumberRaw, 10);
-    if (!Number.isInteger(parsedNumber) || parsedNumber < 1 || parsedNumber > 10) {
-      return { ok: false, error: 'Invalid paragraphNumber: use an integer between 1 and 10.' };
-    }
-    paragraphNumber = parsedNumber;
-  }
-  const faceQuality = optionalString(formData.get('faceQuality'));
-  if (faceQuality !== null && !(FACE_QUALITIES as readonly string[]).includes(faceQuality)) {
-    return {
-      ok: false,
-      error: `Invalid faceQuality: ${faceQuality}. Use one of ${FACE_QUALITIES.join(', ')}.`,
-      logMessage: `Invalid faceQuality. Use one of ${FACE_QUALITIES.join(', ')}.`,
-    };
   }
 
   const identityCard = parseIdentityCardField(formData.get('identityCard'));
@@ -140,47 +48,5 @@ export async function parsePatchBody(request: Request): Promise<ParsePatchResult
     return { ok: false, error: identityCard.error };
   }
 
-  return {
-    ok: true,
-    value: {
-      name,
-      photo,
-      photoExtension,
-      avatarUrl,
-      voiceId,
-      language,
-      videoAspect,
-      videoLayout,
-      hookPanel: hookPanel.value,
-      aiLabel: aiLabel.value,
-      scriptPrompt,
-      ctaType: ctaType as (typeof PERSONA_CTA_TYPES)[number] | null,
-      ctaUrl,
-      ctaInstruction,
-      paragraphNumber,
-      niche,
-      faceQuality: faceQuality as (typeof FACE_QUALITIES)[number] | null,
-      identityCard,
-    },
-  };
-}
-
-function asFile(value: FormDataEntryValue | null): File | null {
-  return isFileLike(value) ? value : null;
-}
-
-function optionalString(value: FormDataEntryValue | null): string | null {
-  if (typeof value !== 'string' || value.trim().length === 0) return null;
-  return value;
-}
-
-export function englishOnlyPatchError(patch: PersonaPatchBody): string | null {
-  if (
-    patch.language !== null
-    && patch.language.trim().length > 0
-    && !isEnglishLanguage(patch.language)
-  ) {
-    return ONLY_ENGLISH_VIDEOS_MESSAGE;
-  }
-  return null;
+  return { ok: true, value: { name, aiLabel: aiLabel.value, photo, photoExtension, identityCard } };
 }

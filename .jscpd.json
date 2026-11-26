@@ -15,9 +15,7 @@
         "docs/**",
         "**/*.lock",
         "**/*.snap",
-        "**/*.snap.*",
-        "apps/web/lib/generation/script-segments.ts",
-        "apps/mcp/src/script-segments.ts"
+        "**/*.snap.*"
     ],
     "minLines": 50,
     "minTokens": 100,

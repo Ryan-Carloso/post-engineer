@@ -140,7 +140,7 @@ async function deleteHandler(
   if ('error' in owned) return owned.error;
   const slot = owned.slot;
 
-  const DELETABLE_STATUSES = new Set(['pending', 'ready', 'failed']);
+  const DELETABLE_STATUSES = new Set(['ready', 'failed']);
   if (!DELETABLE_STATUSES.has(slot.status)) {
     return apiErrorResponse(
       409,
@@ -205,9 +205,9 @@ async function patchHandler(
   if ('error' in owned) return owned.error;
   const { slot, publishMode } = owned;
 
-  const EDITABLE_STATUSES = new Set(['pending', 'ready']);
+  const EDITABLE_STATUSES = new Set(['ready']);
   if (!EDITABLE_STATUSES.has(slot.status)) {
-    return apiErrorResponse(409, 'Only a pending or ready slot can be edited.', {
+    return apiErrorResponse(409, 'Only a ready slot can be edited.', {
       route: 'PATCH /api/schedule/slots',
       metadata: { status: slot.status },
     });
@@ -273,12 +273,12 @@ async function patchHandler(
     .update(patch)
     .eq('id', slot.id)
     .eq('user_id', auth.userId)
-    .in('status', ['pending', 'ready'])
+    .in('status', ['ready'])
     .select('id')
     .single();
   if (updateError) {
     if ((updateError as { code?: string }).code === 'PGRST116') {
-      return apiErrorResponse(409, 'Only a pending or ready slot can be edited.', {
+      return apiErrorResponse(409, 'Only a ready slot can be edited.', {
         route: 'PATCH /api/schedule/slots',
         metadata: { status: slot.status },
       });

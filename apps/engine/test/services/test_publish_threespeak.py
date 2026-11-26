@@ -7,30 +7,10 @@ fill-schedule mapping for the 3speak provider.
 
 import unittest
 
-from pydantic import ValidationError
 
 from app.providers import SOCIAL_PROVIDERS
-from app.models.publish import PublishParams, ThreespeakPublish
 from app.services import publish_threespeak, upload_publisher
 from app.services.fill_schedule.metadata import metadata_for, validate_publish_plan
-
-
-class ThreespeakPublishParamsTest(unittest.TestCase):
-    def test_accepts_threespeak_publish(self) -> None:
-        params = PublishParams(
-            providers=["3speak"],
-            threespeak=ThreespeakPublish(caption="post", account_ids=["alice"]),
-        )
-        self.assertEqual(params.threespeak.account_ids, ["alice"])
-
-    def test_rejects_provider_without_metadata(self) -> None:
-        with self.assertRaisesRegex(ValidationError, "3speak provider requires 3speak metadata"):
-            PublishParams(providers=["3speak"])
-
-    def test_accepts_a_long_caption_and_rejects_an_empty_one(self) -> None:
-        ThreespeakPublish(caption="a" * 70000, account_ids=["alice"])
-        with self.assertRaises(ValidationError):
-            ThreespeakPublish(caption="", account_ids=["alice"])
 
 
 class PublishThreespeakModuleTest(unittest.TestCase):

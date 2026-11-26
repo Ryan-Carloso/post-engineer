@@ -43,8 +43,6 @@ function mockSlotsClient(options: {
   persona?: unknown;
   personaError?: unknown;
   remaining?: unknown[];
-  history?: unknown[];
-  historyError?: unknown;
   deleteError?: unknown;
   rpcResult?: string;
   rpcError?: unknown;
@@ -88,11 +86,6 @@ function mockSlotsClient(options: {
   const postsChain = makeChain('scheduled_posts');
   const schedulesChain = makeChain('schedules');
   const personasChain = makeChain('personas');
-  const historyChain = makeChain('scheduled_post_progress_history');
-  (historyChain as Record<string, unknown>).order = vi.fn(async () => ({
-    data: options.historyError ? null : (options.history ?? []),
-    error: options.historyError ?? null,
-  }));
   const promptVersionsChain = makeChain('prompt_versions');
   (promptVersionsChain as Record<string, unknown>).maybeSingle = vi.fn(async () => ({
     data: options.promptVersionError ? null : (options.promptVersion ?? null),
@@ -105,15 +98,13 @@ function mockSlotsClient(options: {
         ? postsChain
         : table === 'schedules'
           ? schedulesChain
-          : table === 'scheduled_post_progress_history'
-            ? historyChain
-            : personasChain,
+          : personasChain,
   );
   const rpc = vi.fn(async () => ({
     data: options.rpcResult ?? 'deleted',
     error: options.rpcError ?? null,
   }));
-  return { from, rpc, postsChain, schedulesChain, personasChain, historyChain, calls };
+  return { from, rpc, postsChain, schedulesChain, personasChain, calls };
 }
 
 function mockAuth(personaIds?: string[] | null) {
@@ -141,9 +132,9 @@ describe('DELETE /api/schedule/slots/[slotId]', () => {
     vi.clearAllMocks();
   });
 
-  it('deletes an awaiting slot owned by the user', async () => {
+  it('deletes a ready slot owned by the user', async () => {
     const client = mockSlotsClient({
-      slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', title: 'T' },
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'ready', title: 'T' },
       schedule: { id: 's1', user_id: USER_ID },
       rpcResult: 'deleted',
     });
@@ -163,7 +154,7 @@ describe('DELETE /api/schedule/slots/[slotId]', () => {
 
   it('uses the service client for OAuth callers (no cookie session)', async () => {
     const client = mockSlotsClient({
-      slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', title: 'T' },
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'ready', title: 'T' },
       schedule: { id: 's1', user_id: USER_ID },
       rpcResult: 'deleted',
     });
@@ -179,12 +170,12 @@ describe('DELETE /api/schedule/slots/[slotId]', () => {
 
   it('runs delete_slot_if_not_last on the service client for a cookie session (service-role-only RPC)', async () => {
     const sessionClient = mockSlotsClient({
-      slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', title: 'T' },
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'ready', title: 'T' },
       schedule: { id: 's1', user_id: USER_ID },
       rpcResult: 'deleted',
     });
     const serviceClient = mockSlotsClient({
-      slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', title: 'T' },
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'ready', title: 'T' },
       schedule: { id: 's1', user_id: USER_ID },
       rpcResult: 'deleted',
     });
@@ -222,7 +213,7 @@ describe('DELETE /api/schedule/slots/[slotId]', () => {
 
   it('returns 404 when the slot belongs to another user', async () => {
     const client = mockSlotsClient({
-      slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', title: 'T' },
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'ready', title: 'T' },
       schedule: { id: 's1', user_id: 'someone-else' },
     });
     mockAuth();
@@ -236,7 +227,7 @@ describe('DELETE /api/schedule/slots/[slotId]', () => {
 
   it('returns 404 and does not delete a slot outside the API key persona scope', async () => {
     const client = mockSlotsClient({
-      slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', title: 'T' },
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'ready', title: 'T' },
       schedule: { id: 's1', user_id: USER_ID, persona_id: 'p-other' },
     });
     mockAuth(['p-allowed']);
@@ -268,8 +259,8 @@ describe('DELETE /api/schedule/slots/[slotId]', () => {
     );
   });
 
-  it('returns 409 for slots mid-flight (generating, publishing)', async () => {
-    for (const status of ['generating', 'publishing']) {
+  it('returns 409 for a slot mid-flight (publishing)', async () => {
+    for (const status of ['publishing']) {
       const client = mockSlotsClient({
         slot: { id: 'slot-1', schedule_id: 's1', status, title: 'T' },
         schedule: { id: 's1', user_id: USER_ID },
@@ -284,29 +275,9 @@ describe('DELETE /api/schedule/slots/[slotId]', () => {
     }
   });
 
-  it('deletes a ready slot owned by the user', async () => {
-    const client = mockSlotsClient({
-      slot: { id: 'slot-1', schedule_id: 's1', status: 'ready', title: 'T' },
-      schedule: { id: 's1', user_id: USER_ID },
-      rpcResult: 'deleted',
-    });
-    mockAuth();
-    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
-
-    const response = await deleteSlot(SLOT_ID);
-
-    expect(response.status).toBe(200);
-    const body = (await response.json()) as { success: boolean };
-    expect(body.success).toBe(true);
-    expect(client.rpc).toHaveBeenCalledWith('delete_slot_if_not_last', {
-      p_slot_id: 'slot-1',
-      p_user_id: USER_ID,
-    });
-  });
-
   it('returns 409 when deleting the schedule’s only remaining slot', async () => {
     const client = mockSlotsClient({
-      slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', title: 'T' },
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'ready', title: 'T' },
       schedule: { id: 's1', user_id: USER_ID },
       rpcResult: 'is_last_slot',
     });
@@ -350,9 +321,9 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
     vi.clearAllMocks();
   });
 
-  it('edits the title of an awaiting slot and returns the trimmed value', async () => {
+  it('edits the title of a ready slot and returns the trimmed value', async () => {
     const client = mockSlotsClient({
-      slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', title: 'Old' },
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'ready', title: 'Old' },
       schedule: { id: 's1', user_id: USER_ID },
     });
     mockAuth();
@@ -369,40 +340,7 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
     expect(updateCall?.args?.[0]).toEqual({ title: 'Novo tema' });
     const inCall = client.calls.find((c) => c.op === 'in');
     expect(inCall?.args?.[0]).toBe('status');
-    expect(inCall?.args?.[1]).toEqual(['pending', 'ready']);
-  });
-
-  it('edits the title of a ready slot', async () => {
-    const client = mockSlotsClient({
-      slot: { id: 'slot-1', schedule_id: 's1', status: 'ready', title: 'Old' },
-      schedule: { id: 's1', user_id: USER_ID },
-    });
-    mockAuth();
-    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
-
-    const response = await patchSlot(SLOT_ID, { title: 'Novo tema' });
-
-    expect(response.status).toBe(200);
-    const body = (await response.json()) as { success: boolean; title: string };
-    expect(body).toEqual({ success: true, title: 'Novo tema' });
-  });
-
-  it('reschedules a pending slot within the window', async () => {
-    const slotAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-    const client = mockSlotsClient({
-      slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', title: 'Old' },
-      schedule: { id: 's1', user_id: USER_ID },
-    });
-    mockAuth();
-    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
-
-    const response = await patchSlot(SLOT_ID, { slotAt });
-
-    expect(response.status).toBe(200);
-    const body = (await response.json()) as { success: boolean; slotAt: string };
-    expect(body).toEqual({ success: true, slotAt });
-    const updateCall = client.calls.find((c) => c.op === 'update');
-    expect(updateCall?.args?.[0]).toEqual({ slot_at: slotAt });
+    expect(inCall?.args?.[1]).toEqual(['ready']);
   });
 
   it('reschedules a ready slot within the window', async () => {
@@ -424,7 +362,7 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
   it('edits the title and reschedules in one call', async () => {
     const slotAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     const client = mockSlotsClient({
-      slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', title: 'Old' },
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'ready', title: 'Old' },
       schedule: { id: 's1', user_id: USER_ID },
     });
     mockAuth();
@@ -442,7 +380,7 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
   it('returns 400 when the new time is inside the 3h lead', async () => {
     const slotAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
     const client = mockSlotsClient({
-      slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', title: 'Old' },
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'ready', title: 'Old' },
       schedule: { id: 's1', user_id: USER_ID },
     });
     mockAuth();
@@ -457,7 +395,7 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
   it('returns 400 when the new time is more than 30 days ahead', async () => {
     const slotAt = new Date(Date.now() + 31 * 24 * 60 * 60 * 1000).toISOString();
     const client = mockSlotsClient({
-      slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', title: 'Old' },
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'ready', title: 'Old' },
       schedule: { id: 's1', user_id: USER_ID },
     });
     mockAuth();
@@ -471,7 +409,7 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
 
   it('returns 400 for an invalid slotAt', async () => {
     const client = mockSlotsClient({
-      slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', title: 'Old' },
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'ready', title: 'Old' },
       schedule: { id: 's1', user_id: USER_ID },
     });
     mockAuth();
@@ -488,7 +426,7 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
       .toISOString()
       .replace(/Z$/, '');
     const client = mockSlotsClient({
-      slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', title: 'Old' },
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'ready', title: 'Old' },
       schedule: { id: 's1', user_id: USER_ID },
     });
     mockAuth();
@@ -505,7 +443,7 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
   it('returns 409 when rescheduling an ASAP slot', async () => {
     const slotAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     const client = mockSlotsClient({
-      slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', title: 'Old' },
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'ready', title: 'Old' },
       schedule: { id: 's1', user_id: USER_ID, publish_mode: 'asap' },
     });
     mockAuth();
@@ -519,7 +457,7 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
 
   it('returns 400 when neither title nor slotAt is provided', async () => {
     const client = mockSlotsClient({
-      slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', title: 'Old' },
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'ready', title: 'Old' },
       schedule: { id: 's1', user_id: USER_ID },
     });
     mockAuth();
@@ -533,7 +471,7 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
 
   it('returns 409 when the slot dispatches between the status check and the update', async () => {
     const client = mockSlotsClient({
-      slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', title: 'Old' },
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'ready', title: 'Old' },
       schedule: { id: 's1', user_id: USER_ID },
       updateConflict: true,
     });
@@ -547,7 +485,7 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
 
   it('uses the service client for OAuth callers (no cookie session)', async () => {
     const client = mockSlotsClient({
-      slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', title: 'Old' },
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'ready', title: 'Old' },
       schedule: { id: 's1', user_id: USER_ID },
     });
     mockOAuthAuth();
@@ -562,7 +500,7 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
 
   it('returns 400 for an empty or whitespace-only title', async () => {
     const client = mockSlotsClient({
-      slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', title: 'Old' },
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'ready', title: 'Old' },
       schedule: { id: 's1', user_id: USER_ID },
     });
     mockAuth();
@@ -575,7 +513,7 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
     expect(client.calls.some((c) => c.op === 'update')).toBe(false);
   });
 
-  it('returns 409 for a slot that already dispatched (not pending or ready)', async () => {
+  it('returns 409 for a slot that already dispatched (not ready)', async () => {
     const client = mockSlotsClient({
       slot: { id: 'slot-1', schedule_id: 's1', status: 'published', title: 'Old' },
       schedule: { id: 's1', user_id: USER_ID },
@@ -591,7 +529,7 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
 
   it('returns 404 when the slot belongs to another user', async () => {
     const client = mockSlotsClient({
-      slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', title: 'Old' },
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'ready', title: 'Old' },
       schedule: { id: 's1', user_id: 'someone-else' },
     });
     mockAuth();
@@ -605,7 +543,7 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
 
   it('returns 404 and does not update a slot outside the API key persona scope', async () => {
     const client = mockSlotsClient({
-      slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', title: 'Old' },
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'ready', title: 'Old' },
       schedule: { id: 's1', user_id: USER_ID, persona_id: 'p-other' },
     });
     mockAuth(['p-allowed']);
@@ -622,11 +560,11 @@ const SLOT_DETAIL_ROW = {
   id: 'slot-1',
   schedule_id: 's1',
   slot_at: '2030-06-01T10:00:00.000Z',
-  status: 'pending',
+  status: 'ready',
   title: 'Next big thing',
   error: null,
   published_at: null,
-  task_id: null,
+  publish_outcomes: null,
 };
 
 const SCHEDULE_ROW = {
@@ -644,8 +582,6 @@ const SCHEDULE_ROW = {
 describe('GET /api/schedule/slots/[slotId]', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
-    vi.stubEnv('MONEYPRINT_API_SECRET', 'secret');
     vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://example.com');
   });
 
@@ -675,9 +611,8 @@ describe('GET /api/schedule/slots/[slotId]', () => {
       id: 'slot-1',
       scheduleId: 's1',
       slotAt: '2030-06-01T10:00:00.000Z',
-      status: 'awaiting',
+      status: 'ready',
       title: 'Next big thing',
-      taskId: null,
       postUrl: 'https://example.com/posts/slot-1',
     });
     expect(body.schedule).toMatchObject({
@@ -732,9 +667,9 @@ describe('GET /api/schedule/slots/[slotId]', () => {
     const response = await getSlot();
 
     expect(response.status).toBe(200);
-    const body = (await response.json()) as { generation: { prompt: unknown } };
+    const body = (await response.json()) as { prompt: unknown };
     expect(GetSlotResponseSchema.safeParse(body).success).toBe(true);
-    expect(body.generation.prompt).toEqual({ slug: 'community-hook', title: 'Community hook', version: 2, source: 'user' });
+    expect(body.prompt).toEqual({ slug: 'community-hook', title: 'Community hook', version: 2, source: 'user' });
     expect(session.from).not.toHaveBeenCalledWith('prompt_versions');
     expect(service.from).toHaveBeenCalledWith('prompt_versions');
     expect(
@@ -796,9 +731,9 @@ describe('GET /api/schedule/slots/[slotId]', () => {
     const response = await getSlot();
 
     expect(response.status).toBe(200);
-    const body = (await response.json()) as { slot: { id: string }; generation: { prompt: unknown } };
+    const body = (await response.json()) as { slot: { id: string }; prompt: unknown };
     expect(body.slot.id).toBe('slot-1');
-    expect(body.generation.prompt).toBeNull();
+    expect(body.prompt).toBeNull();
     expect(logger.error).toHaveBeenCalledWith(
       '[prompt-versions] post prompt lookup failed',
       { code: 'XX000', message: 'down' },
@@ -926,29 +861,6 @@ describe('GET /api/schedule/slots/[slotId]', () => {
     expect(response.status).toBe(429);
   });
 
-  it('enriches a generating slot with live engine progress', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ body: { progress: 62, stage: 'lipsync' } }) })),
-    );
-    const client = mockSlotsClient({
-      slot: { ...SLOT_DETAIL_ROW, status: 'generating', task_id: 'task-1' },
-      schedule: SCHEDULE_ROW,
-      persona: { id: 'p1', name: 'Viva Leve' },
-    });
-    mockAuth();
-    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
-
-    const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
-      params: Promise.resolve({ slotId: SLOT_ID }),
-    });
-
-    expect(response.status).toBe(200);
-    const body = (await response.json()) as { slot: { progress: number; stage: string | null } };
-    expect(body.slot.progress).toBe(62);
-    expect(body.slot.stage).toBe('lipsync');
-  });
-
   it('returns 404 for another user’s slot without leaking the row', async () => {
     const client = mockSlotsClient({
       slot: { ...SLOT_DETAIL_ROW, user_id: 'someone-else' },
@@ -981,208 +893,25 @@ describe('GET /api/schedule/slots/[slotId]', () => {
     expect(response.status).toBe(401);
   });
 
-  it('returns the recorded progress history with the slot', async () => {
-    const client = mockSlotsClient({
-      slot: SLOT_DETAIL_ROW,
-      schedule: SCHEDULE_ROW,
-      persona: { id: 'p1', name: 'Viva Leve' },
-      history: [
-        { progress: 40, stage: 'subtitle', recorded_at: '2026-10-05T22:10:00.000Z' },
-        { progress: 50, stage: 'materials', recorded_at: '2026-10-05T22:12:00.000Z' },
-      ],
-    });
-    mockAuth();
-    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
-
-    const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
-      params: Promise.resolve({ slotId: SLOT_ID }),
-    });
-
-    expect(response.status).toBe(200);
-    const body = (await response.json()) as {
-      slot: { progressHistory: { progress: number; stage: string | null; recordedAt: string }[] };
-    };
-    expect(body.slot.progressHistory).toEqual([
-      { progress: 40, stage: 'subtitle', recordedAt: '2026-10-05T22:10:00.000Z' },
-      { progress: 50, stage: 'materials', recordedAt: '2026-10-05T22:12:00.000Z' },
-    ]);
-    const historyCalls = client.calls.filter((c) => c.table === 'scheduled_post_progress_history');
-    expect(historyCalls.filter((c) => c.op === 'eq').map((c) => c.args)).toEqual([
-      ['post_id', SLOT_ID],
-      ['user_id', USER_ID],
-    ]);
-    const { logger } = await import('@/lib/logger');
-    expect(logger.warn).not.toHaveBeenCalledWith(
-      '[api/schedule/slots] progress history lookup failed',
-      expect.anything(),
-    );
-  });
-
-  it('defaults progressHistory to [] when nothing was recorded', async () => {
-    const client = mockSlotsClient({
-      slot: SLOT_DETAIL_ROW,
-      schedule: SCHEDULE_ROW,
-      persona: { id: 'p1', name: 'Viva Leve' },
-    });
-    mockAuth();
-    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
-
-    const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
-      params: Promise.resolve({ slotId: SLOT_ID }),
-    });
-
-    expect(response.status).toBe(200);
-    const body = (await response.json()) as { slot: { progressHistory: unknown[] } };
-    expect(body.slot.progressHistory).toEqual([]);
-  });
-
-  it('degrades to [] when the history lookup fails', async () => {
-    const { logger } = await import('@/lib/logger');
-    const client = mockSlotsClient({
-      slot: SLOT_DETAIL_ROW,
-      schedule: SCHEDULE_ROW,
-      persona: { id: 'p1', name: 'Viva Leve' },
-      historyError: { message: 'db down' },
-    });
-    mockAuth();
-    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
-
-    const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
-      params: Promise.resolve({ slotId: SLOT_ID }),
-    });
-
-    expect(response.status).toBe(200);
-    const body = (await response.json()) as { slot: { progressHistory: unknown[] } };
-    expect(body.slot.progressHistory).toEqual([]);
-    expect(logger.warn).toHaveBeenCalledWith('[post-detail] progress history lookup failed', {
-      slotId: SLOT_ID,
-      error: { message: 'db down' },
-    });
-  });
-});
-
-describe('GET /api/schedule/slots/[slotId] generation facts', () => {
-  const SNAPSHOT_SCHEDULE_ROW = {
-    ...SCHEDULE_ROW,
-    post_language: 'pt-BR',
-    post_voice_id: 'ana_neural',
-    post_video_aspect: '9:16',
-    post_video_layout: 'react',
-    post_niche: 'cooking',
-    post_paragraph_number: 5,
-    post_face_quality: 'high',
-  };
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
-    vi.stubEnv('MONEYPRINT_API_SECRET', 'secret');
-    mockAuth();
-  });
-
-  async function getGeneration(slot: unknown, schedule: unknown) {
-    const client = mockSlotsClient({
-      slot,
-      schedule,
-      persona: { id: 'p1', name: 'Viva Leve' },
-    });
-    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
-    const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
-      params: Promise.resolve({ slotId: SLOT_ID }),
-    });
-    expect(response.status).toBe(200);
-    const body = (await response.json()) as {
-      success: boolean;
-      generation: Record<string, unknown>;
-    };
-    expect(body.success).toBe(true);
-    return body.generation;
-  }
-
-  it('returns the generation facts used to create the post', async () => {
-    const generation = await getGeneration(
-      { ...SLOT_DETAIL_ROW, voiceover: true },
-      SNAPSHOT_SCHEDULE_ROW,
-    );
-    expect(generation).toEqual({
-      prompt: null, voiceover: true, mediaKind: null,
-      language: 'pt-BR',
-      voiceId: 'ana_neural',
-      videoAspect: '9:16',
-      videoLayout: 'react',
-      niche: 'cooking',
-      paragraphNumber: 5,
-      faceQuality: 'high',
-    });
-  });
-
-  it('reports voiceover as true only for the literal true', async () => {
-    for (const voiceover of [true, false, null, 'true', 1]) {
-      const generation = await getGeneration({ ...SLOT_DETAIL_ROW, voiceover }, SCHEDULE_ROW);
-      expect(generation.voiceover).toBe(voiceover === true);
-    }
-  });
-
-  it('omits nothing when the snapshot columns are null', async () => {
-    const generation = await getGeneration(SLOT_DETAIL_ROW, SCHEDULE_ROW);
-    expect(generation).toEqual({
-      prompt: null, voiceover: false, mediaKind: null,
-      language: null,
-      voiceId: null,
-      videoAspect: null,
-      videoLayout: null,
-      niche: null,
-      paragraphNumber: null,
-      faceQuality: null,
-    });
-  });
-
-  it('keeps persona null for a persona-less post', async () => {
-    const client = mockSlotsClient({
-      slot: SLOT_DETAIL_ROW,
-      schedule: { ...SCHEDULE_ROW, persona_id: null },
-      persona: null,
-    });
-    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
-    const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
-      params: Promise.resolve({ slotId: SLOT_ID }),
-    });
-    const body = (await response.json()) as {
-      success: boolean;
-      persona: unknown;
-      generation: Record<string, unknown>;
-    };
-    expect(body.success).toBe(true);
-    expect(body.persona).toBeNull();
-    expect(body.generation.voiceover).toBe(false);
-  });
 });
 
 describe('GET /api/schedule/slots/[slotId] published links', () => {
-  const PUBLISHED_ROW = { ...SLOT_DETAIL_ROW, status: 'published', task_id: 'task-1' };
-
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
-    vi.stubEnv('MONEYPRINT_API_SECRET', 'secret');
     mockAuth();
   });
 
-  function mockPublished(publishResults: unknown) {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => ({
-        ok: true,
-        status: 200,
-        json: async () => ({ body: { state: 2, progress: 100, publish_results: publishResults } }),
-      })),
-    );
+  function mockSlot(row: Record<string, unknown>) {
     const client = mockSlotsClient({
-      slot: PUBLISHED_ROW,
+      slot: row,
       schedule: SCHEDULE_ROW,
       persona: { id: 'p1', name: 'Viva Leve' },
     });
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+  }
+
+  function mockPublished(publishOutcomes: unknown) {
+    mockSlot({ ...SLOT_DETAIL_ROW, status: 'published', publish_outcomes: publishOutcomes });
   }
 
   async function getBody(): Promise<{ slot: { publishLinks: unknown } }> {
@@ -1193,10 +922,10 @@ describe('GET /api/schedule/slots/[slotId] published links', () => {
     return (await response.json()) as { slot: { publishLinks: unknown } };
   }
 
-  it('returns the provider links recorded by the engine', async () => {
+  it('returns the provider links recorded in the publish outcomes', async () => {
     mockPublished([
-      { provider: 'youtube', video: 'final-1.mp4', videoUrl: 'https://www.youtube.com/watch?v=abc' },
-      { provider: 'instagram', video: 'final-1.mp4', permalink: 'https://www.instagram.com/p/xyz/' },
+      { provider: 'youtube', status: 'published', accountId: 'ch1', videoUrl: 'https://www.youtube.com/watch?v=abc' },
+      { provider: 'instagram', status: 'published', accountId: 'ig1', permalink: 'https://www.instagram.com/p/xyz/' },
     ]);
 
     const body = await getBody();
@@ -1208,7 +937,7 @@ describe('GET /api/schedule/slots/[slotId] published links', () => {
 
   it('derives the Bluesky URL from the at:// record URI', async () => {
     mockPublished([
-      { provider: 'bluesky', video: 'final-1.mp4', postId: 'at://did:plc:abc/app.bsky.feed.post/xyz' },
+      { provider: 'bluesky', status: 'published', accountId: 'bsky1', postId: 'at://did:plc:abc/app.bsky.feed.post/xyz' },
     ]);
 
     const body = await getBody();
@@ -1217,61 +946,32 @@ describe('GET /api/schedule/slots/[slotId] published links', () => {
     ]);
   });
 
-  it('returns no links when the engine recorded none', async () => {
-    mockPublished([]);
+  it('returns no links when no outcome was recorded', async () => {
+    mockPublished(null);
 
     const body = await getBody();
     expect(body.slot.publishLinks).toEqual([]);
   });
 
-  it('drops a provider entry with no usable URL', async () => {
-    mockPublished([{ provider: 'linkedin', video: 'final-1.mp4' }]);
+  it('drops a failed outcome and an outcome with no usable URL', async () => {
+    mockPublished([
+      { provider: 'linkedin', status: 'published', accountId: 'li1' },
+      { provider: 'youtube', status: 'failed', accountId: 'ch1', videoUrl: 'https://www.youtube.com/watch?v=abc' },
+    ]);
 
     const body = await getBody();
     expect(body.slot.publishLinks).toEqual([]);
   });
 
-  it('does not call the engine for a slot that is not published', async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
-    const client = mockSlotsClient({
-      slot: { ...SLOT_DETAIL_ROW, status: 'awaiting', task_id: null },
-      schedule: SCHEDULE_ROW,
-      persona: { id: 'p1', name: 'Viva Leve' },
+  it('shows no links for a slot that is not published yet', async () => {
+    mockSlot({
+      ...SLOT_DETAIL_ROW,
+      status: 'publishing',
+      publish_outcomes: [{ provider: 'youtube', status: 'published', accountId: 'ch1', videoUrl: 'https://www.youtube.com/watch?v=abc' }],
     });
-    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
 
     const body = await getBody();
     expect(body.slot.publishLinks).toEqual([]);
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it('degrades to no links when the engine lookup fails', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('engine down'); }));
-    const client = mockSlotsClient({
-      slot: PUBLISHED_ROW,
-      schedule: SCHEDULE_ROW,
-      persona: { id: 'p1', name: 'Viva Leve' },
-    });
-    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
-
-    const body = await getBody();
-    expect(body.slot.publishLinks).toEqual([]);
-  });
-
-  it('has no links for a published slot with no engine task id', async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
-    const client = mockSlotsClient({
-      slot: { ...SLOT_DETAIL_ROW, status: 'published', task_id: null },
-      schedule: SCHEDULE_ROW,
-      persona: { id: 'p1', name: 'Viva Leve' },
-    });
-    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
-
-    const body = await getBody();
-    expect(body.slot.publishLinks).toEqual([]);
-    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 
@@ -1355,8 +1055,6 @@ describe('GET /api/schedule/slots/[slotId] failure logging', () => {
 describe('slot id normalization', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
-    vi.stubEnv('MONEYPRINT_API_SECRET', 'secret');
   });
 
   function slotIdEqCalls(client: { calls: ChainCall[] }, table: string) {
@@ -1385,7 +1083,7 @@ describe('slot id normalization', () => {
       client.calls
         .filter((c) => c.table === 'scheduled_posts' && c.op === 'select')
         .map((c) => c.args),
-    ).toEqual([['id, schedule_id, slot_at, status, title, error, published_at, task_id, voiceover, publish_outcomes, segments, prompt_version_id, media_kind, media_ref, media_content_type']]);
+    ).toEqual([['id, schedule_id, slot_at, status, title, error, published_at, publish_outcomes, prompt_version_id, media_kind, media_ref, media_content_type']]);
     expect(
       client.calls
         .filter((c) => c.table === 'scheduled_posts' && c.op === 'eq')
@@ -1394,20 +1092,6 @@ describe('slot id normalization', () => {
       ['id', SLOT_ID],
       ['user_id', USER_ID],
     ]);
-    expect(
-      client.calls
-        .filter((c) => c.table === 'scheduled_post_progress_history' && c.op === 'eq')
-        .map((c) => c.args),
-    ).toEqual([
-      ['post_id', SLOT_ID],
-      ['user_id', USER_ID],
-    ]);
-    expect(
-      client.calls
-        .filter((c) => c.table === 'scheduled_post_progress_history' && c.op === 'select')
-        .map((c) => c.args),
-    ).toEqual([['progress, stage, recorded_at']]);
-    expect(client.historyChain.order).toHaveBeenCalledWith('recorded_at', { ascending: true });
   });
 
   it('GET 404s a non-uuid id without touching the database', async () => {
@@ -1466,7 +1150,7 @@ describe('slot id normalization', () => {
 
   it('DELETE resolves a batch key to the slot uuid', async () => {
     const client = mockSlotsClient({
-      slot: { id: SLOT_ID, schedule_id: 's1', status: 'pending', title: 'T' },
+      slot: { id: SLOT_ID, schedule_id: 's1', status: 'ready', title: 'T' },
       schedule: { id: 's1', user_id: USER_ID },
       rpcResult: 'deleted',
     });
@@ -1496,7 +1180,7 @@ describe('slot id normalization', () => {
   });
 
   it('updates a cookie session slot on the service client when the session update is denied', async () => {
-    const slot = { id: 'slot-1', schedule_id: 's1', status: 'pending', title: 'Old' };
+    const slot = { id: 'slot-1', schedule_id: 's1', status: 'ready', title: 'Old' };
     const schedule = { id: 's1', user_id: USER_ID };
     const session = mockSlotsClient({ slot, schedule, updateConflict: true });
     const service = mockSlotsClient({ slot, schedule });

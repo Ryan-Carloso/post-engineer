@@ -1,34 +1,14 @@
 """Contract tests for Threads publish support (engine side).
 
-Covers PublishParams (schema), upload_publisher metadata/multipart rules and
+Covers upload_publisher metadata/multipart rules and
 the fill-schedule mapping for the threads provider.
 """
 
 import unittest
 
-from pydantic import ValidationError
-
 from app.providers import SOCIAL_PROVIDERS
-from app.models.publish import PublishParams, ThreadsPublish
 from app.services import upload_publisher
 from app.services.fill_schedule.metadata import metadata_for, validate_publish_plan
-
-
-class ThreadsPublishParamsTest(unittest.TestCase):
-    def test_accepts_threads_publish(self) -> None:
-        params = PublishParams(
-            providers=["threads"],
-            threads=ThreadsPublish(caption="post", account_ids=["42"]),
-        )
-        self.assertEqual(params.threads.account_ids, ["42"])
-
-    def test_rejects_provider_without_metadata(self) -> None:
-        with self.assertRaisesRegex(ValidationError, "threads provider requires threads metadata"):
-            PublishParams(providers=["threads"])
-
-    def test_rejects_caption_over_limit(self) -> None:
-        with self.assertRaises(ValidationError):
-            ThreadsPublish(caption="a" * 501, account_ids=["42"])
 
 
 class ThreadsPublisherTest(unittest.TestCase):

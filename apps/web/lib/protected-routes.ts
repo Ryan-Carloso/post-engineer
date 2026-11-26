@@ -1,7 +1,6 @@
 export const PROTECTED_PREFIXES = [
   '/account',
   '/accounts',
-  '/billing',
   '/experiments',
   '/metrics',
   '/persona',

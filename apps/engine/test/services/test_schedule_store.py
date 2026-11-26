@@ -65,45 +65,10 @@ class StoreRequestsTests(unittest.TestCase):
         self.requests.request.return_value = _response(json_data=[])
 
 
-
-
-
-
-    def test_pending_slots_filters_status_and_horizon(self):
-        self.store.pending_slots(datetime(2026, 9, 6, 12, 0, tzinfo=UTC), limit=10)
-        _, url, kwargs = self._last_call()
-        self.assertEqual(kwargs["params"]["status"], f"eq.{fs.SLOT_PENDING}")
-        self.assertTrue(kwargs["params"]["slot_at"].startswith("lte."))
-        self.assertIn("schedules!left", kwargs["params"]["select"])
-        self.assertIn("linkedin_account_ids", kwargs["params"]["select"])
-        self.assertEqual(kwargs["params"]["order"], "slot_at.asc")
-
-    def test_slot_select_embeds_personas_for_generate_stage(self):
-        self.store.pending_slots(datetime(2026, 9, 6, 12, 0, tzinfo=UTC), limit=10)
-        _, _, kwargs = self._last_call()
-        select = kwargs["params"]["select"]
-        self.assertIn("personas(", select)
-        for field in ("niche", "language", "video_aspect", "voice_id"):
-            self.assertIn(field, select)
-        self.assertNotIn("script_prompt", select)
-
     def test_ready_due_slots_embeds_personas_for_notification(self):
         self.store.ready_due_slots(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
         _, _, kwargs = self._last_call()
         self.assertIn("personas(", kwargs["params"]["select"])
-
-    def test_generating_slots_requires_task_id(self):
-        self.store.generating_slots()
-        _, _, kwargs = self._last_call()
-        self.assertEqual(kwargs["params"]["status"], f"eq.{fs.SLOT_GENERATING}")
-        self.assertEqual(kwargs["params"]["task_id"], "not.is.null")
-
-    def test_generating_slots_reads_the_slot_row_alone(self):
-        self.store.generating_slots()
-        _, _, kwargs = self._last_call()
-        self.assertEqual(kwargs["params"]["select"], "*")
-        self.assertEqual(kwargs["params"]["status"], f"eq.{fs.SLOT_GENERATING}")
-        self.assertEqual(kwargs["params"]["task_id"], "not.is.null")
 
     def test_ready_due_slots_filters_due_time(self):
         self.store.ready_due_slots(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
@@ -174,93 +139,15 @@ class StoreRequestsTests(unittest.TestCase):
         self.requests.request.return_value = _response(json_data=[])
         self.assertFalse(self.store.claim_resumable_slot("slot-9", "NOW", "LEASE"))
 
-    def test_publishing_slots_lists_claimed(self):
-        self.requests.request.return_value = _response(
-            json_data=[{"id": "slot-9", "status": "publishing"}]
-        )
-        rows = self.store.publishing_slots()
-        self.assertEqual([r["id"] for r in rows], ["slot-9"])
-        _, _, kwargs = self._last_call()
-        self.assertEqual(kwargs["params"]["status"], "eq.publishing")
-
-    def test_signed_url_posts_to_storage_sign(self):
-        self.requests.post.return_value = _response(json_data={"signedURL": "/object/sign/personas/x?token=t"})
-        url = self.store.signed_url("personas", "user-1/foto.png")
-        self.assertTrue(url.startswith("https://supabase.example/storage/v1/object/sign/"))
-        post_kwargs = self.requests.post.call_args
-        self.assertIn("/storage/v1/object/sign/personas/user-1/foto.png", post_kwargs.args[0])
-        self.assertEqual(post_kwargs.kwargs["json"]["expiresIn"], fs.SIGNED_URL_EXPIRES_SECONDS)
-
     def test_non_dict_rows_filtered(self):
         self.requests.request.return_value = _response(json_data=[{"id": "s1"}, "junk", 42])
-        slots = self.store.pending_slots(datetime(2026, 9, 6, 12, 0, tzinfo=timezone.utc), limit=10)
+        slots = self.store.ready_due_slots(datetime(2026, 9, 6, 12, 0, tzinfo=timezone.utc))
         self.assertEqual(len(slots), 1)
 
     def _last_call(self):
         call = self.requests.request.call_args
         args = call.args
         return args[0], args[1], call.kwargs
-
-
-class GenerationHorizonTests(unittest.TestCase):
-    """Configurable generation horizon — Modal batch cost control.
-
-    Default 24h = generate on the eve (1 nightly batch). Larger values
-    generate earlier; idle days outside the horizon never cost GPU.
-    """
-
-    def test_default_horizon_is_24h(self):
-        from app.config import config as app_config
-
-        original = app_config.app.get("fill_schedule_generation_horizon_hours")
-        app_config.app.pop("fill_schedule_generation_horizon_hours", None)
-        try:
-            self.assertEqual(fs.ScheduleStore.generation_horizon_hours(), 24)
-        finally:
-            if original is not None:
-                app_config.app["fill_schedule_generation_horizon_hours"] = original
-
-    def test_horizon_read_from_config(self):
-        from app.config import config as app_config
-
-        original = app_config.app.get("fill_schedule_generation_horizon_hours")
-        app_config.app["fill_schedule_generation_horizon_hours"] = 48
-        try:
-            self.assertEqual(fs.ScheduleStore.generation_horizon_hours(), 48)
-        finally:
-            if original is None:
-                app_config.app.pop("fill_schedule_generation_horizon_hours", None)
-            else:
-                app_config.app["fill_schedule_generation_horizon_hours"] = original
-
-    def test_pending_slots_horizon_uses_config_value(self):
-        env = dict(ENV)
-        with patch.dict(os.environ, env, clear=True):
-            store = fs.ScheduleStore(requests_module=MagicMock())
-        store._requests.request.return_value = _response(json_data=[])
-        from app.config import config as app_config
-
-        original = app_config.app.get("fill_schedule_generation_horizon_hours")
-        app_config.app["fill_schedule_generation_horizon_hours"] = 1
-        try:
-            store.pending_slots(datetime(2026, 9, 6, 12, 0, tzinfo=UTC), limit=10)
-        finally:
-            if original is None:
-                app_config.app.pop("fill_schedule_generation_horizon_hours", None)
-            else:
-                app_config.app["fill_schedule_generation_horizon_hours"] = original
-        kwargs = self._pair(store)[1]
-        slot_at = kwargs["params"]["slot_at"]
-        self.assertEqual(slot_at, "lte.2026-09-06T13:00:00+00:00")
-
-    @staticmethod
-    def _pair(store):
-        call = store._requests.request.call_args
-        return call.args[1], call.kwargs
-
-
-if __name__ == "__main__":
-    unittest.main()
 
 
 class SlotSelectTests(unittest.TestCase):
@@ -281,6 +168,11 @@ class SlotSelectTests(unittest.TestCase):
     def test_slot_select_includes_bluesky_account_ids(self):
         self.assertIn("bluesky_account_ids", fs.ScheduleStore.SLOT_SELECT)
 
+    def test_slot_select_reads_no_column_migration_087_dropped(self):
+        for column in ("post_voice_id", "post_niche", "post_language", "post_video_aspect", "voice_id", "niche", "task_id"):
+            self.assertNotIn(column, fs.ScheduleStore.SLOT_SELECT)
+        self.assertIn("personas(name,ai_label)", fs.ScheduleStore.SLOT_SELECT)
+
 
 class _JsonHandler(BaseHTTPRequestHandler):
     def _respond(self, payload):
@@ -294,8 +186,8 @@ class _JsonHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self._respond([{"id": "slot-1"}])
 
-    def do_POST(self):
-        self._respond({"spent": True, "refunded": True})
+    def do_PATCH(self):
+        self._respond([{"id": "slot-1"}])
 
     def log_message(self, *args):
         pass
@@ -332,7 +224,7 @@ class RetryingSessionTests(unittest.TestCase):
     def test_default_store_retries_a_connect_failure(self):
         attempts, patcher = self._patch_new_conn(failures=1)
         with patcher:
-            rows = self.store.pending_slots(datetime(2026, 9, 6, 12, 0, tzinfo=UTC), limit=10)
+            rows = self.store.ready_due_slots(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
         self.assertEqual(rows, [{"id": "slot-1"}])
         self.assertEqual(len(attempts), 2)
 
@@ -341,7 +233,7 @@ class RetryingSessionTests(unittest.TestCase):
 
         attempts, patcher = self._patch_new_conn(failures=10)
         with patcher, self.assertRaises(requests.ConnectionError):
-            self.store.pending_slots(datetime(2026, 9, 6, 12, 0, tzinfo=UTC), limit=10)
+            self.store.ready_due_slots(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
         self.assertEqual(len(attempts), fs.store.CONNECT_RETRIES + 1)
 
     def _patch_getresponse(self, failures):
@@ -366,12 +258,12 @@ class RetryingSessionTests(unittest.TestCase):
 
         attempts, patcher = self._patch_getresponse(failures=1)
         with patcher, self.assertRaises(requests.ConnectionError):
-            self.store.pending_slots(datetime(2026, 9, 6, 12, 0, tzinfo=UTC), limit=10)
+            self.store.ready_due_slots(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
         self.assertEqual(len(attempts), 1, "a read failure was retried")
 
-    def test_post_rpc_retries_a_connect_failure(self):
+    def test_patch_claim_retries_a_connect_failure(self):
         attempts, patcher = self._patch_new_conn(failures=1)
         with patcher:
-            spent = self.store.spend_tokens("user-1", "batch:sched-1", 2, "why")
-        self.assertTrue(spent, "the retried POST did not reach the handler")
+            claimed = self.store.claim_ready_slot("slot-1", datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+        self.assertTrue(claimed, "the retried PATCH did not reach the handler")
         self.assertEqual(len(attempts), 2)

@@ -14,7 +14,6 @@ vi.mock('@/lib/rate-limit', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/rate-limit')>();
   return { ...actual, applyRateLimit: vi.fn(async () => null) };
 });
-vi.mock('@/lib/voice-catalog-fetch', () => ({ fetchPersonaVoiceCatalogIds: vi.fn(async () => undefined) }));
 const posthogMock = vi.hoisted(() => ({
   capture: vi.fn(),
   captureAs: vi.fn(),
@@ -115,8 +114,6 @@ function mockSupabase(options: { failWrite?: boolean } = {}) {
 function createRequest(card?: string): Request {
   const formData = new FormData();
   formData.set('name', 'Maria');
-  formData.set('avatarUrl', 'data:image/png;base64,IA');
-  formData.set('voiceId', 'chatterbox:kokoro_af_heart');
   formData.set('publishingAccounts', JSON.stringify({ youtube: ['acct-1'] }));
   if (card !== undefined) formData.set('identityCard', card);
   return new Request('http://localhost/api/persona', { method: 'POST', body: formData });
