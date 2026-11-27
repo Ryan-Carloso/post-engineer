@@ -136,6 +136,8 @@ class BatchPublisher:
             return None
         if not isinstance(row, dict):
             return None
+        if row.get("user_id") != slot_user_id(slot):
+            return None
         storage_path = row.get("storage_path")
         if not isinstance(storage_path, str) or not storage_path:
             return None

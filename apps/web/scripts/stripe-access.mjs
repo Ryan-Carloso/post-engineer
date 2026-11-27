@@ -7,6 +7,20 @@ export const USAGE = `usage:
   node apps/web/scripts/stripe-access.mjs grant --email <email> --until <ISO date>
   node apps/web/scripts/stripe-access.mjs revoke --email <email>`;
 
+const SUBSCRIPTION_STATUSES = ['trialing', 'active', 'past_due', 'canceled', 'unpaid', 'incomplete', 'incomplete_expired', 'paused'];
+const DUNNING_GRACE_MS = 3 * 24 * 60 * 60 * 1000;
+
+export function effectiveAccessOf(args, now) {
+  if (!SUBSCRIPTION_STATUSES.includes(args.status)) {
+    throw new Error(`unknown subscription status ${args.status}`);
+  }
+  const nowMs = now.getTime();
+  const endMs = args.periodEnd === null ? nowMs : Date.parse(args.periodEnd);
+  if (args.status === 'active' || args.status === 'trialing') return new Date(Math.max(endMs, nowMs)).toISOString();
+  if (args.status === 'past_due') return new Date(Math.max(endMs + DUNNING_GRACE_MS, nowMs)).toISOString();
+  return new Date(nowMs).toISOString();
+}
+
 export function parseArgs(argv) {
   const [command, ...rest] = argv;
   const options = { command, email: null, until: null };
@@ -109,8 +123,12 @@ export async function run(argv, deps) {
     const userId = await resolveUserIdByEmail(supabase, options.email);
     if (userId === null) throw new Error(`no user with email ${options.email}`);
     const until = new Date(options.until);
-    const { error } = await supabase.from('user_profiles').update({ access_until: until.toISOString() }).eq('id', userId);
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .upsert({ id: userId, access_until: until.toISOString() }, { onConflict: 'id' })
+      .select('id');
     if (error) throw new Error(`grant failed: ${error.message}`);
+    if (data === null || data.length === 0) throw new Error(`grant failed: no profile for ${options.email}`);
     log(`granted ${options.email} access until ${until.toISOString()}`);
     return { updated: 1 };
   }
@@ -126,8 +144,23 @@ export async function run(argv, deps) {
 
   let updated = 0;
   let skipped = 0;
+  const nowDate = now();
+  const byCustomer = new Map();
   for await (const subscription of stripe.subscriptions.list({ status: 'all', limit: 100 })) {
     const args = accessArgsOf(subscription);
+    const access = effectiveAccessOf(args, nowDate);
+    const current = byCustomer.get(args.customer);
+    if (current === undefined) {
+      byCustomer.set(args.customer, { args, access });
+      continue;
+    }
+    if (current.args.userId === null) current.args.userId = args.userId;
+    if (access > current.access) {
+      if (args.userId === null) args.userId = current.args.userId;
+      byCustomer.set(args.customer, { args, access });
+    }
+  }
+  for (const { args } of byCustomer.values()) {
     const { data: link, error: linkError } = await supabase
       .from('user_billing_links')
       .select('user_id')

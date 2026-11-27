@@ -156,6 +156,26 @@ describe('DELETE /api/schedule/slots/[slotId]', () => {
     });
   });
 
+  it('deletes an expired slot owned by the user', async () => {
+    const client = mockSlotsClient({
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'expired', title: 'T' },
+      schedule: { id: 's1', user_id: USER_ID },
+      rpcResult: 'deleted',
+    });
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await deleteSlot(SLOT_ID);
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { success: boolean };
+    expect(body.success).toBe(true);
+    expect(client.rpc).toHaveBeenCalledWith('delete_slot_if_not_last', {
+      p_slot_id: 'slot-1',
+      p_user_id: USER_ID,
+    });
+  });
+
   it('uses the service client for OAuth callers (no cookie session)', async () => {
     const client = mockSlotsClient({
       slot: { id: 'slot-1', schedule_id: 's1', status: 'ready', title: 'T' },

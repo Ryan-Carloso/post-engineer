@@ -165,10 +165,18 @@ class AccessPauseTests(unittest.TestCase):
 
     def test_expire_cleans_up_upload_media(self):
         store = _store(due=[_slot(media_kind="upload")], access={"user-1": PAST})
-        store.get_video_upload.return_value = {"storage_path": "user-1/direct-uploads/x.mp4", "status": "ready"}
+        store.get_video_upload.return_value = {"user_id": "user-1", "storage_path": "user-1/direct-uploads/x.mp4", "status": "ready"}
         publisher = _publisher(store)
         publisher.run(NOW)
         store.remove_storage_object.assert_called_once_with("videos", "user-1/direct-uploads/x.mp4")
+
+    def test_expire_keeps_an_upload_owned_by_another_user(self):
+        store = _store(due=[_slot(media_kind="upload")], access={"user-1": PAST})
+        store.get_video_upload.return_value = {"user_id": "user-2", "storage_path": "user-2/direct-uploads/x.mp4", "status": "ready"}
+        publisher = _publisher(store)
+        publisher.run(NOW)
+        store.remove_storage_object.assert_not_called()
+        store.expire_ready_slot.assert_called_once_with("slot-1")
 
     def test_expire_survives_an_upload_lookup_failure_without_cleanup(self):
         store = _store(due=[_slot(media_kind="upload")], access={"user-1": PAST})

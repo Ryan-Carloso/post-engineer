@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { accessArgsOf, parseArgs, periodEndOf, run } from '../stripe-access.mjs';
+import { accessArgsOf, effectiveAccessOf, parseArgs, periodEndOf, run } from '../stripe-access.mjs';
 
 function subscription(overrides: Record<string, unknown> = {}) {
   return {
@@ -13,8 +13,8 @@ function subscription(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function fakeSupabase(link: unknown = null) {
-  const calls: { table?: string; rpc?: string; args?: unknown; update?: unknown }[] = [];
+function fakeSupabase(link: unknown = null, grantRows: { id: string }[] | null = [{ id: 'user-9' }]) {
+  const calls: { table?: string; rpc?: string; args?: unknown; update?: unknown; upsert?: unknown }[] = [];
   return {
     calls,
     from(table: string) {
@@ -24,6 +24,12 @@ function fakeSupabase(link: unknown = null) {
           eq: async (_column: string, id: string) => {
             calls.push({ table, update: values, args: id });
             return { error: null };
+          },
+        }),
+        upsert: (values: unknown, options: unknown) => ({
+          select: async () => {
+            calls.push({ table, upsert: values, args: options });
+            return { data: grantRows, error: null };
           },
         }),
       };
@@ -113,6 +119,56 @@ describe('stripe-access CLI', () => {
     });
   });
 
+  it('maps each subscription status to the access the SQL function grants', () => {
+    const now = new Date('2026-11-27T00:00:00Z');
+    const future = { status: 'active', periodEnd: '2027-01-01T00:00:00.000Z', customer: 'cus_1', subscriptionId: 'sub_1', userId: null };
+    expect(effectiveAccessOf(future, now)).toBe('2027-01-01T00:00:00.000Z');
+    expect(effectiveAccessOf({ ...future, periodEnd: '2026-01-01T00:00:00.000Z' }, now)).toBe('2026-11-27T00:00:00.000Z');
+    expect(effectiveAccessOf({ ...future, status: 'past_due' }, now)).toBe('2027-01-04T00:00:00.000Z');
+    expect(effectiveAccessOf({ ...future, status: 'canceled' }, now)).toBe('2026-11-27T00:00:00.000Z');
+    expect(() => effectiveAccessOf({ ...future, status: 'weird' }, now)).toThrow(/unknown subscription status/);
+  });
+
+  it('applies only the active subscription when a customer also holds a canceled one with a later paid-through date', async () => {
+    const supabase = fakeSupabase({ user_id: 'user-1' });
+    const subscriptions = {
+      list: () => ({
+        async *[Symbol.asyncIterator]() {
+          yield subscription({ id: 'sub_old', status: 'canceled', current_period_end: 1_900_000_000, items: { data: [{ current_period_end: 1_900_000_000 }] } });
+          yield subscription({ id: 'sub_new', status: 'active', current_period_end: 1_800_000_000, items: { data: [{ current_period_end: 1_800_000_000 }] } });
+        },
+      }),
+    };
+    const now = () => new Date('2026-11-27T00:00:00Z');
+    const result = await run(['sync'], { supabase, stripe: { subscriptions }, log: () => {}, now });
+    expect(result).toEqual({ updated: 1, skipped: 0 });
+    expect(supabase.calls).toHaveLength(1);
+    expect(supabase.calls[0]).toMatchObject({
+      rpc: 'apply_subscription_access',
+      args: { p_subscription_id: 'sub_new', p_status: 'active' },
+    });
+  });
+
+  it('applies the later paid-through date when a customer holds two active subscriptions', async () => {
+    const supabase = fakeSupabase({ user_id: 'user-1' });
+    const subscriptions = {
+      list: () => ({
+        async *[Symbol.asyncIterator]() {
+          yield subscription({ id: 'sub_early', status: 'active', current_period_end: 1_800_000_000, items: { data: [{ current_period_end: 1_800_000_000 }] } });
+          yield subscription({ id: 'sub_late', status: 'active', current_period_end: 1_900_000_000, items: { data: [{ current_period_end: 1_900_000_000 }] } });
+        },
+      }),
+    };
+    const now = () => new Date('2026-11-27T00:00:00Z');
+    const result = await run(['sync'], { supabase, stripe: { subscriptions }, log: () => {}, now });
+    expect(result).toEqual({ updated: 1, skipped: 0 });
+    expect(supabase.calls).toHaveLength(1);
+    expect(supabase.calls[0]).toMatchObject({
+      rpc: 'apply_subscription_access',
+      args: { p_subscription_id: 'sub_late', p_status: 'active', p_current_period_end: new Date(1_900_000_000 * 1000).toISOString() },
+    });
+  });
+
   it('grants access by writing access_until for the matched email', async () => {
     const supabase = fakeSupabase();
     const admin = {
@@ -125,8 +181,25 @@ describe('stripe-access CLI', () => {
     expect(granted).toEqual({ updated: 1 });
     expect(supabase.calls[0]).toEqual({
       table: 'user_profiles',
-      update: { access_until: '2027-01-01T00:00:00.000Z' },
-      args: 'user-9',
+      upsert: { id: 'user-9', access_until: '2027-01-01T00:00:00.000Z' },
+      args: { onConflict: 'id' },
+    });
+  });
+
+  it('fails loudly when the grant upsert returns no row', async () => {
+    const supabase = fakeSupabase(null, []);
+    const admin = {
+      listUsers: async () => ({ data: { users: [{ id: 'user-9', email: 'a@b.c' }] }, error: null }),
+    };
+    await expect(
+      run(['grant', '--email', 'a@b.c', '--until', '2027-01-01T00:00:00Z'], {
+        supabase: { ...supabase, auth: { admin } },
+        log: () => {},
+      }),
+    ).rejects.toThrow(/no profile for a@b\.c/);
+    expect(supabase.calls[0]).toMatchObject({
+      table: 'user_profiles',
+      upsert: { id: 'user-9', access_until: '2027-01-01T00:00:00.000Z' },
     });
   });
 
