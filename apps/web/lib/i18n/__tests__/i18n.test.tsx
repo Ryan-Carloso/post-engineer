@@ -64,6 +64,12 @@ describe('i18n dictionaries', () => {
     }
   });
 
+  it('names the prompts destination the same on the page as in the nav in both locales', () => {
+    for (const dictionary of [ptDictionary, enDictionary]) {
+      expect(dictionary.recipes.title).toBe(dictionary.nav.prompts);
+    }
+  });
+
   it('carries the prompts tab copy in both locales', () => {
     expect(ptDictionary.nav.prompts).toBe('Prompts');
     expect(enDictionary.nav.prompts).toBe('Prompts');

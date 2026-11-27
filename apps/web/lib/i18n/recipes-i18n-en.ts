@@ -1,5 +1,5 @@
 export const recipesI18nEn = {
-  title: 'Get your prompts',
+  title: 'Prompts',
   subtitle:
       'Persona videos, published by your agent. MCP-first: create your key, install the MCP, and send the post.',
   whyMcpTitle: 'Why MCP-first?',
