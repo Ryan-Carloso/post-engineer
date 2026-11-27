@@ -171,7 +171,7 @@ describe('app/(main)/layout — MainLayout', () => {
     }
   });
 
-  it('renders the sidebar tabs in order: Posts, Accounts, Personas, Metrics, API Key & MCP', () => {
+  it('renders the sidebar tabs in order: Posts, Networks, Personas, Metrics, Prompts', () => {
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
     const sidebar = screen.getByTestId('nav-brand').closest('aside');
     const nav = within(sidebar as HTMLElement).getByRole('navigation');
@@ -379,7 +379,7 @@ describe('app/(main)/layout — MainLayout', () => {
       expect(postsLink?.getAttribute('href')).toBe('/posts');
     });
 
-    it('renders tab links in order: Posts, Metrics, Accounts, API Key', () => {
+    it('renders tab links in order: Posts, Metrics, Networks, Prompts', () => {
       render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
       const labels = within(getMobileNav())
         .getAllByRole('link')

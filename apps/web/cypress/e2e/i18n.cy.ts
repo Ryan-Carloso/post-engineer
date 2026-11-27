@@ -37,7 +37,7 @@ describe('i18n — troca de idioma via UI', () => {
 
   it('persiste o idioma escolhido no localStorage entre visitas', () => {
     cy.contains('button', 'EN').click();
-    cy.contains('a', 'Accounts').should('be.visible');
+    cy.contains('a', 'Networks').should('be.visible');
 
     cy.window().then((win) => {
       expect(win.localStorage.getItem('social-hub-locale')).to.eq('en');
@@ -45,7 +45,7 @@ describe('i18n — troca de idioma via UI', () => {
 
     cy.visit('/');
     cy.wait('@getSchedules');
-    cy.contains('a', 'Accounts').should('be.visible');
+    cy.contains('a', 'Networks').should('be.visible');
   });
 
   it('aplica o idioma salvo no localStorage em outras páginas', () => {
@@ -56,17 +56,17 @@ describe('i18n — troca de idioma via UI', () => {
     cy.visit('/accounts');
     cy.wait('@getAccounts');
 
-    cy.contains('a', 'Accounts').should('be.visible');
+    cy.contains('a', 'Networks').should('be.visible');
   });
 
   it('traduz o conteúdo da página de contas ao trocar o idioma', () => {
     cy.visit('/accounts');
     cy.wait('@getAccounts');
 
-    cy.contains('h1', 'Contas').should('be.visible');
+    cy.contains('h1', 'Redes conectadas').should('be.visible');
 
     cy.contains('button', 'EN').click();
-    cy.contains('h1', 'Accounts').scrollIntoView().should('be.visible');
+    cy.contains('h1', 'Connected networks').scrollIntoView().should('be.visible');
   });
 
   it('usa o idioma padrão quando o localStorage tem valor inválido', () => {
@@ -77,6 +77,6 @@ describe('i18n — troca de idioma via UI', () => {
     cy.visit('/');
     cy.wait('@getSchedules');
 
-    cy.contains('a', 'Contas').should('be.visible');
+    cy.contains('a', 'Redes').should('be.visible');
   });
 });

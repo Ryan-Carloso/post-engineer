@@ -1,9 +1,9 @@
 export const promptsStrings = {
   pt: {
     nav: {
-      prompts: 'Chave de API e MCP',
-      promptsShort: 'Chave',
-      promptsHint: 'Chave de API, configuração e prompts para o seu agente',
+      prompts: 'Prompts',
+      promptsShort: 'Prompts',
+      promptsHint: 'Seus prompts, chave de API e MCP',
       postsHint: 'Calendário de publicações',
       more: 'Mais',
       moreTitle: 'Mais opções',
@@ -11,9 +11,9 @@ export const promptsStrings = {
   },
   en: {
     nav: {
-      prompts: 'API key and MCP',
-      promptsShort: 'API key',
-      promptsHint: 'API key, setup, and prompts for your agent',
+      prompts: 'Prompts',
+      promptsShort: 'Prompts',
+      promptsHint: 'Your prompts, API key and MCP',
       more: 'More',
       moreTitle: 'More options',
     },

@@ -1,6 +1,6 @@
 export const accountsI18nPt = {
-  title: 'Contas',
-  subtitle: 'Conecte e gerencie suas contas de publicação.',
+  title: 'Redes conectadas',
+  subtitle: 'Conecte e gerencie suas redes de publicação.',
   youtubeLabel: 'YouTube',
   youtubeDescription: 'Publique vídeos, Shorts e gerencie seus canais.',
   instagramLabel: 'Instagram',

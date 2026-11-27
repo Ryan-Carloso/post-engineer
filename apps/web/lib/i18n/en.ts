@@ -8,8 +8,8 @@ export const enDictionary: Dictionary = {
   nav: {
     brand: 'Post Engineer',
     brandSubtitle: 'Schedule and publish to every network',
-    accounts: 'Accounts',
-    accountsHint: 'Connect and manage',
+    accounts: 'Networks',
+    accountsHint: 'Connect and manage networks',
     create: 'Create post',
     createHint: 'Publish content',
     persona: 'Personas',

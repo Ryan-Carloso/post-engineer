@@ -1,6 +1,6 @@
 export const accountsI18nEn = {
-  title: 'Accounts',
-  subtitle: 'Connect and manage your publishing accounts.',
+  title: 'Connected networks',
+  subtitle: 'Connect and manage your publishing networks.',
   youtubeLabel: 'YouTube',
   youtubeDescription: 'Publish videos and Shorts, and manage your channels.',
   instagramLabel: 'Instagram',

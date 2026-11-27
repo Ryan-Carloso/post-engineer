@@ -7,8 +7,8 @@ export const ptDictionary = {
   nav: {
     brand: 'Post Engineer',
     brandSubtitle: 'Agende e publique em todas as redes',
-    accounts: 'Contas',
-    accountsHint: 'Conectar e gerenciar',
+    accounts: 'Redes',
+    accountsHint: 'Conectar e gerenciar redes',
     create: 'Criar post',
     createHint: 'Publicar conteúdo',
     persona: 'Personas',
