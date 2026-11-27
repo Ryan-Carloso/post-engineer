@@ -158,6 +158,15 @@ def test_renaming_a_protected_file_fails_like_deleting_it():
     assert fails(honesty.analyze([other], lambda _path: True)) == []
 
 
+def test_a_python_coverage_floor_no_longer_moves_the_grade():
+    change = honesty.FileChange(
+        "pyproject.toml", "M", "fail_under = 60\n", "fail_under = 50\n"
+    )
+    findings = honesty.analyze([change], lambda _path: False)
+    assert findings == []
+    assert not any(finding.code == "coverage-threshold" for finding in findings)
+
+
 def test_unpinned_verification_test_file_runs_the_whole_scripts_suite():
     assert scope.local_suites([".github/scripts/tests/test_verification_collect.py"]) == [
         "verification"

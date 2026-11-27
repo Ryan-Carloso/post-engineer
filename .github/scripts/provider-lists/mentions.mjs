@@ -9,6 +9,7 @@ export function buildMentionIndex(providers, columns) {
     index.set(provider, provider);
     index.set(column, provider);
     index.set(`${stem}AccountIds`, provider);
+    index.set(`${stem.toUpperCase()}_PROVIDER`, provider);
   }
   return index;
 }

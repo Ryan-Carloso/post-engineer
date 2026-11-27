@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
-import { HOME, findViolations, loadProviders, run, selectSources } from './check.mjs';
+import { HOME, MIRRORS, findViolations, loadProviders, run, scanPython, selectSources } from './check.mjs';
 import { buildMentionIndex, mentionsInText } from './mentions.mjs';
 import { violationOf } from './rules.mjs';
 import { scanTs } from './scan-ts.mjs';
@@ -15,7 +15,7 @@ const index = buildMentionIndex(providers, loaded.columns);
 const ALL = providers.map((provider) => `'${provider}'`).join(', ');
 
 const tsKinds = (text, file = 'apps/web/lib/x.ts') => scanTs(file, text, index).map((group) => [group.kind, [...new Set(group.providers)].length]);
-const tsViolations = (text, file = 'apps/web/lib/x.ts') => findViolations(scanTs(file, text, index), loaded);
+const tsViolations = (text, file = 'apps/web/lib/x.ts') => findViolations(scanTs(file, text, index), loaded, []);
 
 describe('loadProviders', () => {
   it('reads the list and the named subsets from the home file', () => {
@@ -29,8 +29,8 @@ describe('loadProviders', () => {
 });
 
 describe('mentions', () => {
-  it('maps a provider, its column and the camelCase column', () => {
-    assert.deepEqual(mentionsInText(index, '3speak threespeak_account_ids threespeakAccountIds'), ['3speak', '3speak', '3speak']);
+  it('maps a provider, its column, the camelCase column and the engine constant', () => {
+    assert.deepEqual(mentionsInText(index, '3speak threespeak_account_ids threespeakAccountIds THREESPEAK_PROVIDER'), ['3speak', '3speak', '3speak', '3speak']);
     assert.deepEqual(mentionsInText(index, 'YouTube igAccountIds did'), []);
   });
 });
@@ -104,13 +104,60 @@ describe('scanTs', () => {
   it('still finds the list in its one home (the scanner is not vacuous)', () => {
     const groups = scanTs(HOME, readFileSync(join(root, HOME), 'utf8'), index);
     assert.ok(groups.some((group) => group.kind === 'list' && new Set(group.providers).size === providers.length));
-    assert.deepEqual(findViolations(groups, loaded), []);
+    assert.deepEqual(findViolations(groups, loaded, []), []);
+  });
+});
+
+describe('scanPython', () => {
+  const python = (text) => {
+    const dir = execFileSync('mktemp', ['-d'], { encoding: 'utf8' }).trim();
+    const file = join(dir, 'sample.py');
+    execFileSync('sh', ['-c', 'cat > "$1"', 'sh', file], { input: text });
+    try {
+      return scanPython(root, [file], index).map((group) => [group.kind, [...new Set(group.providers)].length]);
+    } finally {
+      execFileSync('rm', ['-rf', dir]);
+    }
+  };
+  it('finds tuples, sets of engine constants and Literal[...]', () => {
+    assert.deepEqual(python('A = ("youtube", "instagram", "bluesky")\n'), [['list', 3]]);
+    assert.deepEqual(python('A = frozenset({INSTAGRAM_PROVIDER, THREADS_PROVIDER, FACEBOOK_PROVIDER})\n'), [['list', 3]]);
+    assert.deepEqual(
+      python('from typing import Literal\nP = Literal["youtube", "instagram", "bluesky"]\n').sort(),
+      [['list', 3], ['list', 3]],
+    );
+  });
+  it('finds dicts keyed by provider and if/elif and boolean chains', () => {
+    assert.deepEqual(python('M = {"youtube": 1, "instagram": 2, "bluesky": 3}\n'), [['map', 3]]);
+    assert.deepEqual(python('if p == "youtube":\n    a()\nelif p == "instagram":\n    b()\nelif p == "bluesky":\n    c()\n'), [['chain', 3]]);
+    assert.deepEqual(python('ok = p == "youtube" or p == "rumble" or p == "fanvue"\n'), [['chain', 3]]);
+  });
+  it('finds runs of sibling if statements that share a subject', () => {
+    assert.deepEqual(python('if p == "youtube":\n    a()\nif p == "instagram":\n    b()\nif p == "bluesky":\n    c()\n'), [['chain', 3]]);
+    assert.deepEqual(python('if p == YOUTUBE_PROVIDER:\n    a()\nif p == INSTAGRAM_PROVIDER:\n    b()\nif p == BLUESKY_PROVIDER:\n    c()\n'), [['chain', 3]]);
+    assert.deepEqual(python('if p == "youtube":\n    a()\nif p == "instagram":\n    b()\n'), [['chain', 2]]);
+    assert.deepEqual(python('if p == "youtube":\n    a()\nwork()\nif p == "instagram":\n    b()\nif p == "bluesky":\n    c()\n'), [['chain', 2]]);
+  });
+  it('reads an implicitly concatenated select string as one string and skips docstrings', () => {
+    assert.deepEqual(python('"""youtube instagram bluesky"""\nS = (\n    "youtube_account_ids,"\n    "instagram_account_ids,bluesky_account_ids"\n)\n'), [['text', 3]]);
+  });
+});
+
+describe('findViolations (mirrors)', () => {
+  it('accepts a mirror that lists every provider and flags one that drifted', () => {
+    const mirror = 'apps/engine/app/providers.py';
+    const full = { file: mirror, line: 3, kind: 'list', providers: [...providers] };
+    assert.deepEqual(findViolations([full], loaded, [mirror]), []);
+    const drifted = { ...full, providers: providers.filter((provider) => provider !== 'fanvue') };
+    const violations = findViolations([drifted], loaded, [mirror]);
+    assert.equal(violations.length, 1);
+    assert.match(violations[0].message, /mirror of SOCIAL_PROVIDERS/);
   });
 });
 
 describe('selectSources', () => {
   it('keeps production sources and drops tests, cypress and generated files', () => {
-    const ts = selectSources([
+    const { ts, py } = selectSources([
       'apps/web/lib/a.ts',
       'apps/web/lib/__tests__/a.test.ts',
       'apps/web/cypress/e2e/a.cy.ts',
@@ -119,12 +166,20 @@ describe('selectSources', () => {
       'apps/mcp/README.md',
       '.github/scripts/x.mjs',
       'supabase/migrations/001.sql',
+      '.github/scripts/c.py',
+      '.github/scripts/tests/test_c.py',
     ]);
     assert.deepEqual(ts, ['apps/web/lib/a.ts', 'apps/mcp/src/b.ts']);
+    assert.deepEqual(py, ['.github/scripts/c.py']);
   });
 });
 
 describe('the repository', () => {
+  it('has every mirror among the scanned sources', () => {
+    const tracked = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard'], { cwd: root, encoding: 'utf8' }).split('\n');
+    const { ts, py } = selectSources(tracked);
+    for (const mirror of MIRRORS) assert.ok(ts.includes(mirror) || py.includes(mirror), mirror);
+  });
   it('is clean', async () => {
     assert.deepEqual(await run(root), []);
   });

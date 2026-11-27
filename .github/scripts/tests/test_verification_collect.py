@@ -286,6 +286,19 @@ def test_mappings_match_files_in_the_tree():
     assert whatsapp in scope.production_candidates(mapped)
 
 
+def test_removed_engine_paths_are_not_mapped():
+    assert scope.test_candidates("apps/engine/app/services/notify.py") == []
+    assert scope.production_candidates("apps/engine/test/services/test_notify.py") == []
+    assert not scope.is_product_code("apps/engine/app/services/notify.py")
+    areas = {
+        item.area
+        for item in scope.delegated_suites(
+            ["apps/engine/app/services/notify.py"], lambda _path: False
+        )
+    }
+    assert "engine" not in areas
+
+
 def test_product_file_without_a_mapped_test_warns():
     findings = analyze(
         "apps/web/lib/brand_new.py".replace(".py", ".ts"),

@@ -66,6 +66,7 @@ describe('loadConfig (real .github/api-naming.yml)', () => {
     assert.ok(Array.isArray(cfg.apiPaths) && cfg.apiPaths.length > 0);
     assert.ok(cfg.apiPaths.some((p) => p.includes('apps/web/app/api')));
     assert.ok(cfg.apiPaths.some((p) => p.includes('apps/mcp')));
+    assert.equal(cfg.apiPaths.length, 2);
   });
 
   it('loads the full initial denylist with severities', () => {
