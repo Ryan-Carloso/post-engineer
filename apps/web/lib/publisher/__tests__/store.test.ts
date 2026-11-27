@@ -119,6 +119,26 @@ describe('updateSlot', () => {
   });
 });
 
+describe('getSlotMediaClaimedAt', () => {
+  it('reads the slot claim stamp, returning null when the slot is missing', async () => {
+    const maybeSingle = vi.fn(async (): Promise<{ data: unknown; error: { message: string } | null }> => ({
+      data: { media_claimed_at: NOW.toISOString() },
+      error: null,
+    }));
+    const eq = vi.fn(() => ({ maybeSingle }));
+    const select = vi.fn(() => ({ eq }));
+    const from = vi.fn(() => ({ select }));
+    expect(await createPublisherStore(fake({ from })).getSlotMediaClaimedAt('slot-1')).toBe(NOW.toISOString());
+    expect(from).toHaveBeenCalledWith('scheduled_posts');
+    expect(select).toHaveBeenCalledWith('media_claimed_at');
+    expect(eq).toHaveBeenCalledWith('id', 'slot-1');
+    maybeSingle.mockResolvedValueOnce({ data: null, error: null });
+    expect(await createPublisherStore(fake({ from })).getSlotMediaClaimedAt('slot-1')).toBeNull();
+    maybeSingle.mockResolvedValueOnce({ data: null, error: { message: 'down' } });
+    await expect(createPublisherStore(fake({ from })).getSlotMediaClaimedAt('slot-1')).rejects.toThrow('scheduled_posts read failed: down');
+  });
+});
+
 describe('video uploads', () => {
   const row = { id: 'up-1', user_id: 'u', status: 'ready', storage_path: 'u/up-1.mp4', declared_content_type: 'video/mp4', detected_content_type: null, consumed_at: null };
 

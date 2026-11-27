@@ -89,6 +89,13 @@ export function createPublisherStore(supabase: SupabaseClient = createSupabaseSe
       if (error) throw new PublisherStoreError('scheduled_posts update', error.message);
     },
 
+    async getSlotMediaClaimedAt(slotId) {
+      const { data, error } = await supabase.from('scheduled_posts').select('media_claimed_at').eq('id', slotId).maybeSingle();
+      if (error) throw new PublisherStoreError('scheduled_posts read', error.message);
+      if (data === null) return null;
+      return typeof data.media_claimed_at === 'string' ? data.media_claimed_at : null;
+    },
+
     async getVideoUpload(uploadId) {
       const { data, error } = await supabase.from('video_uploads').select('*').eq('id', uploadId).maybeSingle();
       if (error) throw new PublisherStoreError('video_uploads read', error.message);

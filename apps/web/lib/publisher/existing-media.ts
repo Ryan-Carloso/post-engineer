@@ -132,6 +132,52 @@ async function downloadOrDefer(
   }
 }
 
+async function removeConsumedUpload(
+  store: PublisherStore,
+  slot: PublishSlot,
+  row: VideoUploadRecord,
+  expectedClaimAt: string,
+): Promise<void> {
+  let current: VideoUploadRecord | null;
+  try {
+    current = await store.getVideoUpload(row.id);
+  } catch (error) {
+    logger.warn('[publisher] claimed-upload lookup failed after a claim error, leaving the bytes in place', {
+      slotId: slot.id,
+      reason: scrubErrorText(errorMessageOf(error), 200),
+    });
+    return;
+  }
+  if (current === null || current.status !== 'consumed' || current.user_id !== slot.userId) return;
+  if (current.consumed_at === null || Date.parse(current.consumed_at) !== Date.parse(expectedClaimAt)) return;
+  if (current.storage_path === null || current.storage_path === '') return;
+  try {
+    await cleanupExistingMedia(store, slot.id, { bucket: VIDEOS_BUCKET, path: current.storage_path });
+  } catch (error) {
+    logger.warn('[publisher] claimed-upload cleanup failed after a claim error', {
+      slotId: slot.id,
+      reason: scrubErrorText(errorMessageOf(error), 200),
+    });
+  }
+}
+
+async function claimStampMissing(store: PublisherStore, slot: PublishSlot, claimedAt: string): Promise<boolean> {
+  let persisted: string | null;
+  try {
+    persisted = await store.getSlotMediaClaimedAt(slot.id);
+  } catch (error) {
+    logger.warn('[publisher] claim-stamp lookup failed after a stamp error, leaving the bytes in place', {
+      slotId: slot.id,
+      reason: scrubErrorText(errorMessageOf(error), 200),
+    });
+    return false;
+  }
+  if (persisted === null) return true;
+  const persistedAt = Date.parse(persisted);
+  const claimed = Date.parse(claimedAt);
+  return Number.isNaN(persistedAt) || Number.isNaN(claimed) || persistedAt !== claimed;
+}
+
 async function resolveUpload(
   store: PublisherStore,
   failPermanently: FailPermanently,
@@ -160,13 +206,26 @@ async function resolveUpload(
   }
   const bytes = await downloadOrDefer(store, slot, VIDEOS_BUCKET, row.storage_path, 'upload', failPermanently);
   if (bytes === null) return null;
-  const claimed = alreadyClaimed ? row : await store.claimVideoUpload(mediaRef, now);
+  let claimed: VideoUploadRecord | null;
+  try {
+    claimed = alreadyClaimed ? row : await store.claimVideoUpload(mediaRef, now);
+  } catch (error) {
+    await removeConsumedUpload(store, slot, row, now.toISOString());
+    throw error;
+  }
   if (claimed === null) {
     await failPermanently('scheduled video upload was already used');
     return null;
   }
   if (!alreadyClaimed && claimed.consumed_at !== null && claimed.consumed_at !== '') {
-    await store.updateSlot(slot.id, { media_claimed_at: claimed.consumed_at });
+    try {
+      await store.updateSlot(slot.id, { media_claimed_at: claimed.consumed_at });
+    } catch (error) {
+      if (await claimStampMissing(store, slot, claimed.consumed_at)) {
+        await removeConsumedUpload(store, slot, row, claimed.consumed_at);
+      }
+      throw error;
+    }
   }
   const contentType = firstNonEmpty(row.declared_content_type, row.detected_content_type) ?? 'video/mp4';
   const extension = UPLOAD_EXTENSIONS[contentType] ?? 'mp4';

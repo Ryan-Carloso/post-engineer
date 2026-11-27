@@ -72,6 +72,7 @@ export function makeStore(overrides: Partial<PublisherStore> = {}): PublisherSto
     updateSlot: vi.fn(async (_slotId: string, fields: Record<string, unknown>) => {
       updates.push(JSON.parse(JSON.stringify(fields)));
     }),
+    getSlotMediaClaimedAt: vi.fn(async () => null),
     getVideoUpload: vi.fn(async () => readyUpload()),
     claimVideoUpload: vi.fn(async (_id: string, now: Date) => readyUpload({ status: 'consumed', consumed_at: now.toISOString() })),
     downloadStorageObject: vi.fn(async () => new Uint8Array([0, 0, 0, 24, 102, 116, 121, 112])),
