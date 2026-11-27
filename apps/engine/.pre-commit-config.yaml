@@ -1,8 +1,0 @@
-repos:
-  - repo: local
-    hooks:
-      - id: lint
-        name: Ruff lint
-        entry: uv run ruff check app test
-        language: system
-        pass_filenames: false

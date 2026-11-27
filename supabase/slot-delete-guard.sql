@@ -45,7 +45,7 @@ begin
   -- Pending (not yet dispatched), ready (generated, not yet dispatched),
   -- awaiting_approval (held for the owner's approval), failed (dead row
   -- cleanup) and expired (owner lost access, never published) slots can be
-  -- deleted; the engine owns everything mid-flight.
+  -- deleted; the publisher owns everything mid-flight.
   if v_status not in ('pending', 'ready', 'awaiting_approval', 'failed', 'expired') then
     return 'not_deletable';
   end if;

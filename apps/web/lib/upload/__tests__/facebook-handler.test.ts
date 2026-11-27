@@ -200,7 +200,7 @@ describe('handleFacebookUpload', () => {
     expect(touchSocialAccount).toHaveBeenCalledTimes(1);
   });
 
-  it('presigns the engine archive instead of uploading a copy', async () => {
+  it('presigns the archived upload instead of uploading a copy', async () => {
     const fd = new FormData();
     fd.append('videoStoragePath', 'user-1/persona-9/task-7/final-1.mp4');
     fd.append('caption', 'my post');

@@ -11,7 +11,6 @@ meaning isn't clear from the JSON alone. Triggered by an agent adding a
    inside the contract surface (`api_paths` in `.github/api-naming.yml`):
    - `apps/web/app/api/**/route.ts` (Next.js route response/request shapes)
    - `apps/mcp/src/tools.ts` (Zod tool schemas)
-   - `apps/engine/app/models/**/*.py` + `apps/engine/app/controllers/**/*.py` (Pydantic models)
    
    Existing names are grandfathered — the lint never asks you to rename a
    shipped field.

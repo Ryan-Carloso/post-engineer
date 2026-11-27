@@ -42,28 +42,19 @@ Trigger: every pull request.
 
 ### V-2 Verifier honesty
 
-Trigger: a test file, `codecov.yml`, `apps/engine/pyproject.toml` (`fail_under`), a vitest config, or any file under `.github/scripts/verification/`, `.github/workflows/verification.yml`, `.cursor/skills/review/`, or this rubric.
+Trigger: a test file, `codecov.yml`, a vitest config, or any file under `.github/scripts/verification/`, `.github/workflows/verification.yml`, `.cursor/skills/review/`, or this rubric.
 
 - Pass: tests that changed still assert the behavior; coverage floors did not move down; no new unconditional skip, `.only`, or coverage-ignore pragma. A deleted test file is acceptable only when its product module was deleted in the same diff.
 - Fail: a test, assertion, or floor was weakened so CI would go green. Conditional skips (`skipif`, missing ffmpeg, `MPT_RUN_INTEGRATION_TESTS`) must say why, and they are `should-fix` if the reason is "it was red".
 
-### ENG-1 Engine behavior
+### PUB-1 Publish scheduler
 
-Trigger: `apps/engine/app/**`.
+Trigger: `apps/web/lib/publisher/**`, `apps/web/lib/scheduler*.ts`, or `apps/web/lib/upload/publish-content.ts`.
 
-- Pass: the diff-scoped pytest command from the evidence table was run (or the engine CI job log is quoted). Responses stay `{status, message, body}`. Exception text uses the same scrubbed form as the log line next to it (basename, not a raw path; subprocess text through `scrub_error_text`). A persona field the engine reads is forwarded on every dispatch path that exists in the diff.
-- Fail: a new branch returns `data` instead of `body`, a raw path or secret reaches a raised message, or a field is set on one dispatch path and missing on another.
+- Pass: every publish goes through the SQL slot claim and the shared publish core (the route and the scheduler both call it). A retry cannot double-post (the ledger replays a published account) and cannot skip a failure forever (attempt cap + backoff). Failure text is scrubbed (`scrub_error_text`) before it reaches logs, PostHog, Discord, the stored reason or email. Cleanup runs once the slot is terminal.
+- Fail: a publish path bypasses the claim or the ledger, a raw path or secret reaches a raised message, or an unscrubbed provider body reaches telemetry.
 
-Verification: property for a pure helper; repro for a bugfix; differential for a rewrite of an existing helper.
-
-### ENG-2 Idempotency and retries
-
-Trigger: task state, publish results, orphan requeue, or any "already done" marker in `apps/engine`.
-
-- Pass: a retry cannot double-post and cannot skip a failure forever. Empty collections are handled (`all([])` and `not any([])` are true). Terminal task states are only `-1` and `1`.
-- Fail: a marker is written before the external accept, or an empty result is treated as success.
-
-Verification: property on the empty list and on a second identical call.
+Verification: a claim/lost-claim test, a resumed-slot test that asserts the published account is not reposted, and the scrubbing unit test.
 
 ### WEB-1 Frontend
 
@@ -130,9 +121,9 @@ Verification: name the tool, the action, and the test that invokes it.
 
 ### X-1 Cross-app contracts
 
-Trigger: a field, event name, or column read by more than one of engine, web, and mcp.
+Trigger: a field, event name, or column read by more than one of web and mcp.
 
-- Pass: every reader in the diff and the ones found by search handle the new shape. Engine payloads are read from `body`. Shared literals (prices, limits, provider lists) still match their sync test.
+- Pass: every reader in the diff and the ones found by search handle the new shape. Shared literals (prices, limits, provider lists) still match their sync test.
 - Fail: one app learned a new key and another still assumes the old shape.
 
 Verification: differential when the change claims to preserve the old payload; otherwise quote each reader.

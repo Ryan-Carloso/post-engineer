@@ -46,7 +46,7 @@ python3 "$grader/collect.py" --repo . --base <base-sha> --head HEAD --source "$s
 Read `local_suites` and `delegated` from `/tmp/honesty.json`.
 
 - Local suites (`verification`, `review-scripts`): run the matching command from `scope.py` `SUITE_COMMANDS` and save `{exit_code, excerpt}` into `/tmp/suite-results.json`.
-- Delegated rows: run the **scoped** command (the one that lists test files). Web, engine, and mcp already have CI jobs, so do not start another full `pnpm install` when the toolchain is present and the file list is short. Paste the exit code. If you cannot run it, the grade for that area is `needs-human`, not `pass`.
+- Delegated rows: run the **scoped** command (the one that lists test files). Web and mcp already have CI jobs, so do not start another full `pnpm install` when the toolchain is present and the file list is short. Paste the exit code. If you cannot run it, the grade for that area is `needs-human`, not `pass`.
 - No mapped suite: say why.
 
 Then render:
@@ -92,6 +92,6 @@ Needs a human: no
 
 ## What the workflow already does
 
-`.github/workflows/verification.yml` runs on `pull_request` with no repository secrets. It grades with the base script when present, runs the cheap diff-scoped pytest suite for `.github/scripts`, and points web, engine, mcp, Cypress, and Codecov at the existing CI jobs instead of installing those toolchains again. Fork pull requests get the job summary only, because the token cannot comment.
+`.github/workflows/verification.yml` runs on `pull_request` with no repository secrets. It grades with the base script when present, runs the cheap diff-scoped pytest suite for `.github/scripts`, and points web, mcp, Cypress, and Codecov at the existing CI jobs instead of installing those toolchains again. Fork pull requests get the job summary only, because the token cannot comment.
 
 Use that table as input. Then grade the rubric areas the table does not execute, especially publishing, payments, migrations, secrets, and PostHog.

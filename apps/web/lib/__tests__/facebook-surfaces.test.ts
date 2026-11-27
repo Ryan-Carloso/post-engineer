@@ -19,9 +19,10 @@ describe('Facebook Pages across the shared surfaces', () => {
     expect(facebookCounters({})).toEqual({ views: null, likes: null, comments: null, saves: null });
   });
 
-  it('pins the caption ceiling to the engine publisher', () => {
-    const publisher = readFileSync(join(repoRoot, 'apps/engine/app/services/publish_facebook.py'), 'utf8');
-    expect(publisher).toContain(`FACEBOOK_CAPTION_MAX_LENGTH: int = ${FACEBOOK_TEXT_MAX_CHARS}`);
+  it('pins the caption ceiling to the publisher plan', () => {
+    expect(FACEBOOK_TEXT_MAX_CHARS).toBe(63206);
+    const plan = readFileSync(join(repoRoot, 'apps/web/lib/publisher/plan.ts'), 'utf8');
+    expect(plan).toContain('truncateChars(ctx.copy, FACEBOOK_TEXT_MAX_CHARS)');
   });
 
   it('links the https permalink and drops a failed publish or a non-https link', () => {

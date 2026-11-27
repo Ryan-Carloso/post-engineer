@@ -13,7 +13,6 @@ const RUN_ALL_PREFIXES = [
   '.github/workflows/',
   '.github/actions/',
   'supabase/',
-  'apps/engine/',
   'apps/mcp/',
 ];
 

@@ -43,19 +43,12 @@ jobs:
       contents: read
     defaults:
       run:
-        working-directory: apps/engine
+        shell: bash
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4
-        with:
-          version: latest
-
-      - name: Sync dependencies
-        run: uv sync --frozen --only-dev
-
-      - name: No dead engine code (vulture)
-        run: uv run --no-sync vulture
+      - name: Install vulture
+        run: python3 -m pip install --quiet --break-system-packages vulture
 
       - name: No dead CI script code (vulture)
-        run: uv run --no-sync vulture ../../.github/scripts --exclude "*/tests/*" --min-confidence 0
+        run: vulture .github/scripts --exclude "*/tests/*" --min-confidence 0

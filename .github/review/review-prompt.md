@@ -22,7 +22,7 @@ alone is not enough:
    read its definition and docstring and check the change respects its
    stated contract.
 4. Read the module-level docstrings of touched modules — this repo writes its
-   policies there (e.g. `apps/engine/app/services/analytics.py`).
+   policies there (e.g. `apps/web/lib/publisher/scrub-error.ts`).
 5. Compare what the PR body claims against what the diff actually does
    (scope, base branch, "no behaviour change" claims). Do not report a
    mismatch between PR-body test counts and the suite.

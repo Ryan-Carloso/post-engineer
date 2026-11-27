@@ -19,9 +19,10 @@ describe('Pinterest across the shared surfaces', () => {
     expect(counters).toEqual({ views: null, likes: null, comments: null, saves: null });
   });
 
-  it('pins the description ceiling to the engine publisher', () => {
-    const publisher = readFileSync(join(repoRoot, 'apps/engine/app/services/publish_pinterest.py'), 'utf8');
-    expect(publisher).toContain(`PINTEREST_DESCRIPTION_MAX_LENGTH: int = ${PINTEREST_LIB_MAX_CHARS}`);
+  it('pins the description ceiling to the publisher plan', () => {
+    expect(PINTEREST_LIB_MAX_CHARS).toBe(800);
+    const plan = readFileSync(join(repoRoot, 'apps/web/lib/publisher/plan.ts'), 'utf8');
+    expect(plan).toContain('truncateChars(ctx.copy, PINTEREST_DESCRIPTION_MAX_CHARS)');
   });
 
   it('links the pin permalink and derives it from a bare numeric pin id, dropping failed publishes', () => {

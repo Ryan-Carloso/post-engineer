@@ -11,15 +11,14 @@ impact you observed. We aim to acknowledge reports within a few business days.
 
 ## Scope
 
-- This repository's code (apps/web, apps/engine, apps/mcp) and the hosted
+- This repository's code (apps/web, apps/mcp) and the hosted
   platform at [post-engineer.com](https://post-engineer.com).
 - Out of scope: social-engineering, physical attacks, and denial of service.
 
 ## Ground rules
 
-- Never commit real API keys, tokens, or credentials. The three env files
-  (`apps/web/.env`, `apps/engine/.env`, `apps/engine/config.toml`) are
-  gitignored by design — keep it that way.
+- Never commit real API keys, tokens, or credentials. The env file
+  (`apps/web/.env`) is gitignored by design — keep it that way.
 
 ## Dependency advisories
 

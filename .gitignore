@@ -37,11 +37,6 @@ __pycache__/
 .mypy_cache/
 .coverage
 
-# Engine runtime data
-apps/engine/storage/
-apps/engine/logs/
-apps/engine/resource/__DEBUG__/output/
-
 # Logs
 logs/
 *.log
@@ -63,7 +58,6 @@ private/
 !.env.example
 .deploy.env
 apps/web/cypress.env.json
-apps/engine/config.toml
 
 # Supabase CLI cache — contains local project refs / pooler URLs
 apps/web/supabase/.temp/
@@ -78,15 +72,6 @@ apps/web/cypress/supabase/.branches/
 .codegraph/
 *.db
 *.sqlite3
-# Rendered GPU-benchmark artifacts: sample MP4s and their JSON reports.
-# Local diagnostics only — the numbers that matter live in the reports the
-# benchmark writes under apps/engine/bench-work/.
-# Anchored to the repo root on purpose: an unanchored `debug/` would also match
-# any future `.../debug/` SOURCE directory (e.g. an API route of that name) and
-# silently make it untrackable.
-# (apps/engine/.gitignore keeps its own engine-scoped `debug/` entry.)
-/debug/
-/bench-work/
 .playwright-mcp/
 
 # Generated endpoint contracts (shared/contracts/*.ts synced by
