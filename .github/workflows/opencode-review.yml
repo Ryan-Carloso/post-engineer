@@ -23,14 +23,7 @@ name: opencode-review
 #   which need no secret: nemotron-3.5-lightning-free (a full review in
 #   about 2.5 minutes) then flint-40b-free (about 7 minutes). Both were
 #   measured on this PR's real review prompt with the reviewer's tools.
-#   OpenRouter's free router (openrouter/openrouter/free) was tried first
-#   and dropped: it draws a random free model per request, so it switched
-#   model in the middle of the agent session and returned either nothing or
-#   a few lines of narration with no Verdict. An attempt with no Verdict
-#   line is discarded. A runtime discovery script with a ranked preference
-#   list used to build the chain; it kept dead or hanging models in front
-#   (a removed glm-5.3-flash-free, a deepseek that hit its 20m timeout on
-#   every PR), so reviews took 37-58 minutes.
+#   An attempt with no Verdict line is discarded.
 # - A second pass (REVIEW_MODEL_VERIFY, flint-40b-free, a different model
 #   from the pass-1 primary) confirms or refutes pass 1. It is skipped when
 #   the diff is docs/assets-only and pass 1 has no CRITICAL/MAJOR, or when
@@ -345,7 +338,7 @@ jobs:
           # they cannot break out of the shell. The prompt itself is the
           # committed review-prompt.md, not an inline string.
           is_free() {
-            [[ "$1" == *-free || "$1" == *:free || "$1" == openrouter/openrouter/free ]]
+            [[ "$1" == *-free || "$1" == *:free ]]
           }
           # One review attempt. Fails (so the loop tries the next model) when
           # OpenCode falls back to the build agent or writes an empty file.
@@ -458,7 +451,7 @@ jobs:
             fi
           }
           is_free() {
-            [[ "$1" == *-free || "$1" == *:free || "$1" == openrouter/openrouter/free ]]
+            [[ "$1" == *-free || "$1" == *:free ]]
           }
           # Docs, images, lockfiles, and docs/* are not code. Workflow YAML,
           # apps/, supabase/, and .github/ still get pass 2.

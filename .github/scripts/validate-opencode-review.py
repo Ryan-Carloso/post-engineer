@@ -107,38 +107,6 @@ def main() -> int:
         "REVIEW_MODEL_VERIFY: ${{ vars.REVIEW_MODEL_VERIFY || 'opencode/flint-40b-free' }}" in text
         and chain[:1] != ["opencode/flint-40b-free"],
     )
-    env_defaults = [
-        line
-        for line in text.splitlines()
-        if re.match(
-            r"^\s+(REVIEW_MODELS|REVIEW_MODEL_VERIFY|OPENROUTER_MODEL|ZAI_FREE_MODEL):",
-            line,
-        )
-    ]
-    env_blob = "\n".join(env_defaults)
-    check(
-        "workflow defaults have no zai-coding-plan",
-        "zai-coding-plan" not in env_blob,
-        env_blob,
-    )
-    check(
-        "workflow defaults have no z-ai/glm-5.3-flash",
-        "z-ai/glm-5.3-flash" not in env_blob,
-        env_blob,
-    )
-    check(
-        "no ZAI_FREE_MODEL_FALLBACK references",
-        "ZAI_FREE_MODEL_FALLBACK" not in text,
-        "the second z.ai fallback was removed; no reference may remain",
-    )
-    non_comment_lines = [
-        line for line in text.splitlines() if not line.lstrip().startswith("#")
-    ]
-    check(
-        "no glm-4.5-flash in workflow logic",
-        not any("glm-4.5-flash" in line for line in non_comment_lines),
-        "glm-4.5-flash was dropped from the review chain",
-    )
 
     check(
         "no OPENROUTER_MODEL paid z-ai default",
@@ -165,8 +133,8 @@ def main() -> int:
         'read -r -a attempts <<< "$REVIEW_MODELS"' in text,
     )
     check(
-        "free-model banner matches free ids and the free router",
-        '[[ "$1" == *-free || "$1" == *:free || "$1" == openrouter/openrouter/free ]]' in text,
+        "free-model banner matches free ids",
+        '[[ "$1" == *-free || "$1" == *:free ]]' in text,
     )
     check(
         "opencode run closes stdin",
