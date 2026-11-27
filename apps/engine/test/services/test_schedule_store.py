@@ -139,6 +139,45 @@ class StoreRequestsTests(unittest.TestCase):
         self.requests.request.return_value = _response(json_data=[])
         self.assertFalse(self.store.claim_resumable_slot("slot-9", "NOW", "LEASE"))
 
+    def test_access_until_by_user_reads_the_window_in_chunks(self):
+        self.requests.request.return_value = _response(
+            json_data=[
+                {"id": "u1", "access_until": "2026-12-01T00:00:00+00:00"},
+                {"id": "u2", "access_until": None},
+                "junk",
+                {"access_until": "2026-12-01T00:00:00+00:00"},
+            ]
+        )
+        rows = self.store.access_until_by_user(["u1", "u2"])
+        self.assertEqual(rows, {"u1": "2026-12-01T00:00:00+00:00", "u2": None})
+        method, url, kwargs = self._last_call()
+        self.assertEqual(method, "GET")
+        self.assertEqual(url, "https://supabase.example/rest/v1/user_profiles")
+        self.assertEqual(kwargs["params"]["id"], "in.(u1,u2)")
+        self.assertEqual(kwargs["params"]["select"], "id,access_until")
+
+    def test_access_until_by_user_chunks_at_one_hundred(self):
+        self.requests.request.return_value = _response(json_data=[])
+        ids = [f"u{index}" for index in range(250)]
+        self.store.access_until_by_user(ids)
+        self.assertEqual(self.requests.request.call_count, 3)
+        last_params = self.requests.request.call_args.kwargs["params"]["id"]
+        self.assertEqual(last_params.count(","), 49)
+
+    def test_expire_ready_slot_is_conditional_on_ready(self):
+        self.requests.request.return_value = _response(json_data=[{"id": "slot-1", "status": "expired"}])
+        self.assertTrue(self.store.expire_ready_slot("slot-1"))
+        method, url, kwargs = self._last_call()
+        self.assertEqual(method, "PATCH")
+        self.assertEqual(url, "https://supabase.example/rest/v1/scheduled_posts")
+        self.assertEqual(kwargs["params"], {"id": "eq.slot-1", "status": "eq.ready"})
+        self.assertEqual(kwargs["json"], {"status": "expired", "publish_not_before": None})
+        self.assertEqual(kwargs["headers"]["Prefer"], "return=representation")
+
+    def test_expire_ready_slot_returns_false_when_another_tick_won(self):
+        self.requests.request.return_value = _response(json_data=[])
+        self.assertFalse(self.store.expire_ready_slot("slot-1"))
+
     def test_non_dict_rows_filtered(self):
         self.requests.request.return_value = _response(json_data=[{"id": "s1"}, "junk", 42])
         slots = self.store.ready_due_slots(datetime(2026, 9, 6, 12, 0, tzinfo=timezone.utc))

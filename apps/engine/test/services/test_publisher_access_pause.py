@@ -170,6 +170,51 @@ class AccessPauseTests(unittest.TestCase):
         publisher.run(NOW)
         store.remove_storage_object.assert_called_once_with("videos", "user-1/direct-uploads/x.mp4")
 
+    def test_expire_survives_an_upload_lookup_failure_without_cleanup(self):
+        store = _store(due=[_slot(media_kind="upload")], access={"user-1": PAST})
+        store.get_video_upload.side_effect = RuntimeError("db down")
+        publisher = _publisher(store)
+        self.assertEqual(publisher.run(NOW), 0)
+        store.expire_ready_slot.assert_called_once_with("slot-1")
+        store.remove_storage_object.assert_not_called()
+
+    def test_expire_skips_cleanup_when_the_upload_row_is_not_a_dict(self):
+        store = _store(due=[_slot(media_kind="upload")], access={"user-1": PAST})
+        store.get_video_upload.return_value = "junk"
+        publisher = _publisher(store)
+        publisher.run(NOW)
+        store.remove_storage_object.assert_not_called()
+
+    def test_expire_skips_cleanup_when_the_upload_has_no_storage_path(self):
+        store = _store(due=[_slot(media_kind="upload")], access={"user-1": PAST})
+        store.get_video_upload.return_value = {"storage_path": None}
+        publisher = _publisher(store)
+        publisher.run(NOW)
+        store.remove_storage_object.assert_not_called()
+
+    def test_expire_skips_cleanup_when_the_slot_has_no_media_ref(self):
+        slot = _slot(media_kind="upload")
+        slot["media_ref"] = ""
+        store = _store(due=[slot], access={"user-1": PAST})
+        publisher = _publisher(store)
+        publisher.run(NOW)
+        store.get_video_upload.assert_not_called()
+        store.remove_storage_object.assert_not_called()
+
+    def test_expire_falls_back_to_a_plain_update_without_the_claim_method(self):
+        store = _store(due=[_slot()], access={"user-1": PAST})
+        del store.expire_ready_slot
+        publisher = _publisher(store)
+        publisher.run(NOW)
+        store.update_slot.assert_called_once_with("slot-1", status="expired", publish_not_before=None)
+
+    def test_expire_failure_keeps_the_slot_for_the_next_tick(self):
+        store = _store(due=[_slot()], access={"user-1": PAST})
+        store.expire_ready_slot.side_effect = RuntimeError("db down")
+        publisher = _publisher(store)
+        self.assertEqual(publisher.run(NOW), 0)
+        store.remove_storage_object.assert_not_called()
+
     def test_expire_does_not_notify_or_emit_failure_event(self):
         store = _store(due=[_slot()], access={"user-1": PAST})
         publisher = _publisher(store)

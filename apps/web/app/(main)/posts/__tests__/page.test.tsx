@@ -1383,6 +1383,33 @@ describe('PostsPage access pause', () => {
     expect(document.querySelector('[data-status="ready"]')).not.toBeNull();
   });
 
+  it('does nothing while the access window is still loading', () => {
+    const refetch = vi.fn();
+    vi.mocked(useScheduleRangeQuery).mockReturnValue({
+      data: { slots: [UPCOMING_SLOT], truncated: false },
+      isLoading: false,
+      isFetching: false,
+      isError: false,
+      refetch,
+    } as never);
+    vi.mocked(useAccessQuery).mockReturnValue({
+      data: undefined,
+      isPending: true,
+      isError: false,
+      refetch: vi.fn(),
+    } as never);
+    render(<PostsPage />);
+    expect(refetch).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-status="paused"]')).toBeNull();
+  });
+
+  it('paints the calendar event gray once access is gone', () => {
+    vi.mocked(useAccessQuery).mockReturnValue(access(false, 'none') as never);
+    render(<PostsPage />);
+    const card = calendarCard();
+    expect(card.querySelector('[class*="event-gray"]')).not.toBeNull();
+  });
+
   it('refetches the range when access flips from active to inactive', () => {
     const refetch = vi.fn();
     vi.mocked(useScheduleRangeQuery).mockReturnValue({

@@ -46,6 +46,20 @@ class AccessGateTests(unittest.TestCase):
         store.access_until_by_user.side_effect = RuntimeError("db down")
         self.assertEqual(access_states(store, ["u1", "u2"], NOW), {"u1": None, "u2": None})
 
+    def test_unknown_when_the_store_has_no_lookup_method(self):
+        store = MagicMock(spec=["ready_due_slots"])
+        self.assertEqual(access_states(store, ["u1", "u1", ""], NOW), {"u1": None})
+
+    def test_unknown_when_the_lookup_returns_shapes_that_are_not_a_dict(self):
+        store = MagicMock()
+        store.access_until_by_user.return_value = [("u1", "2026-12-01T00:00:00Z")]
+        self.assertEqual(access_states(store, ["u1"], NOW), {"u1": None})
+
+    def test_unknown_when_the_window_cannot_be_parsed(self):
+        store = MagicMock()
+        store.access_until_by_user.return_value = {"u1": "soon"}
+        self.assertEqual(access_states(store, ["u1"], NOW), {"u1": None})
+
     def test_partition_slots_groups_by_state(self):
         slots = [_slot("a", "u1"), _slot("b", "u2"), _slot("c", "u3")]
         active, inactive, unknown = partition_slots(slots, {"u1": True, "u2": False, "u3": None})
