@@ -669,6 +669,21 @@ jobs:
           # revoke, and the service-role-only grants of 089_access-entitlement.sql.
           psql "postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable" -v ON_ERROR_STOP=1 -f scripts/db/check-access-entitlement.sql
 
+      - name: Check publish slot claim behaviour
+        run: |
+          set -euo pipefail
+          # Which slots claim_next_publish_slot may claim (status filter, access,
+          # lease lapse incl. a null lease), the inactive-owner expiry and the
+          # lease release of 094_publish-due-scheduler.sql.
+          psql "postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable" -v ON_ERROR_STOP=1 -f scripts/db/check-publish-claim.sql
+
+      - name: Check publish slot claim under concurrency
+        run: |
+          set -euo pipefail
+          # Two sessions claim the same due slot: exactly one gets it, the other
+          # skips the locked row and gets nothing.
+          scripts/db/check-publish-claim-concurrency.sh "postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable"
+
       - name: Check the schema snapshot is up to date
         run: |
           set -euo pipefail
