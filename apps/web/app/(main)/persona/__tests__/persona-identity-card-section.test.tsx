@@ -81,6 +81,7 @@ describe('PersonaIdentityCardSection', () => {
     expect(screen.getByTestId('identity-card-consent')).toHaveTextContent('only with that person');
     expect(screen.getByTestId('identity-card-consent')).toHaveTextContent('never shown in the persona list or on shared pages');
     expect(screen.getByText(/The description is at most 800 characters/)).toBeInTheDocument();
+    expect(screen.getByTestId('persona-identity-card')).toBeInTheDocument();
   });
 
   it('renders the Portuguese copy when the locale is pt', () => {
@@ -89,6 +90,8 @@ describe('PersonaIdentityCardSection', () => {
     expect(screen.getByText('Cartão de identidade')).toBeInTheDocument();
     expect(screen.getByTestId('identity-card-consent')).toHaveTextContent('consentimento');
     expect(screen.getByText(/Cole o cartão em JSON/)).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Cartão de identidade (JSON)' })).toBe(textarea());
+    expect(screen.getByText(/texto simples é aceito como atalho/)).toBeInTheDocument();
     expect(textarea()).toHaveAttribute('placeholder', expect.stringContaining('"version": 3'));
   });
 
@@ -105,6 +108,7 @@ describe('PersonaIdentityCardSection', () => {
     fireEvent.change(textarea(), { target: { value: pasted } });
     expect(usePersonaStore.getState().identityCardDraft).toBe(pasted);
     expect(textarea()).toHaveValue(pasted);
+    expect(textarea()).toBeEnabled();
   });
 
   it('still accepts plain text as a shortcut for a version 3 description', () => {
@@ -118,6 +122,14 @@ describe('PersonaIdentityCardSection', () => {
     render(<PersonaIdentityCardSection personaId={null} />);
     expect(screen.queryByTestId('identity-card-style')).not.toBeInTheDocument();
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+  });
+
+  it('renders exactly one field on the section', () => {
+    render(<PersonaIdentityCardSection personaId={null} />);
+    expect(screen.getAllByRole('textbox')).toHaveLength(1);
+    expect(screen.getByTestId('persona-identity-card')).toContainElement(textarea());
   });
 
   it('shows no loading text for a new persona', () => {
@@ -160,6 +172,7 @@ describe('PersonaIdentityCardSection', () => {
     setQuery({ isSuccess: true, data: FIXTURE_CARD_V2, dataUpdatedAt: 1 });
     render(<PersonaIdentityCardSection personaId="p1" />);
     expect(JSON.parse(textarea().value)).toEqual(FIXTURE_CARD_V2);
+    expect(textarea()).toHaveValue(JSON.stringify(FIXTURE_CARD_V2, null, 2));
     expect(usePersonaStore.getState().identityCardLoaded).toBe(JSON.stringify(FIXTURE_CARD_V2, null, 2));
   });
 
