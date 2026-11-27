@@ -20,6 +20,7 @@ import { cleanupPublishMedia, presignPublishMedia, uploadPublishMedia } from '@/
 import { httpStatusOf, rememberDeadCredential, reportAccountUnauthorized } from './account-unauthorized';
 import { TokenDecryptError } from '@/lib/token-crypto';
 import { classifyUploadAccountError } from '@/lib/upload/account-error';
+import { uploadErrorStatus } from '@/lib/upload/upload-error-status';
 import { attemptFirstComment, readFirstCommentField } from '@/lib/first-comment/attempt';
 import { postInstagramFirstComment } from '@/lib/first-comment/instagram';
 import { postYouTubeFirstComment } from '@/lib/first-comment/youtube';
@@ -418,6 +419,6 @@ export function buildUploadErrorResponse(
       metadata: { duration },
       suggestions,
     },
-    { status: isValidationError ? 400 : isInstagramError ? (error.statusCode || 500) : isAuthError ? 401 : 500 },
+    { status: uploadErrorStatus(error) },
   );
 }

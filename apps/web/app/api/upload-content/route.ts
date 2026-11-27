@@ -7,20 +7,11 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { secretsMatch } from '@/lib/secrets';
 import { buildUploadErrorResponse } from '@/lib/upload/handlers';
-import { PUBLISH_HANDLERS, type PublishHandlerResponse } from '@/lib/upload/publish-handlers';
+import { publishContent } from '@/lib/upload/publish-content';
 import { SOCIAL_PROVIDERS, isSocialProvider } from '@/lib/providers/registry';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
-import {
-  createPublishLedgerClient,
-  isValidPublishScopeKey,
-  mergePartitionResults,
-  partitionPublishAccounts,
-  type PublishLedgerPartition,
-} from '@/lib/upload/publish-ledger';
-import { releaseGrantedClaims, settlePartition } from '@/lib/upload/publish-ledger-settle';
 import { boundedFormDataFailureResponse, readBoundedFormData } from '@/lib/upload/bounded-form-data';
 import { UPLOAD_CONTENT_MAX_BODY_BYTES } from '@/lib/upload/upload-content-limits';
-import { startLedgerHeartbeat } from '@/lib/upload/publish-ledger-heartbeat';
 
 type UploadAuth =
   | { kind: 'session'; userId: string; isApiKey?: boolean; approvalMode?: ApprovalMode }
@@ -121,53 +112,19 @@ async function postHandler(request: NextRequest) {
       timestamp: new Date().toISOString(),
     });
 
-    const scopeKeyRaw = formData.get('publishScopeKey');
-    const scopeKey = isValidPublishScopeKey(scopeKeyRaw) ? scopeKeyRaw : null;
-    const ledgerClient = scopeKey !== null ? createPublishLedgerClient() : null;
-    let partition: PublishLedgerPartition | null = null;
-    if (scopeKey !== null && ledgerClient !== null) {
-      partition = await partitionPublishAccounts(ledgerClient, scopeKey, provider, userId, formData);
+    const result = await publishContent({
+      provider,
+      userId,
+      formData,
+      scopeKeyRaw: formData.get('publishScopeKey'),
+      logId,
+      startTime,
+    });
+    if (!result.ok) {
+      logger.error('[upload-content] ERRO', result.cause, { logId });
+      return buildUploadErrorResponse(result.cause, logId, startTime);
     }
-
-    type UploadDispatchResult = PublishHandlerResponse;
-    const stopHeartbeat =
-      partition !== null && partition.granted.length > 0 && ledgerClient !== null
-        ? startLedgerHeartbeat(ledgerClient, partition)
-        : null;
-    let response: UploadDispatchResult;
-    try {
-      if (partition !== null && partition.granted.length === 0) {
-        const results = mergePartitionResults(partition, []);
-        response = {
-          success: results.some((result) => result.success),
-          successCount: results.filter((result) => result.success).length,
-          results,
-        };
-      } else {
-        const handlerForm = partition !== null ? partition.formData : formData;
-        try {
-          response = await PUBLISH_HANDLERS[provider](handlerForm, userId, logId, startTime);
-        } catch (error) {
-          if (partition !== null && ledgerClient !== null) {
-            await releaseGrantedClaims(ledgerClient, partition, error);
-          }
-          throw error;
-        }
-        if (partition !== null && ledgerClient !== null) {
-          const merged = await settlePartition(ledgerClient, partition, response.results);
-          response = {
-            ...response,
-            success: merged.some((result) => result.success),
-            successCount: merged.filter((result) => result.success).length,
-            results: merged,
-          };
-        }
-      }
-    } finally {
-      stopHeartbeat?.();
-    }
-
-    logger.info('[upload-content] handler finalizado', { provider, success: response.success, logId });
+    const response = result.response;
     return NextResponse.json(response);
   } catch (error) {
     logger.error('[upload-content] ERRO', error, { logId });
