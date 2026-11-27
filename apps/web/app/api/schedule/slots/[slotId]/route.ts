@@ -9,6 +9,7 @@ import { isPersonaAllowed } from '@/lib/api-keys';
 import { resolveSlotUuid } from '@/lib/schedule-slot-id';
 import { validateScheduleWindow } from '@/lib/schedule-window';
 import { hasExplicitOffset } from '@/lib/timezone';
+import { checkFirstComment } from '@/lib/contracts/first-comment';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
@@ -223,12 +224,22 @@ async function patchHandler(
   }
   const rawTitle = (body as { title?: unknown } | null)?.title;
   const rawSlotAt = (body as { slotAt?: unknown } | null)?.slotAt;
-  if (rawTitle === undefined && rawSlotAt === undefined) {
-    return apiErrorResponse(400, 'Provide title or slotAt to update.', {
+  const rawFirstComment = (body as { firstComment?: unknown } | null)?.firstComment;
+  if (rawTitle === undefined && rawSlotAt === undefined && rawFirstComment === undefined) {
+    return apiErrorResponse(400, 'Provide title, slotAt or firstComment to update.', {
       route: 'PATCH /api/schedule/slots',
     });
   }
-  const patch: { title?: string; slot_at?: string } = {};
+  const patch: { title?: string; slot_at?: string; first_comment?: string | null } = {};
+  let firstComment: string | null | undefined;
+  if (rawFirstComment !== undefined) {
+    const checked = checkFirstComment(rawFirstComment);
+    if (!checked.ok) {
+      return apiErrorResponse(400, checked.error, { route: 'PATCH /api/schedule/slots' });
+    }
+    firstComment = checked.value;
+    patch.first_comment = firstComment;
+  }
   let title: string | undefined;
   if (rawTitle !== undefined) {
     if (typeof rawTitle !== 'string' || rawTitle.trim() === '') {
@@ -292,6 +303,7 @@ async function patchHandler(
     success: true,
     ...(title !== undefined ? { title } : {}),
     ...(slotAt !== undefined ? { slotAt } : {}),
+    ...(firstComment !== undefined ? { firstComment } : {}),
   });
 }
 

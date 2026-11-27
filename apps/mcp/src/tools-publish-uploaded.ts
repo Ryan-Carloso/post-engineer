@@ -8,6 +8,7 @@ import {
   CreateVideoUploadSchema,
   PublishUploadedVideoSchema,
 } from './publish-uploaded-shape.js';
+import { firstCommentWarningSuffix } from './first-comment-warnings.js';
 import { sanitizeEngineError } from './tools.js';
 import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
 
@@ -43,7 +44,7 @@ export async function handlePublishUploadedVideo(
     const lines = result.results.map((account) => {
       if (account.success) {
         const link = account.videoUrl ?? account.permalink ?? account.postId ?? account.videoId ?? '';
-        return `- ${account.accountId}: published${link ? ` (${link})` : ''}`;
+        return `- ${account.accountId}: published${link ? ` (${link})` : ''}${firstCommentWarningSuffix(account)}`;
       }
       return `- ${account.accountId}: FAILED — ${account.error ?? 'unknown error'}`;
     });

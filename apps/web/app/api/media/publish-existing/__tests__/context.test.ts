@@ -20,6 +20,7 @@ function request(overrides: Partial<PublishExistingRequest> = {}): PublishExisti
     tags: ['porto'],
     privacyStatus: 'public',
     caption: undefined,
+    firstComment: null,
     promptVersionId: undefined,
     idempotencyKey: undefined,
     ...overrides,
@@ -47,5 +48,10 @@ describe('fieldsFor', () => {
     const fields = fieldsFor(request({ caption: '  My caption  ' }), 'threads', ['acc-1'], true);
     expect(fields.caption).toBe('My caption');
     expect(fields.aiLabel).toBe(true);
+  });
+
+  it('passes the first comment through to the form fields', () => {
+    expect(fieldsFor(request({ firstComment: 'Link in bio' }), 'youtube', ['acc-1']).firstComment).toBe('Link in bio');
+    expect(fieldsFor(request(), 'youtube', ['acc-1']).firstComment).toBeNull();
   });
 });

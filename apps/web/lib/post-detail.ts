@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { commentWarningsFromOutcomes, type FirstCommentOutcomeWarning } from './first-comment/outcome-warnings';
 import { resolvePublishLinks, type PublishLink } from './publish-links';
 import { buildScheduleDetail, type ScheduleDetailRow } from './post-detail-schedule';
 import { noticesFromOutcomes, type PublishProviderFailure, type PublishUserNotice } from './publish-user-notice';
@@ -32,6 +33,8 @@ export interface SlotPostDetail {
     publishLinks: PublishLink[];
     userNotices: PublishUserNotice[];
     providerFailures: PublishProviderFailure[];
+    firstComment: string | null;
+    commentWarnings: FirstCommentOutcomeWarning[];
     postUrl: string | null;
     media: SlotMedia | null;
   };
@@ -52,7 +55,7 @@ export async function getSlotPost(
 ): Promise<SlotPostDetail | null> {
   const { data: slot, error: slotError } = await supabase
     .from('scheduled_posts')
-    .select('id, schedule_id, slot_at, status, title, error, published_at, publish_outcomes, prompt_version_id, media_kind, media_ref, media_content_type')
+    .select('id, schedule_id, slot_at, status, title, error, published_at, publish_outcomes, prompt_version_id, media_kind, media_ref, media_content_type, first_comment')
     .eq('id', slotId)
     .eq('user_id', userId)
     .single();
@@ -73,6 +76,7 @@ export async function getSlotPost(
     media_kind: string | null;
     media_ref: string | null;
     media_content_type: string | null;
+    first_comment: string | null;
   };
 
   const { data: schedule, error: scheduleError } = await supabase
@@ -126,6 +130,8 @@ export async function getSlotPost(
       publishLinks: row.status === 'published' ? resolvePublishLinks(row.publish_outcomes) : [],
       userNotices: publishNotices.userNotices,
       providerFailures: publishNotices.providerFailures,
+      firstComment: row.first_comment ?? null,
+      commentWarnings: commentWarningsFromOutcomes(row.publish_outcomes),
     },
     schedule: buildScheduleDetail(scheduleRow),
     persona: personaRow,

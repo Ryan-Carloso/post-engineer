@@ -56,6 +56,7 @@ export const PublishExistingShape = {
   tags: PublishVideoDirectShape.tags.describe('YouTube only: required with mode asap (scheduled derives them from the title).'),
   privacyStatus: PublishVideoDirectShape.privacyStatus.describe('YouTube only: required with mode asap.'),
   boardId: PublishVideoDirectShape.boardId,
+  firstComment: PublishVideoDirectShape.firstComment,
   promptVersionId: z
     .string()
     .regex(UUID_PATTERN, 'promptVersionId must be a UUID')

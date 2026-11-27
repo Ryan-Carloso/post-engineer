@@ -285,3 +285,46 @@ describe('decodeImageMedia', () => {
     if (!decoded.ok) expect(decoded.issues[0]?.message).toContain('8 MB');
   });
 });
+
+describe('first comment', () => {
+  it('trims a first comment and passes it to the request', () => {
+    const parsed = parsePublishExistingBody({ ...ASAP_BODY, firstComment: '  Link in bio  ' });
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    const checked = checkPublishExistingSemantics(parsed.value);
+    expect(checked.ok && checked.value.firstComment).toBe('Link in bio');
+  });
+
+  it.each([undefined, null, '', '   '])('treats %j as no first comment', (value) => {
+    const parsed = parsePublishExistingBody({ ...ASAP_BODY, firstComment: value });
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    const checked = checkPublishExistingSemantics(parsed.value);
+    expect(checked.ok && checked.value.firstComment).toBeNull();
+  });
+
+  it('answers 400 data for a first comment over the limit, naming the field', () => {
+    const parsed = parsePublishExistingBody({ ...ASAP_BODY, firstComment: 'x'.repeat(1001) });
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    const checked = checkPublishExistingSemantics(parsed.value);
+    expect(checked.ok).toBe(false);
+    if (checked.ok) return;
+    expect(checked.issues).toEqual([expect.objectContaining({ field: 'firstComment' })]);
+  });
+
+  it('rejects a first comment that is not a string', () => {
+    expect(parsePublishExistingBody({ ...ASAP_BODY, firstComment: 5 }).ok).toBe(false);
+  });
+
+  it('accepts the field even when a selected network cannot comment', () => {
+    const parsed = parsePublishExistingBody({
+      ...ASAP_BODY,
+      publishing: { mode: 'asap', providers: ['youtube', 'pinterest'], accounts: { youtube: ['UC1'], pinterest: ['p1'] }, pinterestBoardId: 'b1' },
+      firstComment: 'Link in bio',
+    });
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(checkPublishExistingSemantics(parsed.value).ok).toBe(true);
+  });
+});

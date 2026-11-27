@@ -1,4 +1,5 @@
 import type { DirectPublishAccountResult } from './client-types.js';
+import { isFirstCommentWarningCode } from './contracts/first-comment.js';
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -18,5 +19,9 @@ export function narrowDirectPublishAccountResult(value: unknown): DirectPublishA
   if (typeof value.permalink === 'string') result.permalink = value.permalink;
   if (typeof value.error === 'string') result.error = value.error;
   if (typeof value.errorCode === 'string') result.errorCode = value.errorCode;
+  if (Array.isArray(value.warnings)) {
+    const warnings = value.warnings.filter(isFirstCommentWarningCode);
+    if (warnings.length > 0) result.warnings = warnings;
+  }
   return result;
 }

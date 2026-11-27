@@ -100,6 +100,8 @@ const FULL_SLOT_DETAIL: ResponseOf<typeof getSlotContract> = {
     postUrl: 'https://post-engineer.com/posts/slot-1',
     publishLinks: [],
     userNotices: [],
+    firstComment: null,
+    commentWarnings: [],
     providerFailures: [],
   },
   schedule: {
@@ -767,9 +769,43 @@ describe('slot tools', () => {
       slotId: 'slot-1',
       title: 'New title',
     });
-    expect(mockClient.updateSlotTitle).toHaveBeenCalledWith('slot-1', 'New title');
+    expect(mockClient.updateSlotTitle).toHaveBeenCalledWith('slot-1', 'New title', undefined);
     expect(response.isError).toBeUndefined();
     expect(textOf(response)).toContain('New title');
+  });
+
+  it('handleUpdateSlotTitle sets a first comment alone and says so', async () => {
+    const { handleUpdateSlotTitle } = await import('../tools.js');
+    vi.mocked(mockClient.updateSlotTitle).mockResolvedValue({ success: true, firstComment: 'Link in bio' });
+    const response = await handleUpdateSlotTitle(mockClient, { slotId: 'slot-1', firstComment: 'Link in bio' });
+    expect(mockClient.updateSlotTitle).toHaveBeenCalledWith('slot-1', undefined, 'Link in bio');
+    expect(response.isError).toBeUndefined();
+    expect(textOf(response)).toContain('first comment set to "Link in bio"');
+    expect(textOf(response)).not.toContain('title updated');
+  });
+
+  it('handleUpdateSlotTitle removes the first comment with an empty string', async () => {
+    const { handleUpdateSlotTitle } = await import('../tools.js');
+    vi.mocked(mockClient.updateSlotTitle).mockResolvedValue({ success: true, firstComment: null });
+    const response = await handleUpdateSlotTitle(mockClient, { slotId: 'slot-1', firstComment: '' });
+    expect(textOf(response)).toContain('first comment removed');
+  });
+
+  it('handleUpdateSlotTitle updates the title and the first comment in one call', async () => {
+    const { handleUpdateSlotTitle } = await import('../tools.js');
+    vi.mocked(mockClient.updateSlotTitle).mockResolvedValue({ success: true, title: 'T', firstComment: 'Hi' });
+    const response = await handleUpdateSlotTitle(mockClient, { slotId: 'slot-1', title: 'T', firstComment: 'Hi' });
+    expect(mockClient.updateSlotTitle).toHaveBeenCalledWith('slot-1', 'T', 'Hi');
+    expect(textOf(response)).toContain('title updated to "T", first comment set to "Hi"');
+  });
+
+  it('handleUpdateSlotTitle refuses a call with neither field, before any request', async () => {
+    const { handleUpdateSlotTitle } = await import('../tools.js');
+    vi.mocked(mockClient.updateSlotTitle).mockClear();
+    const response = await handleUpdateSlotTitle(mockClient, { slotId: 'slot-1' });
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toContain('Provide title, firstComment or both');
+    expect(mockClient.updateSlotTitle).not.toHaveBeenCalled();
   });
 
   it('handleDeleteSlot confirms the deletion', async () => {

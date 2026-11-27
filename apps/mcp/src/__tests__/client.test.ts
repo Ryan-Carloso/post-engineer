@@ -326,6 +326,8 @@ describe('PostEngineerClient', () => {
         publishLinks: [],
         userNotices: [],
         providerFailures: [],
+        firstComment: null,
+        commentWarnings: [],
       },
       schedule: {
         id: 'sched-1',
@@ -373,6 +375,24 @@ describe('PostEngineerClient', () => {
     const [, init] = vi.mocked(global.fetch).mock.calls[0] as [string, RequestInit];
     expect(init.method).toBe('PATCH');
     expect(JSON.parse(String(init.body))).toEqual({ title: 'New title' });
+  });
+
+  it('PATCHes a trimmed first comment, and null when it is blank', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true, firstComment: 'Link in bio' }),
+    });
+    await client.updateSlotTitle('slot-1', undefined, '  Link in bio ');
+    await client.updateSlotTitle('slot-1', 'T', '   ');
+    const bodies = vi.mocked(global.fetch).mock.calls.map(([, init]) => JSON.parse(String((init as RequestInit).body)) as unknown);
+    expect(bodies).toEqual([{ firstComment: 'Link in bio' }, { title: 'T', firstComment: null }]);
+  });
+
+  it('refuses to update a slot with neither a title nor a first comment', async () => {
+    global.fetch = vi.fn();
+    await expect(client.updateSlotTitle('slot-1', undefined)).rejects.toThrow('Provide title, firstComment or both');
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it('fails fast on an empty slot title without fetching', async () => {

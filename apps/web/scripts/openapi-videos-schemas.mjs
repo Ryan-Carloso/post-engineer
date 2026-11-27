@@ -56,6 +56,7 @@ export function videoOperationSchemas({ success, object, str }) {
           privacyStatus: { type: 'string', enum: ['public', 'private', 'unlisted'] },
           caption: str,
           boardId: str,
+          firstComment: { type: 'string', maxLength: 1000, description: 'Posted as a comment on the new post when the network has a comment API (YouTube, Instagram, Bluesky, LinkedIn, Threads, Facebook, Telegram); ignored otherwise. A failed comment never fails the post: the account result carries a warnings code.' },
         },
         ['uploadId', 'provider', 'accountIds'],
       ),

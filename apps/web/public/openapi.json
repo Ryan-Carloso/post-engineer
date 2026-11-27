@@ -2169,6 +2169,11 @@
                   "caption": {
                     "type": "string"
                   },
+                  "firstComment": {
+                    "type": "string",
+                    "maxLength": 1000,
+                    "description": "Posted as a comment on the new post of each network that has a comment API (YouTube, Instagram, Bluesky, LinkedIn, Threads, Facebook, Telegram); the others skip it. A failed comment never fails the post: the account result carries a warnings code. It cannot be pinned."
+                  },
                   "idempotencyKey": {
                     "type": "string",
                     "description": "Retry with the same key: scheduled replays the schedule, asap replays the recorded posts per account."
@@ -3625,6 +3630,10 @@
                     },
                     "title": {
                       "type": "string"
+                    },
+                    "firstComment": {
+                      "type": "string",
+                      "nullable": true
                     }
                   },
                   "required": [
@@ -3685,11 +3694,13 @@
                   "title": {
                     "type": "string",
                     "minLength": 1
+                  },
+                  "firstComment": {
+                    "type": "string",
+                    "nullable": true,
+                    "maxLength": 1000
                   }
-                },
-                "required": [
-                  "title"
-                ]
+                }
               }
             }
           }
@@ -3703,7 +3714,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "description": "Send title, firstComment or both. firstComment is posted as a comment on the post right after it publishes (YouTube, Instagram, Bluesky, LinkedIn, Threads, Facebook and Telegram; other networks skip it); null or an empty string removes it."
       },
       "delete": {
         "operationId": "delete_schedules_delete_slot",
@@ -5253,6 +5265,11 @@
                   },
                   "boardId": {
                     "type": "string"
+                  },
+                  "firstComment": {
+                    "type": "string",
+                    "maxLength": 1000,
+                    "description": "Posted as a comment on the new post when the network has a comment API (YouTube, Instagram, Bluesky, LinkedIn, Threads, Facebook, Telegram); ignored otherwise. A failed comment never fails the post: the account result carries a warnings code."
                   }
                 },
                 "required": [

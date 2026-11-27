@@ -80,6 +80,8 @@ describe('GET /api/posts/[id]', () => {
         publishLinks: [],
         userNotices: [],
         providerFailures: [],
+        firstComment: null,
+        commentWarnings: [],
         postUrl: 'https://example.com/posts/slot-1',
         media: null,
       },

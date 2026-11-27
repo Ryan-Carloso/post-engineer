@@ -52,6 +52,8 @@ const SLOT_DETAIL = {
     publishLinks: [],
     userNotices: [],
     providerFailures: [],
+    firstComment: null,
+    commentWarnings: [],
     postUrl: null,
   },
   schedule: {

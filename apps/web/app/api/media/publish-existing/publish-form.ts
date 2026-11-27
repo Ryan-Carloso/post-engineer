@@ -1,4 +1,5 @@
 import { PUBLISH_ACCOUNT_FIELDS, isAiLabelProvider, isTitleProvider } from '@/lib/contracts/providers';
+import { appendFirstComment } from '@/lib/first-comment/form-field';
 import type { SocialProvider } from '@/lib/providers/registry';
 
 export interface ExistingMediaFormFields {
@@ -10,6 +11,7 @@ export interface ExistingMediaFormFields {
   boardId: string;
   accountIds: string[];
   aiLabel: boolean;
+  firstComment: string | null;
 }
 
 function fileName(contentType: string): string {
@@ -28,6 +30,7 @@ export function buildExistingMediaForm(
   const file = new File([new Uint8Array(buffer)], fileName(contentType), { type: contentType });
   const formData = new FormData();
   formData.append('provider', provider);
+  appendFirstComment(formData, provider, fields.firstComment);
   if (provider === 'youtube') {
     formData.append('video', file);
     formData.append('title', fields.title.trim());

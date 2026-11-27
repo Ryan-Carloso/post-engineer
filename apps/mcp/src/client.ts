@@ -224,14 +224,23 @@ export class PostEngineerClient {
     return parseContractResponse(getSlotContract, raw);
   }
 
-  async updateSlotTitle(slotId: string, title: string): Promise<ResponseOf<typeof updateSlotTitleContract>> {
-    const trimmed = requireTitle(title);
+  async updateSlotTitle(
+    slotId: string,
+    title: string | undefined,
+    firstComment?: string,
+  ): Promise<ResponseOf<typeof updateSlotTitleContract>> {
+    if (title === undefined && firstComment === undefined) {
+      throw new Error('Provide title, firstComment or both.');
+    }
     const raw = await this.request(
       `/api/schedule/slots/${encodeURIComponent(slotId)}`,
       {
         method: 'PATCH',
         headers: this.getHeaders(),
-        body: JSON.stringify({ title: trimmed }),
+        body: JSON.stringify({
+          ...(title === undefined ? {} : { title: requireTitle(title) }),
+          ...(firstComment === undefined ? {} : { firstComment: firstComment.trim() === '' ? null : firstComment.trim() }),
+        }),
       },
       'update slot title'
     );

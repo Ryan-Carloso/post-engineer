@@ -15,7 +15,7 @@ describe('requireDirectPublishFields', () => {
         tags: ['tech'],
         privacyStatus: 'public',
       }),
-    ).toEqual({ title: 'T', description: 'D', tags: ['tech'], privacyStatus: 'public', caption: '', boardId: '' });
+    ).toEqual({ title: 'T', description: 'D', tags: ['tech'], privacyStatus: 'public', caption: '', boardId: '', firstComment: '' });
     expect(
       requireDirectPublishFields({
         provider: 'rumble',
@@ -24,7 +24,7 @@ describe('requireDirectPublishFields', () => {
         title: 'T',
         description: 'D',
       }),
-    ).toEqual({ title: 'T', description: 'D', tags: [], privacyStatus: '', caption: '', boardId: '' });
+    ).toEqual({ title: 'T', description: 'D', tags: [], privacyStatus: '', caption: '', boardId: '', firstComment: '' });
     expect(() =>
       requireDirectPublishFields({ provider: 'youtube', videoPath: 'clip.mp4', accountIds: ['c'], title: 'T', description: 'D' }),
     ).toThrow(/tags is required for youtube/);
@@ -46,7 +46,7 @@ describe('requireDirectPublishFields', () => {
     ).toThrow(/caption is required for facebook/);
     expect(
       requireDirectPublishFields({ provider: 'facebook', videoPath: 'clip.mp4', accountIds: ['p'], caption: ' hi ' }),
-    ).toEqual({ title: '', description: '', tags: [], privacyStatus: '', caption: 'hi', boardId: '' });
+    ).toEqual({ title: '', description: '', tags: [], privacyStatus: '', caption: 'hi', boardId: '', firstComment: '' });
   });
 
   it('requires a boardId for pinterest and falls back from description to caption', () => {
@@ -62,10 +62,11 @@ describe('requireDirectPublishFields', () => {
       privacyStatus: '',
       caption: 'pin text',
       boardId: 'b1',
+      firstComment: '',
     });
     expect(
       requireDirectPublishFields({ ...base, boardId: 'b1', title: 'T', description: 'explicit', caption: 'c' }),
-    ).toEqual({ title: 'T', description: 'explicit', tags: [], privacyStatus: '', caption: 'c', boardId: 'b1' });
+    ).toEqual({ title: 'T', description: 'explicit', tags: [], privacyStatus: '', caption: 'c', boardId: 'b1', firstComment: '' });
   });
 });
 
@@ -99,6 +100,7 @@ describe('buildDirectPublishForm', () => {
       accountIds: ['user-9'],
       caption: 'pin text',
       boardId: 'b1',
+      firstComment: '',
     });
     const form = buildDirectPublishForm(
       { provider: 'pinterest', videoPath: 'clip.mp4', accountIds: ['user-9'], caption: 'pin text', boardId: 'b1' },
@@ -231,5 +233,34 @@ describe('buildDirectPublishForm', () => {
     expect(first.get('publishScopeKey')).toMatch(/^direct:[0-9a-f-]{36}$/);
     expect(second.get('publishScopeKey')).toMatch(/^direct:[0-9a-f-]{36}$/);
     expect(second.get('publishScopeKey')).not.toBe(first.get('publishScopeKey'));
+  });
+});
+
+describe('first comment in the direct publish form', () => {
+  const base = { videoPath: 'clip.mp4', accountIds: ['a-1'], caption: 'hi', title: 'T', description: 'D' };
+
+  function formFor(provider: 'youtube' | 'instagram' | 'bluesky' | 'telegram' | 'pinterest' | 'rumble', firstComment?: string) {
+    const input = {
+      ...base,
+      provider,
+      tags: ['a'],
+      privacyStatus: 'public' as const,
+      boardId: 'b1',
+      ...(firstComment === undefined ? {} : { firstComment }),
+    };
+    return buildDirectPublishForm(input, requireDirectPublishFields(input), new Blob([new Uint8Array([1])], { type: 'video/mp4' }), 'clip.mp4');
+  }
+
+  it.each(['youtube', 'instagram', 'bluesky', 'telegram'] as const)('sends the trimmed first comment to %s', (provider) => {
+    expect(formFor(provider, '  Link in bio ').get('firstComment')).toBe('Link in bio');
+  });
+
+  it.each(['pinterest', 'rumble'] as const)('leaves it out for %s, which has no comment API', (provider) => {
+    expect(formFor(provider, 'Link in bio').has('firstComment')).toBe(false);
+  });
+
+  it('sends no field without a comment or with a blank one', () => {
+    expect(formFor('instagram').has('firstComment')).toBe(false);
+    expect(formFor('instagram', '   ').has('firstComment')).toBe(false);
   });
 });

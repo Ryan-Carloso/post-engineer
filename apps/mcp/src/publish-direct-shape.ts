@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import { MAX_UPLOAD_VIDEO_GB } from './limits.js';
-import { SOCIAL_PROVIDERS } from './contracts/providers.js';
+import { FIRST_COMMENT_MAX_LENGTH } from './contracts/first-comment.js';
+import { COMMENT_PROVIDERS, SOCIAL_PROVIDERS } from './contracts/providers.js';
+
+export const FIRST_COMMENT_DESCRIPTION = `Optional: a comment the publisher posts on the new post right after it goes live, up to ${FIRST_COMMENT_MAX_LENGTH} characters. Posted on ${COMMENT_PROVIDERS.join(', ')}; the other networks skip it. A failed comment never fails the post: the account result carries a warnings code (FIRST_COMMENT_FAILED, FIRST_COMMENT_RECONNECT_REQUIRED when the account was connected before the comment permission existed and must be reconnected, FIRST_COMMENT_UNSUPPORTED_CHAT for a Telegram channel with no linked discussion group, FIRST_COMMENT_TOO_LONG over the network limit). It cannot be pinned.`;
 
 export const PublishVideoDirectShape = {
   provider: z
@@ -42,6 +45,11 @@ export const PublishVideoDirectShape = {
     .string()
     .optional()
     .describe('Pinterest only: the board to publish the pin to (the id from accounts (action: list_boards)). Required for pinterest.'),
+  firstComment: z
+    .string()
+    .max(FIRST_COMMENT_MAX_LENGTH, `firstComment must be at most ${FIRST_COMMENT_MAX_LENGTH} characters`)
+    .optional()
+    .describe(FIRST_COMMENT_DESCRIPTION),
   idempotencyKey: z
     .string()
     .min(1)

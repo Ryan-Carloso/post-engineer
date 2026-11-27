@@ -458,3 +458,28 @@ describe('publishVideoDirect local file read', () => {
     }
   });
 });
+
+describe('publish_uploaded_video first comment', () => {
+  it('sends the first comment in the body and keeps the account warnings of the answer', async () => {
+    const request = vi.fn(async (_path: string, _init?: { body?: string }) => ({
+      success: true,
+      provider: 'instagram',
+      results: [{ accountId: 'ig-1', success: true, warnings: ['FIRST_COMMENT_FAILED'] }],
+      successCount: 1,
+      logId: 'log-1',
+    }));
+    const result = await publishUploadedVideo(fakeClient(request), {
+      provider: 'instagram',
+      uploadId: 'up-1',
+      accountIds: ['ig-1'],
+      caption: 'hi',
+      firstComment: '  Link in bio ',
+    });
+    expect(JSON.parse(request.mock.calls[0][1]?.body ?? '{}')).toMatchObject({ firstComment: 'Link in bio' });
+    expect(result.results[0].warnings).toEqual(['FIRST_COMMENT_FAILED']);
+  });
+
+  it('omits a blank first comment and rejects one over the limit in the shape', () => {
+    expect(PublishUploadedVideoSchema.safeParse({ provider: 'instagram', uploadId: 'u', accountIds: ['a'], caption: 'c', firstComment: 'x'.repeat(1001) }).success).toBe(false);
+  });
+});

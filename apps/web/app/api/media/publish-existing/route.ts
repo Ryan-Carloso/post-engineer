@@ -152,6 +152,7 @@ async function scheduleExistingMedia(ctx: PublishExistingContext): Promise<NextR
     scheduleId,
     userId,
     promptVersionId: input.promptVersionId,
+    firstComment: input.firstComment,
   }).map((row) => ({
     ...row,
     status: 'ready',

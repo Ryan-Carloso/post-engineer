@@ -9,6 +9,7 @@ import { IMAGE_PROVIDERS, isImageProvider, type SocialProvider as Provider } fro
 import { boundAccounts } from './bound-accounts.js';
 import { PublishExistingSchema, type PublishExistingArgs } from './publish-existing-shape.js';
 import { createRefResolvers } from './refs.js';
+import { firstCommentWarningSuffix } from './first-comment-warnings.js';
 import { sanitizeEngineError } from './tools.js';
 import { type McpToolResponse } from './tools-call.js';
 
@@ -99,7 +100,7 @@ function summary(result: PublishExistingResult, mediaKind: string, resolvedNote:
       .map((account) => {
         if (account.success) {
           const link = account.videoUrl ?? account.permalink ?? account.postId ?? account.videoId ?? '';
-          return `- ${account.accountId}: published${link ? ` (${link})` : ''}`;
+          return `- ${account.accountId}: published${link ? ` (${link})` : ''}${firstCommentWarningSuffix(account)}`;
         }
         return `- ${account.accountId}: FAILED — ${account.error ?? 'unknown error'}`;
       })
@@ -139,6 +140,7 @@ export async function handlePublishExisting(client: PostEngineerClient, args: Pu
       title: input.title,
       description: input.description,
       caption: input.caption,
+      firstComment: input.firstComment,
       personaId: input.personaId,
       mode: input.mode,
       publishAt: input.publishAt,

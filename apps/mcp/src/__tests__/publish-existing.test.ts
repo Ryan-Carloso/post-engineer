@@ -391,3 +391,59 @@ describe('publish_existing tool on both transports', () => {
     }
   });
 });
+
+describe('publish_existing first comment', () => {
+  it('accepts a first comment up to the limit and rejects one over it', () => {
+    expect(PublishExistingSchema.safeParse(args({ firstComment: 'x'.repeat(1000) })).success).toBe(true);
+    const over = PublishExistingSchema.safeParse(args({ firstComment: 'x'.repeat(1001) }));
+    expect(over.success).toBe(false);
+    expect(over.success === false && over.error.issues[0]?.message).toContain('at most 1000');
+  });
+
+  const BASE: PublishExistingInput = {
+    media: { kind: 'upload', uploadId: '33333333-3333-4333-8333-333333333333' },
+    accounts: { youtube: ['UC1'], instagram: ['ig-1'] },
+    title: 'T',
+    description: 'D',
+    mode: 'scheduled',
+    publishAt: '2026-12-01T20:00:00',
+    timezone: 'UTC',
+    idempotencyKey: 'key-1',
+  };
+
+  it('sends the first comment in the request body, and omits it when unset', async () => {
+    const withComment = fakeClient(async () => SCHEDULED_REPLY);
+    await publishExisting(withComment.client, { ...BASE, firstComment: 'Link in bio' });
+    expect(publishBody(withComment.request).firstComment).toBe('Link in bio');
+    const without = fakeClient(async () => SCHEDULED_REPLY);
+    await publishExisting(without.client, BASE);
+    expect(publishBody(without.request)).not.toHaveProperty('firstComment');
+  });
+
+  it('passes the first comment from the tool arguments to the API', async () => {
+    const { client, request } = fakeClient(async () => SCHEDULED_REPLY);
+    await handlePublishExisting(client, args({ firstComment: 'Link in bio' }));
+    expect(publishBody(request).firstComment).toBe('Link in bio');
+  });
+
+  it('says what happened to the first comment of each account in the summary and keeps the code in the JSON', async () => {
+    const { client } = fakeClient(async () => ({
+      ...ASAP_REPLY,
+      publishes: [
+        {
+          provider: 'youtube',
+          success: true,
+          results: [{ accountId: 'UC1', success: true, videoUrl: 'https://youtu.be/v1', warnings: ['FIRST_COMMENT_RECONNECT_REQUIRED', 'made_up'] }],
+        },
+        { provider: 'instagram', success: true, results: [{ accountId: 'ig-1', success: true, warnings: ['FIRST_COMMENT_FAILED'] }] },
+      ],
+    }));
+    const text = textOf(await handlePublishExisting(client, args({ mode: 'asap', publishAt: undefined, firstComment: 'Hi' })));
+    expect(text).toContain('- UC1: published (https://youtu.be/v1) — FIRST_COMMENT_RECONNECT_REQUIRED: the first comment needs a permission');
+    expect(text).toContain('reconnect the account');
+    expect(text).toContain('- ig-1: published — FIRST_COMMENT_FAILED: the first comment did not post; the post is still live');
+    expect(text).not.toContain('made_up');
+    const json = JSON.parse(text.slice(text.lastIndexOf('{"success"'))) as { publishes: Array<{ results: Array<{ warnings?: string[] }> }> };
+    expect(json.publishes[0].results[0].warnings).toEqual(['FIRST_COMMENT_RECONNECT_REQUIRED']);
+  });
+});

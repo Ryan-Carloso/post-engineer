@@ -9,6 +9,7 @@ import type { CreatePersonaResult, SocialProvider } from '@/lib/types';
 import { HttpStatusError } from '@/lib/errors';
 import { notifyIfSessionExpired } from '@/lib/session-expiry';
 import type { PublishLink } from '@/lib/publish-links';
+import type { FirstCommentOutcomeWarning } from '@/lib/first-comment/outcome-warnings';
 import type { PublishProviderFailure, PublishUserNotice } from '@/lib/publish-user-notice';
 import { narrowPostPrompt, narrowSlotFields, type PostPromptFacts, type SlotMedia } from './slot-detail';
 import { parseJsonBody, throwForBadResponse } from './api-response';
@@ -323,6 +324,8 @@ export interface SlotDetailPayload {
     publishLinks: PublishLink[];
     userNotices?: PublishUserNotice[];
     providerFailures?: PublishProviderFailure[];
+    firstComment: string | null;
+    commentWarnings: FirstCommentOutcomeWarning[];
     media: SlotMedia | null;
   };
   schedule: {

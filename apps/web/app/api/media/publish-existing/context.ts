@@ -37,5 +37,6 @@ export function fieldsFor(
     boardId: input.publishing.pinterestBoardId ?? '',
     aiLabel,
     accountIds,
+    firstComment: input.firstComment,
   };
 }
