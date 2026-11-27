@@ -474,9 +474,5 @@ def _is_comment(line: str) -> bool:
     )
 
 
-def _ints(pattern: re.Pattern[str], text: str) -> list[float]:
-    return [float(value) for value in pattern.findall(text)]
-
-
 def _floats(pattern: re.Pattern[str], text: str) -> list[float]:
     return [float(value) for value in pattern.findall(text)]
