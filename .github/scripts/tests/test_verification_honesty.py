@@ -164,7 +164,6 @@ def test_a_python_coverage_floor_no_longer_moves_the_grade():
     )
     findings = honesty.analyze([change], lambda _path: False)
     assert findings == []
-    assert not any(finding.code == "coverage-threshold" for finding in findings)
 
 
 def test_unpinned_verification_test_file_runs_the_whole_scripts_suite():
