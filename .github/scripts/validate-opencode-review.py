@@ -6,9 +6,8 @@ Run: python3 .github/scripts/validate-opencode-review.py
 Guards the design decisions of the OpenCode review workflow:
 - direct `opencode run` (verified against the installed CLI: there is no
   --standalone flag), no third-party wrapper
-- static model chain in REVIEW_MODELS: the OpenRouter free router first
-  (no hardcoded model list to rot), one OpenCode free model as fallback,
-  15 minutes per attempt
+- static model chain in REVIEW_MODELS: two OpenCode free models measured on
+  the real review prompt, 12 minutes per attempt
 - the job always runs (free OpenCode models need no secret); each paid tier
   is skipped when its key is missing (secret gating via step outputs)
 - both keys masked in logs and scrubbed from review.md before the comment
@@ -94,18 +93,19 @@ def main() -> int:
     chain_match = re.search(r"^  REVIEW_MODELS: \$\{\{ vars\.REVIEW_MODELS \|\| '([^']+)' \}\}$", text, re.M)
     chain = chain_match.group(1).split(",") if chain_match else []
     check(
-        "REVIEW_MODELS default starts with the OpenRouter free router",
-        chain[:1] == ["openrouter/openrouter/free"],
+        "REVIEW_MODELS default starts with nemotron-3.5-lightning-free",
+        chain[:1] == ["opencode/nemotron-3.5-lightning-free"],
         f"chain={chain}",
     )
     check(
-        "REVIEW_MODELS default falls back to an OpenCode free model",
-        len(chain) == 2 and chain[1].startswith("opencode/") and chain[1].endswith("-free"),
+        "REVIEW_MODELS default falls back to flint-40b-free",
+        chain == ["opencode/nemotron-3.5-lightning-free", "opencode/flint-40b-free"],
         f"chain={chain}",
     )
     check(
-        "REVIEW_MODEL_VERIFY default is the OpenRouter free router",
-        "REVIEW_MODEL_VERIFY: ${{ vars.REVIEW_MODEL_VERIFY || 'openrouter/openrouter/free' }}" in text,
+        "REVIEW_MODEL_VERIFY default is flint-40b-free, not the pass-1 primary",
+        "REVIEW_MODEL_VERIFY: ${{ vars.REVIEW_MODEL_VERIFY || 'opencode/flint-40b-free' }}" in text
+        and chain[:1] != ["opencode/flint-40b-free"],
     )
     env_defaults = [
         line
@@ -179,15 +179,15 @@ def main() -> int:
         and text.find("Review attempt order:") < text.find("Attempting review with"),
     )
     check(
-        "pass 1 attempt timeout is 15m",
-        "limit=15m" in text and "limit=20m" not in text and "limit=30m" not in text,
+        "pass 1 attempt timeout is 12m",
+        "limit=12m" in text and "limit=20m" not in text and "limit=30m" not in text,
         "a working review finishes in under 10 minutes; a hung model must not hold the job longer",
     )
     check(
-        "pass 2 timeout is 15m",
-        "timeout 15m opencode run" in text,
+        "pass 2 timeout is 12m",
+        "timeout 12m opencode run" in text,
     )
-    attempt_minutes = 15
+    attempt_minutes = 12
     overhead_minutes = 5
     required_minutes = attempt_minutes * len(chain) + attempt_minutes + overhead_minutes
     timeout_match = re.search(r"^\s*timeout-minutes:\s*(\d+)\s*$", text, re.M)
