@@ -73,7 +73,10 @@ const nextConfig: NextConfig = {
     ],
   },
   async redirects() {
-    return [{ source: '/api-keys', destination: '/recipes', permanent: true }];
+    return [
+      { source: '/api-keys', destination: '/recipes', permanent: true },
+      { source: '/posts/history', destination: '/posts', permanent: true },
+    ];
   },
   async headers() {
     const dev = process.env.NODE_ENV !== 'production';

@@ -39,7 +39,6 @@ vi.mock('@/lib/ui', () => ({
   CoinsIcon: () => <span data-testid="icon-coins" />,
   ComposeIcon: () => <span data-testid="icon-compose" />,
   ProfileIcon: () => <span data-testid="icon-profile" />,
-  HistoryIcon: () => <span data-testid="icon-history" />,
   ChartIcon: () => <span data-testid="icon-chart" />,
   CalendarIcon: () => <span data-testid="icon-calendar" />,
   SparklesIcon: () => <span data-testid="icon-sparkles" />,
@@ -172,14 +171,14 @@ describe('app/(main)/layout — MainLayout', () => {
     }
   });
 
-  it('renders the sidebar tabs in order: Posts, History, Accounts, Personas, Metrics, A/B Tests, API Key & MCP', () => {
+  it('renders the sidebar tabs in order: Posts, Accounts, Personas, Metrics, Experiments, API Key & MCP', () => {
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
     const sidebar = screen.getByTestId('nav-brand').closest('aside');
     const nav = within(sidebar as HTMLElement).getByRole('navigation');
     const titles = within(nav)
       .getAllByRole('link')
       .map((link) => link.getAttribute('title'));
-    expect(titles).toEqual(['nav.posts', 'nav.history', 'nav.accounts', 'nav.persona', 'nav.metrics', 'nav.experiments', 'nav.prompts']);
+    expect(titles).toEqual(['nav.posts', 'nav.accounts', 'nav.persona', 'nav.metrics', 'nav.experiments', 'nav.prompts']);
   });
 
   it('experiments tab links to /experiments', () => {
@@ -425,17 +424,7 @@ describe('app/(main)/layout — MainLayout', () => {
       expect(postsLink).toHaveAttribute('aria-current', 'page');
     });
 
-    it('on /posts/history highlights History in the sidebar and More in the bottom bar, not Posts', () => {
-      vi.mocked(usePathname).mockReturnValue('/posts/history');
-      render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
-      expect(within(getMobileNav()).getByText('nav.posts').closest('a')).not.toHaveAttribute('aria-current');
-      expect(within(getMobileNav()).getByRole('button', { name: 'nav.more' }).className).toContain('font-semibold');
-      const sidebar = within(screen.getByTestId('nav-brand').closest('aside') as HTMLElement);
-      expect(sidebar.getByTitle('nav.history').className).toContain('bg-brand-soft');
-      expect(sidebar.getByTitle('nav.posts').className).not.toContain('bg-brand-soft');
-    });
-
-    it('on /experiments highlights A/B Tests in the sidebar and More in the bottom bar', () => {
+    it('on /experiments highlights Experiments in the sidebar and More in the bottom bar', () => {
       vi.mocked(usePathname).mockReturnValue('/experiments');
       render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
       expect(within(getMobileNav()).getByRole('button', { name: 'nav.more' }).className).toContain('font-semibold');
@@ -518,11 +507,10 @@ describe('mobile header profile area', () => {
     expect(within(link).getByText('H')).toBeInTheDocument();
   });
 
-  it('More opens a sheet linking History, Metrics and A/B Tests (not the profile, no billing)', async () => {
+  it('More opens a sheet linking Metrics and Experiments (not the profile, no billing)', async () => {
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
     fireEvent.click(screen.getByRole('button', { name: 'nav.more' }));
     const sheet = await screen.findByRole('dialog', { name: 'nav.moreTitle' });
-    expect(within(sheet).getByText('nav.history').closest('a')).toHaveAttribute('href', '/posts/history');
     expect(within(sheet).getByText('nav.metrics').closest('a')).toHaveAttribute('href', '/metrics');
     expect(within(sheet).getByText('nav.experiments').closest('a')).toHaveAttribute('href', '/experiments');
     expect(within(sheet).queryByText('nav.profile')).toBeNull();
@@ -536,7 +524,7 @@ describe('mobile header profile area', () => {
     const list = sheet.querySelector('ul');
     expect(list?.className).toContain('grid-cols-2');
     expect(list?.className).not.toContain('grid-cols-3');
-    for (const labelKey of ['nav.history', 'nav.metrics', 'nav.experiments']) {
+    for (const labelKey of ['nav.metrics', 'nav.experiments']) {
       const label = within(sheet).getByText(labelKey);
       expect(label.className).toContain('truncate');
       expect(label.className).toContain('min-w-0');
@@ -557,7 +545,7 @@ describe('mobile header profile area', () => {
     expect(activeLink).toHaveAttribute('aria-current', 'page');
     expect(activeLink.className).toContain('bg-brand-soft');
     expect(activeLink.className).not.toContain('bg-surface');
-    for (const labelKey of ['nav.history', 'nav.experiments']) {
+    for (const labelKey of ['nav.experiments']) {
       const link = within(sheet).getByText(labelKey).closest('a') as HTMLElement;
       expect(link).not.toHaveAttribute('aria-current');
       expect(link.className).toContain('bg-surface');

@@ -87,16 +87,21 @@ describe('Account area — mobile header (390px)', () => {
     cy.contains('h1', 'Perfil').should('be.visible');
   });
 
-  it('opens History from the More sheet', () => {
+  it('opens Metrics from the More sheet', () => {
     visitHomeAsReturningUser();
+    cy.intercept('GET', '/api/metrics**', {
+      statusCode: 200,
+      body: { success: true, rows: [], coverage: [], coverageTruncated: false, asOf: null },
+    });
+    cy.intercept('GET', '/api/persona/list', { statusCode: 200, body: { authenticated: true, personas: [] } });
 
     cy.get('nav.fixed.bottom-0').contains('button', 'Mais').click();
     cy.get('[role=dialog]').within(() => {
       cy.contains('a', 'Perfil').should('not.exist');
-      cy.contains('a', 'Histórico').click();
+      cy.contains('a', 'Métricas').click();
     });
-    cy.url().should('include', '/posts/history');
-    cy.contains('h1', 'Histórico').should('be.visible');
+    cy.url().should('include', '/metrics');
+    cy.contains('h1', 'Métricas').should('be.visible');
   });
 
   it('has four bottom tab links starting at /posts plus More', () => {

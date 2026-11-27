@@ -17,31 +17,27 @@ import {
   BoltIcon,
   CalendarIcon,
   ChartIcon,
-  HistoryIcon,
   KeyIcon,
   SparklesIcon,
 } from '@/lib/ui';
 
 interface NavItem {
   href: string;
-  labelKey: 'nav.accounts' | 'nav.persona' | 'nav.posts' | 'nav.history' | 'nav.metrics' | 'nav.experiments' | 'nav.prompts';
-  hintKey: 'nav.accountsHint' | 'nav.personaHint' | 'nav.postsHint' | 'nav.historyHint' | 'nav.metricsHint' | 'nav.experimentsHint' | 'nav.promptsHint';
+  labelKey: 'nav.accounts' | 'nav.persona' | 'nav.posts' | 'nav.metrics' | 'nav.experiments' | 'nav.prompts';
+  hintKey: 'nav.accountsHint' | 'nav.personaHint' | 'nav.postsHint' | 'nav.metricsHint' | 'nav.experimentsHint' | 'nav.promptsHint';
   icon: () => React.JSX.Element;
 }
-
-const HISTORY_HREF = '/posts/history';
 
 function onRoute(route: string, pathname: string): boolean {
   return pathname === route || pathname.startsWith(`${route}/`);
 }
 
 function isNavActive(href: string, pathname: string): boolean {
-  if (href === '/posts' && onRoute(HISTORY_HREF, pathname)) return false;
   if (href === '/personas') return onRoute(href, pathname) || onRoute('/persona', pathname);
   return onRoute(href, pathname);
 }
 
-const MORE_ROUTES = [HISTORY_HREF, '/metrics', '/experiments'];
+const MORE_ROUTES = ['/metrics', '/experiments'];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
@@ -66,7 +62,6 @@ const MainSidebar = () => {
 
   const navItems: Array<NavItem> = [
     { href: '/posts', labelKey: 'nav.posts', hintKey: 'nav.postsHint', icon: CalendarIcon },
-    { href: HISTORY_HREF, labelKey: 'nav.history', hintKey: 'nav.historyHint', icon: HistoryIcon },
     { href: '/accounts', labelKey: 'nav.accounts', hintKey: 'nav.accountsHint', icon: AccountsIcon },
     { href: '/personas', labelKey: 'nav.persona', hintKey: 'nav.personaHint', icon: SparklesIcon },
     { href: '/metrics', labelKey: 'nav.metrics', hintKey: 'nav.metricsHint', icon: ChartIcon },
@@ -175,7 +170,6 @@ const MobileNavigation = () => {
     { href: '/recipes', labelKey: 'nav.prompts', shortLabelKey: 'nav.promptsShort', icon: KeyIcon },
   ];
   const moreLinks: Array<{ href: string; labelKey: NavItem['labelKey']; icon: () => React.JSX.Element }> = [
-    { href: HISTORY_HREF, labelKey: 'nav.history', icon: HistoryIcon },
     { href: '/metrics', labelKey: 'nav.metrics', icon: ChartIcon },
     { href: '/experiments', labelKey: 'nav.experiments', icon: BoltIcon },
   ];
