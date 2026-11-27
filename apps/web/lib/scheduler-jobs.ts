@@ -27,6 +27,7 @@ import { createTokenRefreshStore } from '@/lib/social-token-refresh-store';
 import {
   getSchedulerLastSuccess,
   recordSchedulerSuccess,
+  releaseSchedulerLease,
   tryAcquireSchedulerLease,
 } from '@/lib/scheduler-lease';
 
@@ -108,7 +109,7 @@ async function runSocialTokenRefreshTick(): Promise<void> {
   await flushPostHog();
 }
 
-const SCHEDULER_TICK_MS = 60 * 60 * 1000;
+export const SCHEDULER_TICK_MS = 60 * 1000;
 
 export const SCHEDULER_JOBS: SchedulerJob[] = [
   {
@@ -151,10 +152,19 @@ export function startInternalScheduler(): SchedulerHandle | null {
     tickMs: SCHEDULER_TICK_MS,
     acquireLease: async (job, ttlSeconds, holder) => {
       const acquired = await tryAcquireSchedulerLease(job, ttlSeconds, holder);
-      const lastSuccessAt = await getSchedulerLastSuccess(job);
-      return { acquired, lastSuccessAt };
+      try {
+        return { acquired, lastSuccessAt: await getSchedulerLastSuccess(job) };
+      } catch (error) {
+        if (acquired) {
+          await releaseSchedulerLease(job, holder).catch((releaseError: unknown) => {
+            logger.error(`[scheduler] ${job}: lease release failed`, releaseError);
+          });
+        }
+        throw error;
+      }
     },
     recordSuccess: recordSchedulerSuccess,
+    releaseLease: releaseSchedulerLease,
     track: trackApiEvent,
     logger,
     holder: `${process.env.HOSTNAME ?? 'web'}:${process.pid}`,
