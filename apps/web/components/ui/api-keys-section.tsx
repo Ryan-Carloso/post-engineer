@@ -23,7 +23,7 @@ export default function ApiKeysSection({
 
   const [isCreating, setIsCreating] = useState(false);
   const [keyName, setKeyName] = useState('');
-  const [keyMode, setKeyMode] = useState<ApprovalMode>('yolo');
+  const [keyMode, setKeyMode] = useState<ApprovalMode>('approval');
   const [newKeyData, setNewKeyData] = useState<{ name: string; key: string } | null>(null);
   const [showAllKeys, setShowAllKeys] = useState(false);
   const { copied, copy } = useCopyText();
@@ -47,7 +47,7 @@ export default function ApiKeysSection({
       setNewKeyData({ name: result.name, key: result.key });
       onKeyCreated?.(result.key);
       setKeyName('');
-      setKeyMode('yolo');
+      setKeyMode('approval');
       setIsCreating(false);
     } catch {
     }

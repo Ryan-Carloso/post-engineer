@@ -660,7 +660,7 @@
                 {
                     "name": "approval_mode",
                     "type": "text",
-                    "default": "'yolo'::text",
+                    "default": "'approval'::text",
                     "notNull": true
                 }
             ],

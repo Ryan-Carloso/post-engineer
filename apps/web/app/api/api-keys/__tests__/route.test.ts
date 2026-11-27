@@ -109,7 +109,7 @@ describe('/api/api-keys endpoints', () => {
               name: 'My Custom Agent',
               key_prefix: 'pe_live_12345678...',
               persona_ids: ownedIds.length > 0 ? ownedIds : null,
-              approval_mode: (insert.mock.calls[0]?.[0] as { approval_mode?: string } | undefined)?.approval_mode ?? 'yolo',
+              approval_mode: (insert.mock.calls[0]?.[0] as { approval_mode?: string } | undefined)?.approval_mode ?? 'approval',
               created_at: '2026-09-18T10:00:00.000Z',
             },
             error: null,
@@ -223,7 +223,7 @@ describe('/api/api-keys endpoints', () => {
       );
     });
 
-    it('defaults the mode to yolo when approvalMode is absent', async () => {
+    it('defaults the mode to approval when approvalMode is absent', async () => {
       vi.mocked(requireSupabaseSession).mockResolvedValue({
         auth: { userId: 'user-1', accessToken: 'token' },
         error: null,
@@ -239,7 +239,7 @@ describe('/api/api-keys endpoints', () => {
       const response = await POST(request);
       expect(response.status).toBe(201);
       expect(insert).toHaveBeenCalledWith(
-        expect.objectContaining({ approval_mode: 'yolo' }),
+        expect.objectContaining({ approval_mode: 'approval' }),
       );
     });
 

@@ -171,7 +171,7 @@ describe('ApiKeysSection', () => {
     expect(screen.queryByTestId('api-key-scope-specific')).not.toBeInTheDocument();
   });
 
-  it('create form defaults the mode to yolo and sends approval when chosen', async () => {
+  it('create form defaults the mode to approval and sends yolo when chosen', async () => {
     vi.mocked(useApiKeysQuery).mockReturnValue({
       data: [],
       isLoading: false,
@@ -179,7 +179,7 @@ describe('ApiKeysSection', () => {
     } as never);
     const mutateAsync = vi.fn().mockResolvedValue({
       id: 'key-1',
-      name: 'Approval Agent',
+      name: 'Yolo Agent',
       key: 'pe_live_abcdef1234567890abcdef1234567890',
       keyPrefix: 'pe_live_abcdef12...',
       createdAt: '2026-09-18T10:00:00.000Z',
@@ -188,13 +188,13 @@ describe('ApiKeysSection', () => {
     renderSection();
 
     fireEvent.click(screen.getByTestId('generate-api-key-btn'));
-    expect(screen.getByTestId('api-key-mode-yolo')).toBeChecked();
-    fireEvent.click(screen.getByTestId('api-key-mode-approval'));
-    fireEvent.change(screen.getByTestId('api-key-name-input'), { target: { value: 'Approval Agent' } });
+    expect(screen.getByTestId('api-key-mode-approval')).toBeChecked();
+    fireEvent.click(screen.getByTestId('api-key-mode-yolo'));
+    fireEvent.change(screen.getByTestId('api-key-name-input'), { target: { value: 'Yolo Agent' } });
     fireEvent.click(screen.getByTestId('submit-create-key-btn'));
 
     await waitFor(() => {
-      expect(mutateAsync).toHaveBeenCalledWith({ name: 'Approval Agent', personaIds: null, approvalMode: 'approval' });
+      expect(mutateAsync).toHaveBeenCalledWith({ name: 'Yolo Agent', personaIds: null, approvalMode: 'yolo' });
     });
   });
 
@@ -248,7 +248,7 @@ describe('ApiKeysSection', () => {
     fireEvent.click(screen.getByTestId('submit-create-key-btn'));
 
     await waitFor(() => {
-      expect(mutateAsync).toHaveBeenCalledWith({ name: 'CI Agent', personaIds: null, approvalMode: 'yolo' });
+      expect(mutateAsync).toHaveBeenCalledWith({ name: 'CI Agent', personaIds: null, approvalMode: 'approval' });
     });
     expect(await screen.findByTestId('api-key-created-banner')).toBeInTheDocument();
     expect(onKeyCreated).toHaveBeenCalledExactlyOnceWith('pe_live_abcdef1234567890abcdef1234567890');
@@ -367,7 +367,7 @@ describe('ApiKeysSection', () => {
     fireEvent.click(screen.getByTestId('submit-create-key-btn'));
 
     await waitFor(() => {
-      expect(mutateAsync).toHaveBeenCalledWith({ name: 'Scoped Agent', personaIds: null, approvalMode: 'yolo' });
+      expect(mutateAsync).toHaveBeenCalledWith({ name: 'Scoped Agent', personaIds: null, approvalMode: 'approval' });
     });
     expect(await screen.findByTestId('api-key-created-banner')).toBeInTheDocument();
   });

@@ -13,7 +13,7 @@ interface CreateKeyBody {
 }
 
 function parseApprovalMode(value: unknown): { ok: true; approvalMode: ApprovalMode } | { ok: false; error: string } {
-  if (value === undefined || value === null) return { ok: true, approvalMode: 'yolo' };
+  if (value === undefined || value === null) return { ok: true, approvalMode: 'approval' };
   if (isApprovalMode(value)) return { ok: true, approvalMode: value };
   return { ok: false, error: 'approvalMode must be "yolo" or "approval".' };
 }
@@ -68,7 +68,7 @@ async function getHandler(request: Request): Promise<NextResponse> {
       name: k.name,
       keyPrefix: k.key_prefix,
       personaIds: Array.isArray(k.persona_ids) ? k.persona_ids : null,
-      approvalMode: isApprovalMode(k.approval_mode) ? k.approval_mode : 'yolo',
+      approvalMode: isApprovalMode(k.approval_mode) ? k.approval_mode : 'approval',
       createdAt: k.created_at,
       lastUsedAt: k.last_used_at,
       revokedAt: k.revoked_at,
@@ -168,7 +168,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
       name: data.name,
       keyPrefix: data.key_prefix,
       personaIds: Array.isArray(data.persona_ids) ? data.persona_ids : null,
-      approvalMode: isApprovalMode(data.approval_mode) ? data.approval_mode : 'yolo',
+      approvalMode: isApprovalMode(data.approval_mode) ? data.approval_mode : 'approval',
       createdAt: data.created_at,
     },
     { status: 201 },

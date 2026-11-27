@@ -87,7 +87,7 @@ describe('api-keys-client — fetchers', () => {
     expect(fetch).toHaveBeenCalledWith('/api/api-keys', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'CI key', personaIds: null, approvalMode: 'yolo' }),
+      body: JSON.stringify({ name: 'CI key', personaIds: null, approvalMode: 'approval' }),
     });
   });
 

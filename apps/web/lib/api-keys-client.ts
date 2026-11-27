@@ -39,7 +39,7 @@ export async function createApiKey(input: CreateApiKeyInput): Promise<{
   const response = await fetch('/api/api-keys', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: input.name, personaIds: input.personaIds ?? null, approvalMode: input.approvalMode ?? 'yolo' }),
+    body: JSON.stringify({ name: input.name, personaIds: input.personaIds ?? null, approvalMode: input.approvalMode ?? 'approval' }),
   });
   if (!response.ok) throw new HttpStatusError('Failed to create API key', response.status);
   return response.json();

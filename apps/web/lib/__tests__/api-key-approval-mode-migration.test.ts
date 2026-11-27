@@ -16,9 +16,9 @@ const snapshot = JSON.parse(readFileSync(join(root, 'supabase/schema.snapshot.js
 const readme = readFileSync(join(root, 'supabase/README.md'), 'utf8');
 
 describe('user_api_keys.approval_mode migration', () => {
-  it('adds a text column defaulting to yolo, idempotently', () => {
+  it('adds a text column defaulting to approval, idempotently', () => {
     expect(migration).toContain('alter table public.user_api_keys');
-    expect(migration).toContain('add column if not exists approval_mode text not null default \'yolo\';');
+    expect(migration).toContain('add column if not exists approval_mode text not null default \'approval\';');
   });
 
   it('checks the mode against exactly yolo and approval', () => {
@@ -26,9 +26,9 @@ describe('user_api_keys.approval_mode migration', () => {
     expect(migration).toContain("check (approval_mode in ('yolo', 'approval'));");
   });
 
-  it('is recorded in the schema snapshot as a non-null text defaulting to yolo', () => {
+  it('is recorded in the schema snapshot as a non-null text defaulting to approval', () => {
     const column = snapshot.tables.user_api_keys.columns.find((entry) => entry.name === 'approval_mode');
-    expect(column).toEqual({ name: 'approval_mode', type: 'text', default: "'yolo'::text", notNull: true });
+    expect(column).toEqual({ name: 'approval_mode', type: 'text', default: "'approval'::text", notNull: true });
     expect(snapshot.tables.user_api_keys.constraints.user_api_keys_approval_mode_check).toBe(
       "CHECK ((approval_mode = ANY (ARRAY['yolo'::text, 'approval'::text])))",
     );
