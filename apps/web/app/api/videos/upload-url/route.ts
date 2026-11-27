@@ -4,7 +4,7 @@ import { apiErrorResponse } from '@/lib/api-error';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { requireSupabaseSession } from '@/lib/request-auth';
-import { assertTrialActive } from '@/lib/trial';
+import { assertAccessActive } from '@/lib/access';
 import {
   VideoUploadError,
   createSupabaseVideoUploadStorage,
@@ -21,8 +21,8 @@ async function postHandler(request: Request): Promise<NextResponse> {
 
   const limited = await applyRateLimit(request, RATE_LIMITS.signedVideoUpload, auth.userId);
   if (limited) return limited;
-  const trialBlocked = await assertTrialActive(auth.userId, { route: ROUTE });
-  if (trialBlocked) return trialBlocked;
+  const blocked = await assertAccessActive(auth.userId, { route: ROUTE });
+  if (blocked) return blocked;
 
   let body: unknown;
   try {

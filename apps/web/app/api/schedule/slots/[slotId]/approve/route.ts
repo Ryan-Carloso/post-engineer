@@ -8,11 +8,8 @@ import { personaScopeOf } from '@/lib/post-detail';
 import { resolveSlotUuid } from '@/lib/schedule-slot-id';
 import { loadOwnedSlot } from '../route';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
-import { CONTACT_WHATSAPP_URL } from '@/lib/contact';
 import { ERROR_CODES, errorMessage } from '@/lib/error-codes';
-import { logger } from '@/lib/logger';
-import { readTrialEndsAt } from '@/lib/trial';
-import { computeTrialStatus } from '@/lib/trial-status';
+import { assertAccessActive } from '@/lib/access';
 import { createSupabaseVideoUploadStore } from '@/lib/videos/signed-upload';
 import { SCHEDULED_UPLOAD_EXPIRY_MS } from '@/lib/videos/upload-expiry';
 import { publishHeldSlot } from './publish-held';
@@ -53,24 +50,8 @@ async function postHandler(
   }
 
   const serviceClient = createSupabaseServiceClient();
-  let trialEndsAt: string;
-  try {
-    trialEndsAt = await readTrialEndsAt(serviceClient, auth.userId);
-  } catch (error) {
-    logger.error('[api/schedule/slots] trial lookup failed', error, { userId: auth.userId });
-    return apiErrorResponse(500, errorMessage(ERROR_CODES.INTERNAL_ERROR), {
-      route: ROUTE,
-      code: ERROR_CODES.INTERNAL_ERROR,
-      cause: error,
-    });
-  }
-  if (!computeTrialStatus(trialEndsAt, new Date()).active) {
-    return apiErrorResponse(403, errorMessage(ERROR_CODES.TRIAL_EXPIRED), {
-      route: ROUTE,
-      code: ERROR_CODES.TRIAL_EXPIRED,
-      extra: { contactUrl: CONTACT_WHATSAPP_URL, trialEndedAt: trialEndsAt },
-    });
-  }
+  const blocked = await assertAccessActive(auth.userId, { route: ROUTE });
+  if (blocked) return blocked;
 
   const slotAtMs = Date.parse(slot.slot_at);
   if (publishMode === 'scheduled' && slotAtMs < Date.now() - APPROVAL_SLOT_GRACE_MS) {

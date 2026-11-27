@@ -3,6 +3,8 @@ import {
   CARD_STYLES,
   IDENTITY_CARD_ACCEPTED_VERSIONS,
   IDENTITY_CARD_MAX_BYTES,
+  IDENTITY_CARD_WRITE_VERSION,
+  IDENTITY_DESCRIPTION_MAX_LENGTH,
   IDENTITY_TEXT_MAX_LENGTH,
   IdentityCardSchema,
   IdentityCardV1Schema,
@@ -14,7 +16,7 @@ import {
   parseSceneJson,
   parseSceneValue,
 } from '@/lib/contracts/persona-identity-card';
-import { FIXTURE_CARD, FIXTURE_SCENE } from '@/test/identity-card-fixtures';
+import { FIXTURE_CARD, FIXTURE_CARD_V3, FIXTURE_SCENE } from '@/test/identity-card-fixtures';
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -64,18 +66,18 @@ describe('IdentityCardSchema', () => {
     expect(IdentityCardV1Schema.safeParse({ ...clone(FIXTURE_CARD), version: 2 }).success).toBe(false);
   });
 
-  it('accepts exactly versions 1 and 2 as response card versions', () => {
-    expect(IDENTITY_CARD_ACCEPTED_VERSIONS).toEqual([1, 2]);
+  it('accepts exactly versions 1, 2 and 3 as response card versions', () => {
+    expect(IDENTITY_CARD_ACCEPTED_VERSIONS).toEqual([1, 2, 3]);
     const base = { success: true, prompt: 'p', suggestedDescription: 'd' };
     for (const cardVersion of IDENTITY_CARD_ACCEPTED_VERSIONS) {
       expect(RenderIdentityPromptResponseSchema.safeParse({ ...base, cardVersion }).success).toBe(true);
     }
-    for (const cardVersion of [0, 3, '1', null]) {
+    for (const cardVersion of [0, 4, '1', null]) {
       expect(RenderIdentityPromptResponseSchema.safeParse({ ...base, cardVersion }).success).toBe(false);
     }
   });
 
-  it.each([3, '1', 0, null, undefined])('rejects version %s', (version) => {
+  it.each([4, '1', 0, null, undefined])('rejects version %s', (version) => {
     expect(IdentityCardSchema.safeParse({ ...clone(FIXTURE_CARD), version }).success).toBe(false);
   });
 
@@ -88,7 +90,7 @@ describe('IdentityCardSchema', () => {
   it('accepts a leaf of exactly 80 characters and trims surrounding whitespace', () => {
     const exact = 'y'.repeat(IDENTITY_TEXT_MAX_LENGTH);
     expect(IdentityCardSchema.safeParse(withPath(FIXTURE_CARD, ['identity', 'face', 'eyes'], exact)).success).toBe(true);
-    const parsed = IdentityCardSchema.parse(withPath(FIXTURE_CARD, ['identity', 'face', 'eyes'], `  ${exact}  `));
+    const parsed = IdentityCardV1Schema.parse(withPath(FIXTURE_CARD, ['identity', 'face', 'eyes'], `  ${exact}  `));
     expect(parsed.identity.face?.eyes).toBe(exact);
   });
 
@@ -310,12 +312,47 @@ describe('parseIdentityCardJson and parseSceneJson', () => {
       expect(unknownKey.error).toBe('identityCard: unknown field');
       expect(unknownKey.error).not.toContain('green-value');
     }
-    const badVersion = parseIdentityCardJson(JSON.stringify({ ...clone(FIXTURE_CARD), version: 3 }));
+    const badVersion = parseIdentityCardJson(JSON.stringify({ ...clone(FIXTURE_CARD), version: 4 }));
     expect(badVersion).toEqual({ ok: false, error: 'identityCard.version: unsupported version' });
   });
 
   it('reports a non-object card', () => {
     expect(parseIdentityCardJson('"text"').ok).toBe(false);
     expect(parseIdentityCardJson('[]').ok).toBe(false);
+  });
+});
+
+describe('identity card v3', () => {
+  it('is the version new cards are written as', () => {
+    expect(IDENTITY_CARD_WRITE_VERSION).toBe(3);
+    expect(IDENTITY_CARD_ACCEPTED_VERSIONS).toEqual([1, 2, 3]);
+  });
+
+  it('accepts one free description with line breaks and an optional style', () => {
+    expect(parseIdentityCardValue(FIXTURE_CARD_V3)).toEqual({ ok: true, value: FIXTURE_CARD_V3 });
+    expect(parseIdentityCardValue({ version: 3, identity: { description: 'green eyes\nsquare jaw' } }).ok).toBe(true);
+    expect(parseIdentityCardValue({ version: 3, identity: { description: 'green eyes' }, defaults: { style: 'casual' } }).ok).toBe(true);
+  });
+
+  it('keeps the description, its 800-character cap and its control-character rule', () => {
+    expect(IDENTITY_DESCRIPTION_MAX_LENGTH).toBe(800);
+    expect(parseIdentityCardValue({ version: 3, identity: { description: 'x'.repeat(800) } }).ok).toBe(true);
+    expect(parseIdentityCardValue({ version: 3, identity: { description: 'x'.repeat(801) } })).toEqual({
+      ok: false,
+      error: 'identityCard.identity.description: at most 800 characters',
+    });
+    expect(parseIdentityCardValue({ version: 3, identity: { description: 'a\u0001b' } }).ok).toBe(false);
+  });
+
+  it.each([
+    ['an empty description', { version: 3, identity: { description: '   ' } }],
+    ['an empty identity', { version: 3, identity: {} }],
+    ['an unknown identity key', { version: 3, identity: { description: 'green eyes', face: { eyes: 'green' } } }],
+    ['an unknown defaults key', { version: 3, identity: { description: 'green eyes' }, defaults: { outfit: { top: 'tee' } } }],
+    ['empty defaults', { version: 3, identity: { description: 'green eyes' }, defaults: {} }],
+    ['an unknown style', { version: 3, identity: { description: 'green eyes' }, defaults: { style: 'bikini' } }],
+    ['an unknown root key', { version: 3, identity: { description: 'green eyes' }, extra: true }],
+  ])('rejects %s', (_name, card) => {
+    expect(parseIdentityCardValue(card).ok).toBe(false);
   });
 });

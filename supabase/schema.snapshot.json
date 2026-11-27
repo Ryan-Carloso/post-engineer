@@ -697,6 +697,18 @@
                     "type": "timestamp with time zone",
                     "default": "(now() + '7 days'::interval)",
                     "notNull": true
+                },
+                {
+                    "name": "access_until",
+                    "type": "timestamp with time zone",
+                    "default": "(now() + '7 days'::interval)",
+                    "notNull": true
+                },
+                {
+                    "name": "subscription_status",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
                 }
             ],
             "policies": {
@@ -707,7 +719,8 @@
                 }
             },
             "constraints": {
-                "user_profiles_pkey": "PRIMARY KEY (id)"
+                "user_profiles_pkey": "PRIMARY KEY (id)",
+                "user_profiles_subscription_status_check": "CHECK (((subscription_status IS NULL) OR (subscription_status = ANY (ARRAY['trialing'::text, 'active'::text, 'past_due'::text, 'canceled'::text, 'unpaid'::text, 'incomplete'::text, 'incomplete_expired'::text, 'paused'::text]))))"
             }
         },
         "video_uploads": {
@@ -1455,6 +1468,41 @@
                 "post_metrics_daily_post_id_fkey": "FOREIGN KEY (post_id) REFERENCES scheduled_posts(id) ON DELETE CASCADE",
                 "post_metrics_daily_provider_check": "CHECK ((provider = ANY (ARRAY['youtube'::text, 'instagram'::text, 'bluesky'::text, 'linkedin'::text, 'threads'::text, 'facebook'::text, 'pinterest'::text, '3speak'::text, 'rumble'::text, 'fanvue'::text, 'telegram'::text])))",
                 "post_metrics_daily_post_id_provider_external_id_snapshot_da_key": "UNIQUE (post_id, provider, external_id, snapshot_date)"
+            }
+        },
+        "user_billing_links": {
+            "rls": true,
+            "columns": [
+                {
+                    "name": "user_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "stripe_customer_id",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "stripe_subscription_id",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                }
+            ],
+            "policies": {
+            },
+            "constraints": {
+                "user_billing_links_pkey": "PRIMARY KEY (user_id)",
+                "user_billing_links_user_id_fkey": "FOREIGN KEY (user_id) REFERENCES user_profiles(id) ON DELETE CASCADE"
             }
         },
         "owner_alert_notices": {

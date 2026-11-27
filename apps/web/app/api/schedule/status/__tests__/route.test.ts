@@ -447,7 +447,7 @@ describe('GET query contracts', () => {
     const inCalls = client.chain.in.mock.calls;
     expect(inCalls).toContainEqual(['status', ['ready']]);
     expect(inCalls).toContainEqual(['status', ['awaiting_approval']]);
-    expect(inCalls).toContainEqual(['status', ['published', 'failed']]);
+    expect(inCalls).toContainEqual(['status', ['published', 'failed', 'expired']]);
     expect(inCalls).toContainEqual(['status', ['publishing']]);
     expect(inCalls.filter(([column]: unknown[]) => column === 'status')).toHaveLength(5);
   });
@@ -872,6 +872,7 @@ describe('GET range mode', () => {
     const rows = [
       { id: 'a', slot_at: '2026-11-02T10:00:00Z', status: 'ready', title: 'A', schedule_id: 's1', error: null, published_at: null},
       { id: 'b', slot_at: '2026-11-03T10:00:00Z', status: 'published', title: 'B', schedule_id: 's1', error: null, published_at: null},
+      { id: 'c', slot_at: '2026-11-04T10:00:00Z', status: 'expired', title: 'C', schedule_id: 's1', error: null, published_at: null},
     ];
     const client = mockRangeClient(rows);
     vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
@@ -885,7 +886,9 @@ describe('GET range mode', () => {
     expect(body.slots.map((s: { id: string; status: string }) => [s.id, s.status])).toEqual([
       ['a', 'ready'],
       ['b', 'published'],
+      ['c', 'expired'],
     ]);
+    expect(RANGE_STATUSES).toContain('expired');
     expect(body.upcoming).toBeUndefined();
     expect(client.chain.eq).toHaveBeenCalledWith('user_id', USER_ID);
     expect(client.chain.gte).toHaveBeenCalledWith('slot_at', FROM);

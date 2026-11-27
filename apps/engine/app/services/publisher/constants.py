@@ -8,6 +8,7 @@ SLOT_READY = "ready"
 SLOT_PUBLISHING = "publishing"
 SLOT_PUBLISHED = "published"
 SLOT_FAILED = "failed"
+SLOT_EXPIRED = "expired"
 
 MAX_PUBLISH_ATTEMPTS = 3
 

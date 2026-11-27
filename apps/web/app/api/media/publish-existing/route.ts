@@ -9,7 +9,7 @@ import { PUBLISH_EXISTING_NAMESPACE, resolveIdempotency } from '@/lib/idempotenc
 import { logger } from '@/lib/logger';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { requireSupabaseSession } from '@/lib/request-auth';
-import { assertTrialActive } from '@/lib/trial';
+import { assertAccessActive } from '@/lib/access';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import {
   VideoUploadError,
@@ -222,8 +222,8 @@ async function postHandler(request: Request): Promise<NextResponse> {
 
   const limited = await applyRateLimit(request, RATE_LIMITS.publishExisting, userId);
   if (limited) return limited;
-  const trialBlocked = await assertTrialActive(userId, { route: ROUTE });
-  if (trialBlocked) return trialBlocked;
+  const blocked = await assertAccessActive(userId, { route: ROUTE });
+  if (blocked) return blocked;
 
   const supabase = createSupabaseServiceClient();
   const { personaId } = input;

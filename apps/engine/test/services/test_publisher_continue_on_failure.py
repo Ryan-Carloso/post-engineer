@@ -35,6 +35,9 @@ class _FakeStore:
     def claim_ready_slot(self, slot_id, now_utc=None):
         return True
 
+    def access_until_by_user(self, user_ids):
+        return {uid: "2099-01-01T00:00:00+00:00" for uid in user_ids}
+
     def update_slot(self, slot_id, **fields):
         self.updates.append((slot_id, fields))
 

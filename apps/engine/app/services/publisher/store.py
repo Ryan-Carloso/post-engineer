@@ -10,6 +10,7 @@ import requests
 from loguru import logger
 
 from app.services.publisher.constants import (
+    SLOT_EXPIRED,
     SLOT_PUBLISHING,
     SLOT_READY,
 )
@@ -176,6 +177,43 @@ class ScheduleStore:
                 **self._headers,
                 "Prefer": "return=representation",
             },
+        )
+        return bool(rows)
+
+    def access_until_by_user(self, user_ids: list[str]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for start in range(0, len(user_ids), 100):
+            chunk = user_ids[start : start + 100]
+            if not chunk:
+                continue
+            rows = self._request(
+                "GET",
+                "user_profiles",
+                params={
+                    "id": f"in.({','.join(chunk)})",
+                    "select": "id,access_until",
+                },
+            )
+            for row in rows if isinstance(rows, list) else []:
+                if isinstance(row, dict) and isinstance(row.get("id"), str):
+                    result[str(row["id"])] = row.get("access_until")
+        return result
+
+    def expire_ready_slot(self, slot_id: str, now_utc: datetime) -> bool:
+        """Atomic ready→expired transition for a due slot whose owner lost access.
+
+        Conditional PATCH: only transitions if the slot is STILL 'ready'
+        AND still due (slot_at <= now). The due re-check closes the
+        reschedule race (issue #555), same as claim_ready_slot: a ready slot
+        rescheduled to the future between the due snapshot and this call
+        must not expire at its old time.
+        """
+        rows = self._request(
+            "PATCH",
+            "scheduled_posts",
+            json={"status": SLOT_EXPIRED, "publish_not_before": None},
+            params={"id": f"eq.{slot_id}", "status": f"eq.{SLOT_READY}", "slot_at": f"lte.{now_utc.isoformat()}"},
+            headers={**self._headers, "Prefer": "return=representation"},
         )
         return bool(rows)
 

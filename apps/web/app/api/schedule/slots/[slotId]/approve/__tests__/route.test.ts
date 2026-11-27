@@ -26,20 +26,15 @@ const mockPublishHeldSlot = vi.hoisted(() =>
   ),
 );
 vi.mock('../publish-held', () => ({ publishHeldSlot: mockPublishHeldSlot }));
-const mockReadTrialEndsAt = vi.hoisted(() =>
-  vi.fn(async () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()),
-);
+vi.mock('@/lib/access', () => ({ assertAccessActive: vi.fn(async () => null) }));
 const mockUpdateUpload = vi.hoisted(() => vi.fn(async () => true));
-vi.mock('@/lib/trial', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/trial')>();
-  return { ...actual, readTrialEndsAt: mockReadTrialEndsAt };
-});
 vi.mock('@/lib/videos/signed-upload', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/videos/signed-upload')>();
   return { ...actual, createSupabaseVideoUploadStore: () => ({ updateUpload: mockUpdateUpload }) };
 });
 
 import { POST } from '../route';
+import { assertAccessActive } from '@/lib/access';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -277,30 +272,37 @@ describe('POST /api/schedule/slots/[slotId]/approve', () => {
     expect(response.status).toBe(429);
   });
 
-  it('returns 403 when the trial lapsed, without moving the slot or touching its media', async () => {
+  it('answers 402 and neither moves the slot nor touches its media once access has ended', async () => {
     const { serviceClient } = mockOwnedClients({
       slot: awaitingSlot,
       schedule: { id: 's1', user_id: USER_ID },
     });
     mockSession();
-    mockReadTrialEndsAt.mockResolvedValueOnce(new Date(Date.now() - 60 * 1000).toISOString());
+    vi.mocked(assertAccessActive).mockResolvedValueOnce(
+      NextResponse.json({ success: false, code: 'TRIAL_EXPIRED' }, { status: 402 }) as never,
+    );
 
     const response = await postApprove(SLOT_ID);
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(402);
     const body = (await response.json()) as { code?: string };
     expect(body.code).toBe('TRIAL_EXPIRED');
+    expect(vi.mocked(assertAccessActive)).toHaveBeenCalledWith(USER_ID, {
+      route: 'POST /api/schedule/slots/[slotId]/approve',
+    });
     expect(serviceClient.calls.some((c) => c.op === 'update')).toBe(false);
     expect(mockUpdateUpload).not.toHaveBeenCalled();
   });
 
-  it('returns 500 when the trial lookup fails', async () => {
+  it('returns 500 when the access lookup fails', async () => {
     const { serviceClient } = mockOwnedClients({
       slot: awaitingSlot,
       schedule: { id: 's1', user_id: USER_ID },
     });
     mockSession();
-    mockReadTrialEndsAt.mockRejectedValueOnce(new Error('trial lookup failed'));
+    vi.mocked(assertAccessActive).mockResolvedValueOnce(
+      NextResponse.json({ success: false, code: 'INTERNAL_ERROR' }, { status: 500 }) as never,
+    );
 
     const response = await postApprove(SLOT_ID);
 

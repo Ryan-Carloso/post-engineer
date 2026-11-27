@@ -1,10 +1,10 @@
 -- ============================================================================
 -- Atomic slot delete guard (prevents the last-slot check-then-act race)
 -- ----------------------------------------------------------------------------
--- SOURCE OF TRUTH: supabase/migrations/089_slot-delete-awaiting-approval.sql
+-- SOURCE OF TRUTH: supabase/migrations/092_slot-delete-expired.sql
 -- (the newest versioned migration that redefines it: 058's body plus a
 -- pinned search_path; 065 also makes it service-role only; 089 admits
--- awaiting_approval slots). This file keeps the same body for reference,
+-- awaiting_approval slots; 092 admits expired slots). This file keeps the same body for reference,
 -- pinned by slot-delete-ready-migration.test.ts; do not apply it by hand —
 -- the migration chain applies the function and its grants.
 --
@@ -43,9 +43,10 @@ begin
   end if;
 
   -- Pending (not yet dispatched), ready (generated, not yet dispatched),
-  -- awaiting_approval (held for the owner's approval) and failed (dead row
-  -- cleanup) slots can be deleted; the engine owns everything mid-flight.
-  if v_status not in ('pending', 'ready', 'awaiting_approval', 'failed') then
+  -- awaiting_approval (held for the owner's approval), failed (dead row
+  -- cleanup) and expired (owner lost access, never published) slots can be
+  -- deleted; the engine owns everything mid-flight.
+  if v_status not in ('pending', 'ready', 'awaiting_approval', 'failed', 'expired') then
     return 'not_deletable';
   end if;
 

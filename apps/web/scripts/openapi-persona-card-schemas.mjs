@@ -1,6 +1,7 @@
 import {
   IDENTITY_CARD_ACCEPTED_VERSIONS,
   IDENTITY_CARD_MAX_BYTES,
+  IDENTITY_DESCRIPTION_MAX_LENGTH,
   IDENTITY_TEXT_MAX_LENGTH,
   OUTFIT_SLOTS,
   SCENE_ASPECTS,
@@ -28,6 +29,12 @@ const identityCard = strict(
   {
     version: { type: 'integer', enum: [...IDENTITY_CARD_ACCEPTED_VERSIONS] },
     identity: strict({
+      description: {
+        type: 'string',
+        minLength: 1,
+        maxLength: IDENTITY_DESCRIPTION_MAX_LENGTH,
+        description: 'Version 3 only: the free text the prompt uses verbatim as its Person line.',
+      },
       face: strict({
         ...leaves(['shape', 'eyes', 'eye_color', 'eyebrows', 'nose', 'lips', 'teeth', 'smile', 'skin', 'jawline', 'cheekbones', 'chin', 'forehead', 'ears']),
         hair: strict(leaves(['color', 'style', 'length', 'texture', 'parting'])),
@@ -39,7 +46,7 @@ const identityCard = strict(
   },
   ['version', 'identity'],
 );
-identityCard.description = `Versioned identity card (version 1 or 2; new cards are version 2; at most ${IDENTITY_CARD_MAX_BYTES} bytes once stored, every level strict, at least one identity trait). A version 1 card carries only the original leaves and no style; defaults must name a style or an outfit. It describes a real person's physical traits: fill it only with their consent. Advice for the agent's image tool, not enforcement.`;
+identityCard.description = `Versioned identity card (version 1, 2 or 3; new cards are version 3; at most ${IDENTITY_CARD_MAX_BYTES} bytes once stored, every level strict, at least one identity trait). A version 3 card carries one free description of at most ${IDENTITY_DESCRIPTION_MAX_LENGTH} characters and an optional style. A version 1 or 2 card carries the face and body trait leaves instead, one line of at most ${IDENTITY_TEXT_MAX_LENGTH} characters each, and defaults that must name a style or an outfit. It describes a real person's physical traits: fill it only with their consent. Advice for the agent's image tool, not enforcement.`;
 
 const scene = strict(
   {

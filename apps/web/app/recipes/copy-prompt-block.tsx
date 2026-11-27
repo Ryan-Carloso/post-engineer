@@ -30,7 +30,7 @@ export default function CopyPromptBlock({ prompt }: { prompt: string }) {
         </div>
         <pre
           data-testid="full-prompt"
-          className="max-h-[32rem] overflow-auto p-4 font-mono text-xs leading-5 whitespace-pre-wrap text-code-text select-text"
+          className="max-h-128 overflow-auto p-4 font-mono text-xs leading-5 whitespace-pre-wrap text-code-text select-text"
         >
           {prompt}
         </pre>

@@ -60,9 +60,16 @@ export class VideoTooLargeError extends Error {
 const MAX_ERROR_BODY_CHARS = 200;
 
 export const TRIAL_EXPIRED_CODE = 'TRIAL_EXPIRED';
+export const SUBSCRIPTION_INACTIVE_CODE = 'SUBSCRIPTION_INACTIVE';
 
-function trialExpiredMessage(contactUrl: unknown): string {
-  const base = 'The 7-day free trial has ended: scheduling and publishing are blocked, reading your data still works.';
+const ACCESS_BLOCKED_MESSAGES: Record<string, string> = {
+  TRIAL_EXPIRED: 'The 7-day free trial has ended: scheduling and publishing are blocked, reading your data still works.',
+  SUBSCRIPTION_INACTIVE:
+    'The subscription covering this account is not active: scheduling and publishing are blocked, reading your data still works.',
+};
+
+function accessBlockedMessage(code: string, contactUrl: unknown): string {
+  const base = ACCESS_BLOCKED_MESSAGES[code];
   if (typeof contactUrl !== 'string' || !contactUrl.startsWith('https://')) return `${base} Contact the Post Engineer team to continue.`;
   return `${base} Contact the Post Engineer team to continue: ${contactUrl.slice(0, 200)}`;
 }
@@ -100,7 +107,9 @@ export function readApiFailure(errorText: string): {
       if (typeof record.field === 'string') field = record.field;
       if (record.delivered === true) delivered = true;
       if (typeof record.postUrl === 'string') postUrl = record.postUrl;
-      if (code === TRIAL_EXPIRED_CODE) detail = trialExpiredMessage(record.contactUrl);
+      if (code === TRIAL_EXPIRED_CODE || code === SUBSCRIPTION_INACTIVE_CODE) {
+        detail = accessBlockedMessage(code, record.contactUrl);
+      }
     }
   } catch {
   }

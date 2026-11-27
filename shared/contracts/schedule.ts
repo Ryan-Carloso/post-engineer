@@ -73,6 +73,7 @@ export const RANGE_STATUSES = [
   'publishing',
   'published',
   'failed',
+  'expired',
   'cancelled',
 ] as const;
 
@@ -130,6 +131,7 @@ export const StatusSlotSchema = z.object({
     'publishing',
     'published',
     'failed',
+    'expired',
     'cancelled',
   ]),
   title: z.string().nullable(),

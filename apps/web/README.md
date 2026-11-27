@@ -3,7 +3,7 @@
 Next.js 15 app (TypeScript, strict mode): the Post Engineer dashboard and all
 API routes (`app/**/route.ts`). Owns authentication (Supabase), personas,
 scheduling, OAuth for social accounts (YouTube, Instagram, LinkedIn, Threads, Facebook Pages, Bluesky, 3Speak) and manual-token connect (Rumble, Telegram),
-token billing (Stripe), API keys, and the MCP OAuth server.
+publish access (trial + subscription), API keys, and the MCP OAuth server.
 
 ## Develop
 
@@ -34,6 +34,28 @@ pnpm build         # production build
 ```
 
 From the repo root these run via Nx: `pnpm test`, `pnpm lint`, `pnpm typecheck`.
+
+## Publish access
+
+Publishing needs an active account: `user_profiles.access_until` is the
+instant it stops, and `user_profiles.subscription_status` says whether the
+account is on the trial (`null`), a paid subscription, or a lapsed one.
+Cancellations, refunds and exhausted dunning all move `access_until`, so one
+column covers every reason.
+
+Billing is manual while the Stripe account is not wired. From the repo root:
+
+```bash
+pnpm access grant --email user@example.com --until 2027-01-01T00:00:00Z
+pnpm access revoke --email user@example.com
+```
+
+Once `STRIPE_SECRET_KEY` is set, `pnpm access sync` pulls every subscription
+and applies its state through `apply_subscription_access` (the same function a
+webhook would call): `active`/`trialing` → the paid-through date, `past_due` →
+that date plus the 3-day grace, `canceled`/`unpaid`/`incomplete`/
+`incomplete_expired`/`paused` → now. A subscription with no billing link and
+no `metadata.userId` is skipped, never guessed.
 
 ### E2E against a local Supabase
 

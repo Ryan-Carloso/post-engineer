@@ -23,7 +23,7 @@ import { userPromptsStrings } from './user-prompts-i18n';
 import { shareLinksStrings } from './share-links-i18n';
 import { personaIdentityCardStrings } from './persona-identity-card-i18n';
 import { notFoundStrings } from './not-found-i18n';
-import { trialStrings } from './trial-i18n';
+import { accessStrings } from './access-i18n';
 import type { Locale } from './types';
 
 export const ptDictionary = {
@@ -45,7 +45,8 @@ export const ptDictionary = {
   sharedView: shareLinksStrings.pt.sharedView,
   identityCard: personaIdentityCardStrings.pt.identityCard,
   notFound: notFoundStrings.pt.notFound,
-  trial: trialStrings.pt.trial,
+  trial: accessStrings.pt.trial,
+  access: accessStrings.pt.access,
 };
 
 export const enDictionary = {
@@ -67,7 +68,8 @@ export const enDictionary = {
   sharedView: shareLinksStrings.en.sharedView,
   identityCard: personaIdentityCardStrings.en.identityCard,
   notFound: notFoundStrings.en.notFound,
-  trial: trialStrings.en.trial,
+  trial: accessStrings.en.trial,
+  access: accessStrings.en.access,
 };
 
 type PublishingAccountsKeys = typeof publishingAccountsStrings.en;
@@ -88,7 +90,7 @@ type UserPromptsKeys = typeof userPromptsStrings.en;
 type ShareLinksKeys = typeof shareLinksStrings.en;
 type IdentityCardKeys = typeof personaIdentityCardStrings.en;
 type NotFoundKeys = typeof notFoundStrings.en;
-type TrialKeys = typeof trialStrings.en;
+type AccessKeys = typeof accessStrings.en;
 export type Dictionary = BaseDictionary & {
   [Section in keyof ThreadsKeys]: {
     [Key in keyof ThreadsKeys[Section]]: string;
@@ -158,8 +160,8 @@ export type Dictionary = BaseDictionary & {
     [Key in keyof NotFoundKeys[Section]]: string;
   };
 } & {
-  [Section in keyof TrialKeys]: {
-    [Key in keyof TrialKeys[Section]]: string;
+  [Section in keyof AccessKeys]: {
+    [Key in keyof AccessKeys[Section]]: string;
   };
 } & {
   [Section in keyof ThemeKeys]: {

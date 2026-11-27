@@ -15,6 +15,7 @@ import {
   CALENDAR_GROUP_KEY,
   CALENDAR_GROUP_PILL,
   calendarGroupOf,
+  slotDisplayStatus,
 } from './status';
 import { StatusBadge, formatDate, formatTime } from './post-card';
 import { PublishAccountNotices } from './publish-user-notice';
@@ -27,20 +28,23 @@ export function PostRow({
   accounts,
   locale,
   timeOnly = false,
+  hasAccess = true,
 }: {
   slot: ScheduledSlot;
   personaName: string;
   accounts: AccountOption[];
   locale: Locale;
   timeOnly?: boolean;
+  hasAccess?: boolean;
 }) {
   const { t } = useI18n();
-  const isHistory = slot.status === 'published' || slot.status === 'failed';
-  const shownAt = isHistory && slot.publishedAt ? slot.publishedAt : slot.slotAt;
+  const displayStatus = slotDisplayStatus(slot.status, hasAccess);
+  const isHistory = slot.status === 'published' || slot.status === 'failed' || slot.status === 'expired';
+  const shownAt = isHistory && slot.status !== 'expired' && slot.publishedAt ? slot.publishedAt : slot.slotAt;
   const when = timeOnly
     ? formatTime(shownAt, locale)
     : `${formatDate(shownAt, locale)} · ${formatTime(shownAt, locale)}`;
-  const group = calendarGroupOf(slot.status);
+  const group = calendarGroupOf(displayStatus);
   const GroupIcon = CALENDAR_GROUP_ICON[group];
   const isFailed = slot.status === 'failed';
   const displayTitle = slot.title ?? t('posts.unknownTitle');
@@ -95,7 +99,7 @@ export function PostRow({
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
-            <StatusBadge status={slot.status} label={t(CALENDAR_GROUP_KEY[group])} style={CALENDAR_GROUP_PILL[group]} />
+            <StatusBadge status={displayStatus} label={t(CALENDAR_GROUP_KEY[group])} style={CALENDAR_GROUP_PILL[group]} />
             <ChevronRight
               className="size-4 text-muted-text transition-transform group-hover/card:translate-x-0.5"
               aria-hidden

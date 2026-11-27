@@ -750,24 +750,51 @@ export interface Database {
         };
         Relationships: [];
       };
+      user_billing_links: {
+        Row: {
+        user_id: string;
+        stripe_customer_id: string;
+        stripe_subscription_id: string | null;
+        updated_at: string;
+        };
+        Insert: {
+        user_id: string;
+        stripe_customer_id: string;
+        stripe_subscription_id?: string | null;
+        updated_at?: string;
+        };
+        Update: {
+        user_id?: string;
+        stripe_customer_id?: string;
+        stripe_subscription_id?: string | null;
+        updated_at?: string;
+        };
+        Relationships: [];
+      };
       user_profiles: {
         Row: {
         id: string;
         created_at: string;
         updated_at: string;
         trial_ends_at: string;
+        access_until: string;
+        subscription_status: 'trialing' | 'active' | 'past_due' | 'canceled' | 'unpaid' | 'incomplete' | 'incomplete_expired' | 'paused' | null;
         };
         Insert: {
         id: string;
         created_at?: string;
         updated_at?: string;
         trial_ends_at?: string;
+        access_until?: string;
+        subscription_status?: 'trialing' | 'active' | 'past_due' | 'canceled' | 'unpaid' | 'incomplete' | 'incomplete_expired' | 'paused' | null;
         };
         Update: {
         id?: string;
         created_at?: string;
         updated_at?: string;
         trial_ends_at?: string;
+        access_until?: string;
+        subscription_status?: 'trialing' | 'active' | 'past_due' | 'canceled' | 'unpaid' | 'incomplete' | 'incomplete_expired' | 'paused' | null;
         };
         Relationships: [];
       };

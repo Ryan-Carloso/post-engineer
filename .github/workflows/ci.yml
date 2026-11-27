@@ -661,6 +661,14 @@ jobs:
           # 080_share-links.sql.
           psql "postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable" -v ON_ERROR_STOP=1 -f scripts/db/check-share-links.sql
 
+      - name: Check publish entitlement behaviour
+        run: |
+          set -euo pipefail
+          # The Stripe state -> access_until mapping, the dunning grace, the
+          # refusal to guess an unknown status or customer, the operator
+          # revoke, and the service-role-only grants of 089_access-entitlement.sql.
+          psql "postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable" -v ON_ERROR_STOP=1 -f scripts/db/check-access-entitlement.sql
+
       - name: Check the schema snapshot is up to date
         run: |
           set -euo pipefail

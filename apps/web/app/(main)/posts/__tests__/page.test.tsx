@@ -18,6 +18,9 @@ vi.mock('@/lib/social-accounts-queries', () => ({
   useSocialAccountsQuery: vi.fn(),
 }));
 
+vi.mock('@/lib/access-query', () => ({
+  useAccessQuery: vi.fn(() => ({ data: { active: true, endsAt: '2030-01-01T00:00:00.000Z', daysLeft: 1, reason: 'trial' } })),
+}));
 vi.mock('@/lib/schedule-range', () => ({
   RANGE_MAX_SLOTS: 1000,
   useScheduleRangeQuery: vi.fn(),
@@ -67,6 +70,7 @@ import {
   usePersonaListQuery,
 } from '@/lib/api';
 import { useSocialAccountsQuery } from '@/lib/social-accounts-queries';
+import { useAccessQuery } from '@/lib/access-query';
 
 const SCHEDULE = {
   id: 's1',
@@ -1358,5 +1362,73 @@ describe('PostsPage calendar date hints', () => {
     render(<PostsPage />);
     const card = document.querySelector('[data-calendar-card]') as HTMLElement;
     expect(within(card).getByText('posts.unknownTitle')).toBeInTheDocument();
+  });
+});
+
+describe('PostsPage access pause', () => {
+  const access = (active: boolean, reason: 'trial' | 'subscription' | 'none' = 'trial') => ({
+    data: { active, endsAt: '2030-01-01T00:00:00.000Z', daysLeft: active ? 3 : 0, reason },
+    isPending: false,
+    isError: false,
+    refetch: vi.fn(),
+  });
+
+  it('labels a ready slot as paused when the account has no active access', () => {
+    vi.mocked(useAccessQuery).mockReturnValue(access(false) as never);
+    render(<PostsPage />);
+    const badge = document.querySelector('[data-status="paused"]');
+    expect(badge).not.toBeNull();
+    expect(badge).toHaveTextContent('posts.groupPaused');
+  });
+
+  it('keeps a ready slot scheduled while access is active', () => {
+    vi.mocked(useAccessQuery).mockReturnValue(access(true) as never);
+    render(<PostsPage />);
+    expect(document.querySelector('[data-status="paused"]')).toBeNull();
+    expect(document.querySelector('[data-status="ready"]')).not.toBeNull();
+  });
+
+  it('does nothing while the access window is still loading', () => {
+    const refetch = vi.fn();
+    vi.mocked(useScheduleRangeQuery).mockReturnValue({
+      data: { slots: [UPCOMING_SLOT], truncated: false },
+      isLoading: false,
+      isFetching: false,
+      isError: false,
+      refetch,
+    } as never);
+    vi.mocked(useAccessQuery).mockReturnValue({
+      data: undefined,
+      isPending: true,
+      isError: false,
+      refetch: vi.fn(),
+    } as never);
+    render(<PostsPage />);
+    expect(refetch).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-status="paused"]')).toBeNull();
+  });
+
+  it('paints the calendar event gray once access is gone', () => {
+    vi.mocked(useAccessQuery).mockReturnValue(access(false, 'none') as never);
+    render(<PostsPage />);
+    const card = calendarCard();
+    expect(card.querySelector('[class*="event-gray"]')).not.toBeNull();
+  });
+
+  it('refetches the range when access flips from active to inactive', () => {
+    const refetch = vi.fn();
+    vi.mocked(useScheduleRangeQuery).mockReturnValue({
+      data: { slots: [UPCOMING_SLOT], truncated: false },
+      isLoading: false,
+      isFetching: false,
+      isError: false,
+      refetch,
+    } as never);
+    vi.mocked(useAccessQuery).mockReturnValue(access(true) as never);
+    const view = render(<PostsPage />);
+    expect(refetch).not.toHaveBeenCalled();
+    vi.mocked(useAccessQuery).mockReturnValue(access(false) as never);
+    view.rerender(<PostsPage />);
+    expect(refetch).toHaveBeenCalledTimes(1);
   });
 });

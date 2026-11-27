@@ -18,8 +18,8 @@ const { mockRequireSupabaseSession, mockApplyRateLimit, mockHandleYoutubeUpload,
 });
 
 const { mockAssertTrialActive } = vi.hoisted(() => ({ mockAssertTrialActive: vi.fn() }));
-vi.mock('@/lib/trial', () => ({
-  assertTrialActive: (...args: unknown[]) => mockAssertTrialActive(...args),
+vi.mock('@/lib/access', () => ({
+  assertAccessActive: (...args: unknown[]) => mockAssertTrialActive(...args),
 }));
 
 vi.mock('@/lib/api-error-reporting', () => ({

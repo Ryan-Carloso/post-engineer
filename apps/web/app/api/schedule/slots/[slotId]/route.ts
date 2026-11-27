@@ -12,6 +12,7 @@ import { hasExplicitOffset } from '@/lib/timezone';
 import { checkFirstComment } from '@/lib/contracts/first-comment';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
+import { assertAccessActive } from '@/lib/access';
 
 interface SlotRow {
   id: string;
@@ -147,7 +148,7 @@ async function deleteHandler(
   if ('error' in owned) return owned.error;
   const slot = owned.slot;
 
-  const DELETABLE_STATUSES = new Set(['ready', 'failed', 'awaiting_approval']);
+  const DELETABLE_STATUSES = new Set(['ready', 'failed', 'expired', 'awaiting_approval']);
   if (!DELETABLE_STATUSES.has(slot.status)) {
     return apiErrorResponse(
       409,
@@ -251,6 +252,10 @@ async function patchHandler(
     }
     firstComment = checked.value;
     patch.first_comment = firstComment;
+  }
+  if (rawSlotAt !== undefined) {
+    const blocked = await assertAccessActive(auth.userId, { route: 'PATCH /api/schedule/slots' });
+    if (blocked) return blocked;
   }
   let title: string | undefined;
   if (rawTitle !== undefined) {

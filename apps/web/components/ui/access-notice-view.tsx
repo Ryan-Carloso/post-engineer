@@ -1,24 +1,26 @@
 'use client';
 
 import { useI18n } from '@/lib/i18n/provider';
-import type { TrialStatus } from '@/lib/trial-status';
+import type { AccessStatus } from '@/lib/access-status';
 import { AlertIcon } from '@/lib/ui';
 
-export interface TrialNoticeViewProps {
-  status: TrialStatus;
+export interface AccessNoticeViewProps {
+  status: AccessStatus;
   contactUrl: string;
 }
 
 const CONTACT_LINK_CLASS =
   'inline-flex items-center justify-center rounded-xl bg-brand px-4 py-2 text-sm font-bold text-white hover:bg-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand';
 
-export function TrialNoticeView({ status, contactUrl }: TrialNoticeViewProps) {
+export function AccessNoticeView({ status, contactUrl }: AccessNoticeViewProps) {
   const { t } = useI18n();
   if (!status.active) {
+    const title = status.reason === 'trial' ? t('trial.expiredTitle') : t('access.inactiveTitle');
+    const body = status.reason === 'trial' ? t('trial.expiredText') : t('access.inactiveText');
     return (
       <section
         role="alert"
-        data-testid="trial-expired-card"
+        data-testid="access-inactive-card"
         className="mb-6 rounded-2xl border border-destructive/30 bg-card p-5 shadow-sm sm:p-6"
       >
         <div className="flex items-start gap-3">
@@ -26,16 +28,17 @@ export function TrialNoticeView({ status, contactUrl }: TrialNoticeViewProps) {
             <AlertIcon />
           </span>
           <div className="min-w-0 flex-1">
-            <h2 className="text-base font-semibold text-ink">{t('trial.expiredTitle')}</h2>
-            <p className="mt-1 text-sm leading-6 text-muted-text">{t('trial.expiredText')}</p>
-            <a href={contactUrl} target="_blank" rel="noreferrer" data-testid="trial-contact-link" className={`mt-4 ${CONTACT_LINK_CLASS}`}>
-              {t('trial.contactCta')} ↗
+            <h2 className="text-base font-semibold text-ink">{title}</h2>
+            <p className="mt-1 text-sm leading-6 text-muted-text">{body}</p>
+            <a href={contactUrl} target="_blank" rel="noreferrer" data-testid="access-contact-link" className={`mt-4 ${CONTACT_LINK_CLASS}`}>
+              {t('access.contactCta')} ↗
             </a>
           </div>
         </div>
       </section>
     );
   }
+  if (status.reason !== 'trial') return null;
   const headline = status.daysLeft <= 1 ? t('trial.bannerLastDay') : t('trial.bannerDaysLeft', { days: status.daysLeft });
   return (
     <div
@@ -46,7 +49,7 @@ export function TrialNoticeView({ status, contactUrl }: TrialNoticeViewProps) {
       <p className="min-w-0 text-ink">
         <span className="font-semibold">{headline}</span> <span className="text-muted-text">{t('trial.bannerHint')}</span>
       </p>
-      <a href={contactUrl} target="_blank" rel="noreferrer" data-testid="trial-contact-link" className={`shrink-0 ${CONTACT_LINK_CLASS}`}>
+      <a href={contactUrl} target="_blank" rel="noreferrer" data-testid="access-contact-link" className={`shrink-0 ${CONTACT_LINK_CLASS}`}>
         {t('trial.contactCta')} ↗
       </a>
     </div>

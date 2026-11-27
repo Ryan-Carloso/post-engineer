@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { IDENTITY_CARD_MAX_BYTES } from '@/lib/contracts/persona-identity-card';
-import { FIXTURE_CARD } from '@/test/identity-card-fixtures';
+import { FIXTURE_CARD, FIXTURE_CARD_V3 } from '@/test/identity-card-fixtures';
 import { parseIdentityCardField } from '../identity-card-field';
 
 describe('parseIdentityCardField', () => {
@@ -15,11 +15,12 @@ describe('parseIdentityCardField', () => {
 
   it('returns the card for a valid JSON string', () => {
     expect(parseIdentityCardField(JSON.stringify(FIXTURE_CARD))).toEqual({ status: 'set', card: FIXTURE_CARD });
+    expect(parseIdentityCardField(JSON.stringify(FIXTURE_CARD_V3))).toEqual({ status: 'set', card: FIXTURE_CARD_V3 });
   });
 
   it('rejects invalid JSON, unknown versions, unknown keys and over-size bodies', () => {
     expect(parseIdentityCardField('{not json')).toEqual({ status: 'invalid', error: 'identityCard: not valid JSON' });
-    expect(parseIdentityCardField(JSON.stringify({ ...FIXTURE_CARD, version: 3 }))).toEqual({
+    expect(parseIdentityCardField(JSON.stringify({ ...FIXTURE_CARD, version: 4 }))).toEqual({
       status: 'invalid',
       error: 'identityCard.version: unsupported version',
     });

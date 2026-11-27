@@ -82,7 +82,7 @@ export function bucketByDay<T extends Pick<ScheduledSlot, 'slotAt'>>(slots: T[],
 }
 
 export function calendarCounts(slots: Pick<ScheduledSlot, 'status'>[]): Record<CalendarGroup, number> {
-  const counts: Record<CalendarGroup, number> = { published: 0, failed: 0, inProgress: 0, scheduled: 0 };
+  const counts: Record<CalendarGroup, number> = { published: 0, failed: 0, inProgress: 0, scheduled: 0, expired: 0, paused: 0 };
   for (const slot of slots) counts[calendarGroupOf(slot.status)] += 1;
   return counts;
 }

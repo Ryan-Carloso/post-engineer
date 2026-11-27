@@ -96,3 +96,32 @@ describe('TRIAL_EXPIRED responses', () => {
     expect(error.message).toBe('Failed to publish existing media: 400 Bad input');
   });
 });
+
+describe('SUBSCRIPTION_INACTIVE responses', () => {
+  function inactiveResponse(body: Record<string, unknown>): Response {
+    return new Response(
+      JSON.stringify({ success: false, error: 'Your subscription is not active.', code: 'SUBSCRIPTION_INACTIVE', ...body }),
+      { status: 402 },
+    );
+  }
+
+  it('says the subscription is inactive, never that the trial ended', async () => {
+    const error = await apiErrorFromResponse(
+      inactiveResponse({ contactUrl: 'https://wa.me/0000000000' }),
+      'publish existing media',
+    );
+    expect(error.code).toBe('SUBSCRIPTION_INACTIVE');
+    expect(error.message).toContain('The subscription covering this account is not active');
+    expect(error.message).not.toContain('free trial');
+    expect(error.message).toContain('https://wa.me/0000000000');
+  });
+
+  it('drops a contact link that is not https', async () => {
+    const error = await apiErrorFromResponse(
+      inactiveResponse({ contactUrl: 'javascript:alert(1)' }),
+      'publish existing media',
+    );
+    expect(error.message).toContain('Contact the Post Engineer team to continue.');
+    expect(error.message).not.toContain('javascript');
+  });
+});
