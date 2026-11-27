@@ -76,6 +76,54 @@ describe('identity card text', () => {
     expect(cardOf(text)).toEqual(FIXTURE_CARD_V2);
   });
 
+  it('shows a near-cap legacy card as compact JSON so it still round-trips', () => {
+    const leaf = 'é'.repeat(50);
+    const card: IdentityCard = {
+      version: 2,
+      identity: {
+        face: {
+          shape: leaf,
+          eyes: leaf,
+          eye_color: leaf,
+          eyebrows: leaf,
+          nose: leaf,
+          lips: leaf,
+          teeth: leaf,
+          smile: leaf,
+          skin: leaf,
+          jawline: leaf,
+          cheekbones: leaf,
+          chin: leaf,
+          forehead: leaf,
+          ears: leaf,
+          hair: { color: leaf, style: leaf, length: leaf, texture: leaf, parting: leaf },
+          facial_hair: leaf,
+          marks: leaf,
+          tattoos: leaf,
+        },
+        body: {
+          build: leaf,
+          height: leaf,
+          shoulders: leaf,
+          arms: leaf,
+          hands: leaf,
+          waist: leaf,
+          hips: leaf,
+          legs: leaf,
+          posture: leaf,
+          proportions: leaf,
+        },
+      },
+      defaults: { style: 'casual', outfit: { top: leaf, bottom: leaf, footwear: leaf } },
+    };
+    const compact = JSON.stringify(card);
+    const pretty = JSON.stringify(card, null, 2);
+    expect(new TextEncoder().encode(compact).length).toBeLessThanOrEqual(IDENTITY_CARD_MAX_BYTES);
+    expect(new TextEncoder().encode(pretty).length).toBeGreaterThan(IDENTITY_CARD_MAX_BYTES);
+    expect(cardToText(card)).toBe(compact);
+    expect(cardOf(cardToText(card))).toEqual(card);
+  });
+
   it('ignores whitespace around a pasted card and keeps the card unchanged', () => {
     expect(cardOf(`\n  ${JSON.stringify(FIXTURE_CARD)}  \n`)).toEqual(FIXTURE_CARD);
   });
@@ -140,6 +188,11 @@ describe('validateIdentityCardText', () => {
     ['a description over the cap', 'x'.repeat(IDENTITY_DESCRIPTION_MAX_LENGTH + 1), 'identityCard.errField'],
     ['a description with a control character', 'green\u0001eyes', 'identityCard.errField'],
     [
+      'a pasted v2 card with an empty field',
+      JSON.stringify({ version: 2, identity: { face: { eyes: '' } }, defaults: { style: 'casual' } }),
+      'identityCard.errGeneric',
+    ],
+    [
       'a one-piece with a top in a pasted card',
       JSON.stringify({ version: 2, identity: { face: { eyes: 'green' } }, defaults: { outfit: { one_piece: 'dress', top: 'tee' } } }),
       'identityCard.errOnePiece',
@@ -183,6 +236,7 @@ describe('identityCardErrorKey', () => {
     expect(identityCardErrorKey(`identityCard.identity.description: at most ${IDENTITY_DESCRIPTION_MAX_LENGTH} characters`)).toBe('identityCard.errField');
     expect(identityCardErrorKey('identityCard.identity.description: must be text without control characters')).toBe('identityCard.errField');
     expect(identityCardErrorKey('identityCard.identity.description: must not be empty')).toBe('identityCard.errDescriptionMissing');
+    expect(identityCardErrorKey('identityCard.identity.face.eyes: must not be empty')).toBe('identityCard.errGeneric');
     expect(identityCardErrorKey('identityCard.identity.face.eyes: at most 80 characters')).toBe('identityCard.errField');
     expect(identityCardErrorKey('identityCard: not valid JSON')).toBe('identityCard.errGeneric');
     expect(identityCardErrorKey(`identityCard: at most ${IDENTITY_CARD_MAX_BYTES} bytes`)).toBe('identityCard.errTooLarge');
@@ -210,6 +264,7 @@ describe('identityCardErrorKey stays in sync with the real parsers', () => {
     ['a description over the cap', { version: 3, identity: { description: 'x'.repeat(IDENTITY_DESCRIPTION_MAX_LENGTH + 1) } }, 'identityCard.errField'],
     ['a description with a control character', { version: 3, identity: { description: 'a\u0001b' } }, 'identityCard.errField'],
     ['a value over 80 characters in a legacy card', { version: 2, identity: { face: { eyes: 'x'.repeat(81) } }, defaults: { style: 'casual' } }, 'identityCard.errField'],
+    ['an empty legacy field', { version: 2, identity: { face: { eyes: '' } }, defaults: { style: 'casual' } }, 'identityCard.errGeneric'],
   ])('maps %s to %s', (_name, card, key) => {
     expect(keyOf(parseIdentityCardValue(card))).toBe(key);
   });

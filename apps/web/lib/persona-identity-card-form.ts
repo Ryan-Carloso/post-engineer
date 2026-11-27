@@ -14,7 +14,9 @@ function normalizeText(text: string): string {
 export function cardToText(card: IdentityCard | null): string {
   if (card === null) return '';
   if (card.version === 3 && card.defaults === undefined) return card.identity.description;
-  return JSON.stringify(card, null, 2);
+  const pretty = JSON.stringify(card, null, 2);
+  if (new TextEncoder().encode(pretty).length <= IDENTITY_CARD_MAX_BYTES) return pretty;
+  return JSON.stringify(card);
 }
 
 function descriptionCard(text: string): IdentityCard {
@@ -59,7 +61,11 @@ export function identityCardErrorKey(message: string): IdentityCardErrorKey {
   }
   if (message.includes('sexualised')) return 'identityCard.errContent';
   if (message.includes('clothing only')) return 'identityCard.errOutfitIdentity';
-  if (message.includes('must not be empty')) return 'identityCard.errDescriptionMissing';
+  if (message.includes('must not be empty')) {
+    return message.startsWith('identityCard.identity.description')
+      ? 'identityCard.errDescriptionMissing'
+      : 'identityCard.errGeneric';
+  }
   if (message.includes('control characters') || (message.includes('at most ') && message.includes(' characters'))) {
     return 'identityCard.errField';
   }
