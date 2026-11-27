@@ -1,11 +1,12 @@
 import { cn } from '@/lib/utils';
 
-export type ThemeChoice = 'light' | 'dark' | 'system';
+export type ThemeChoice = 'light' | 'dark' | 'neon' | 'system';
 
 export interface ThemeToggleLabels {
   group: string;
   light: string;
   dark: string;
+  neon: string;
   system: string;
 }
 
@@ -42,6 +43,12 @@ const MoonIcon = () => (
   </svg>
 );
 
+const NeonIcon = () => (
+  <svg {...ICON_PROPS}>
+    <path d="M12 2l2.5 7.5L22 12l-7.5 2.5L12 22l-2.5-7.5L2 12l7.5-2.5z" />
+  </svg>
+);
+
 const MonitorIcon = () => (
   <svg {...ICON_PROPS}>
     <rect x="3" y="4" width="18" height="12" rx="2" />
@@ -52,6 +59,7 @@ const MonitorIcon = () => (
 const OPTIONS: ReadonlyArray<{ value: ThemeChoice; icon: () => React.JSX.Element }> = [
   { value: 'light', icon: SunIcon },
   { value: 'dark', icon: MoonIcon },
+  { value: 'neon', icon: NeonIcon },
   { value: 'system', icon: MonitorIcon },
 ];
 

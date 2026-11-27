@@ -28,7 +28,7 @@ export default function Providers({ children }: ProvidersProps) {
   );
 
   return (
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem storageKey="theme" disableTransitionOnChange>
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem storageKey="theme" themes={["light", "dark", "neon"]} value={{ light: "light", dark: "dark", neon: "dark neon" }} disableTransitionOnChange>
       <I18nProvider>
         <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
       </I18nProvider>

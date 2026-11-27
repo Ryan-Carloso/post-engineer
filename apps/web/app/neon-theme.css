@@ -1,0 +1,72 @@
+/* Neon / Cyberpunk theme. Applied on top of `.dark` (see providers.tsx value
+   mapping), so only the accent tokens are overridden here; everything else
+   inherits the dark palette. */
+.neon {
+  --background: #070712;
+  --foreground: #e8e8ff;
+  --ink-navy: #e8e8ff;
+  --accent-hover: #00f0ff;
+  --card: #12122a;
+  --card-foreground: #e8e8ff;
+  --popover: #12122a;
+  --popover-foreground: #e8e8ff;
+  --primary: #ff2d95;
+  --primary-foreground: #070712;
+  --secondary: #1a1a3a;
+  --secondary-foreground: #e8e8ff;
+  --muted: #16163a;
+  --muted-foreground: #a0a0cc;
+  --destructive: #ff4d6d;
+  --destructive-foreground: #070712;
+  --destructive-soft: #3a1a2a;
+  --destructive-hover: #ff6b8a;
+  --border: #2a2a5a;
+  --input: #2a2a5a;
+  --ring: #00f0ff;
+  --ink: #f0f0ff;
+  --on-ink: #070712;
+  --ink-soft: #c0c0ee;
+  --muted-text: #9090bb;
+  --faint: #6060aa;
+  --hairline: #1a1a3a;
+  --line: #2a2a5a;
+  --surface: #12122a;
+  --sunken: #0e0e22;
+  --scrim: #000000;
+  --brand: #ff2d95;
+  --brand-hover: #ff5aae;
+  --brand-soft: #2a1a2e;
+  --success: #00ff9d;
+  --success-soft: #0a2a1e;
+  --info: #00f0ff;
+  --info-soft: #0a2a2e;
+  --warning: #ffe600;
+  --warning-soft: #2a2a0a;
+  --harbor-blue: #00f0ff;
+  --signal-coral: #ff2d95;
+  --live-mint: #00ff9d;
+  --shimmer-base: #16163a;
+  --shimmer-highlight: #2a2a5a;
+  --chart-1: #ff2d95;
+  --chart-2: #00f0ff;
+  --chart-3: #00ff9d;
+  --chart-4: #ffe600;
+  --chart-5: #b967ff;
+}
+
+/* Neon accents: soft glow on primary actions and cards. */
+.neon .bg-primary,
+.neon button.bg-primary,
+.neon a.bg-primary {
+  box-shadow: 0 0 14px rgba(255, 45, 149, 0.45), 0 0 4px rgba(255, 45, 149, 0.6);
+}
+
+.neon .bg-card {
+  box-shadow: 0 0 0 1px rgba(0, 240, 255, 0.08), 0 8px 32px rgba(0, 0, 0, 0.45);
+}
+
+.neon input:focus,
+.neon select:focus,
+.neon textarea:focus {
+  box-shadow: 0 0 0 2px rgba(0, 240, 255, 0.35);
+}

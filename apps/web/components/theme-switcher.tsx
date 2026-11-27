@@ -8,7 +8,7 @@ import { useI18n } from '@/lib/i18n/provider';
 const subscribe = (): (() => void) => () => undefined;
 
 function isThemeChoice(value: string | undefined): value is ThemeChoice {
-  return value === 'light' || value === 'dark' || value === 'system';
+  return value === 'light' || value === 'dark' || value === 'neon' || value === 'system';
 }
 
 export default function ThemeSwitcher({ className }: { className?: string }) {
@@ -22,7 +22,7 @@ export default function ThemeSwitcher({ className }: { className?: string }) {
       value={value}
       onChange={setTheme}
       disabled={!mounted}
-      labels={{ group: t('theme.label'), light: t('theme.light'), dark: t('theme.dark'), system: t('theme.system') }}
+      labels={{ group: t('theme.label'), light: t('theme.light'), dark: t('theme.dark'), neon: t('theme.neon'), system: t('theme.system') }}
     />
   );
 }

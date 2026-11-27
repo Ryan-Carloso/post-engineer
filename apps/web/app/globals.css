@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./neon-theme.css";
 
 /* Theme tokens. Every token below is defined for both themes; `.dark` overrides the
    whole set, so components use token classes (bg-card, text-ink, bg-success-soft ...)
