@@ -78,6 +78,8 @@ describe('PersonaIdentityCardSection', () => {
     expect(screen.getByTestId('identity-card-consent')).toHaveTextContent('only with that person');
     expect(screen.getByTestId('identity-card-consent')).toHaveTextContent('never shown in the persona list or on shared pages');
     expect(screen.getByText(/or paste an identity card as JSON/)).toBeInTheDocument();
+    expect(screen.getByText(/One description, up to 800 characters/)).toBeInTheDocument();
+    expect(screen.getByText(/New photos use this style for the clothing/)).toBeInTheDocument();
   });
 
   it('renders the Portuguese copy when the locale is pt', () => {
