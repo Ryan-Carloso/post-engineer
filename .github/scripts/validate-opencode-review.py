@@ -297,6 +297,15 @@ def main() -> int:
         f"if={ifs}",
     )
     check("secret gate uses step outputs", "steps.check.outputs.has_key" in text)
+    step_ids = {
+        step["id"] for step in doc["jobs"]["review"]["steps"] if "id" in step
+    }
+    referenced_ids = set(re.findall(r"steps\.([A-Za-z0-9_-]+)\.", text))
+    check(
+        "every referenced step id exists",
+        referenced_ids <= step_ids,
+        f"missing ids: {sorted(referenced_ids - step_ids)}",
+    )
     check(
         "per-tier key outputs recorded",
         "has_zai_key=" in text

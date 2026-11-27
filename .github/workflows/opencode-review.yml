@@ -362,6 +362,7 @@ jobs:
               "$(cat .github/review/review-prompt.md)" < /dev/null > review-raw.md 2> review-stderr.txt
             rc=$?
             set -e
+            echo "$model: exit $rc, $(wc -c < review-raw.md) bytes of review output" >&2
             if grep -q 'Falling back to default agent' review-raw.md review-stderr.txt; then
               echo "OpenCode fell back to the default agent for $model; discarding this attempt." >&2
               return 1
@@ -543,6 +544,7 @@ jobs:
           sed -i "s|^POSTED_FREE=.*|POSTED_FREE=${pass1_free}|" review-meta.env
 
       - name: Scrub secrets from review output
+        id: scrub
         if: always() && steps.check.outputs.has_key == 'true'
         env:
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
