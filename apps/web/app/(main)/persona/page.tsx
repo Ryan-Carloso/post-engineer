@@ -16,7 +16,7 @@ import { PersonaPageSkeleton } from './persona-page-skeleton';
 import { PersonaErrorDialog } from './persona-error-dialog';
 import { PersonaFormSync } from './persona-form-sync';
 import { PersonaPhotoPicker } from './persona-photo-picker';
-import { InlineFieldError, SectionDivider } from './persona-section-parts';
+import { InlineFieldError, SectionDivider } from '@/components/ui/form-field';
 import { PersonaSubmit, resolveEditingPersonaId } from './persona-submit';
 import { AlertIcon, CheckIcon, SparklesIcon, SpinnerIcon, INPUT_CLASS } from '@/lib/ui';
 

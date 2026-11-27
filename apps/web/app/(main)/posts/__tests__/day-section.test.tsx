@@ -125,12 +125,12 @@ describe('EmptyState', () => {
 });
 
 describe('AccountEmptyState', () => {
-  it('links New post to the recipes hub', () => {
+  it('links New post to the web composer', () => {
     render(<AccountEmptyState />);
     expect(screen.getByText('posts.accountEmptyTitle')).toBeInTheDocument();
     expect(screen.getByText('posts.accountEmptyHint')).toBeInTheDocument();
     const link = screen.getByRole('link', { name: 'posts.newPostAction' });
-    expect(link).toHaveAttribute('href', '/recipes');
+    expect(link).toHaveAttribute('href', '/posts/new');
     expect(link.className).toContain('h-9');
     expect(link.className).toContain('shrink-0');
     expect(link.className).toContain('whitespace-nowrap');
@@ -155,7 +155,7 @@ describe('DayEmptyState', () => {
     expect(screen.getByText('posts.calendarMonthEmptyTitle')).toBeInTheDocument();
     expect(screen.getByText('posts.calendarMonthEmptyHint')).toBeInTheDocument();
     const link = screen.getByRole('link', { name: 'posts.newPostAction' });
-    expect(link).toHaveAttribute('href', '/recipes');
+    expect(link).toHaveAttribute('href', '/posts/new');
     expect(link.className).toContain('h-8');
     expect(link.className).toContain('min-w-0');
     expect(link.className).toContain('px-2');
@@ -167,7 +167,7 @@ describe('DayEmptyState', () => {
     expect(screen.getByText('posts.calendarDayNone')).toBeInTheDocument();
     expect(screen.getByText('posts.calendarDayNoneHint')).toBeInTheDocument();
     const link = screen.getByRole('link', { name: 'posts.newPostAction' });
-    expect(link).toHaveAttribute('href', '/recipes');
+    expect(link).toHaveAttribute('href', '/posts/new');
     expect(link.className).toContain('h-9');
   });
 });

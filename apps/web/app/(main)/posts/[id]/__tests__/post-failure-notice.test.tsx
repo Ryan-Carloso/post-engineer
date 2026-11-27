@@ -20,7 +20,7 @@ describe('PostFailureNotice', () => {
     expect(details).not.toBeNull();
     expect(details).toHaveTextContent('LongCat job failed: torchrun exited 1');
     const link = screen.getByRole('link', { name: /posts\.cardScheduleAgain/ });
-    expect(link).toHaveAttribute('href', '/recipes');
+    expect(link).toHaveAttribute('href', '/posts/new');
   });
 
   it('renders nothing about a failure while the post has not failed', () => {

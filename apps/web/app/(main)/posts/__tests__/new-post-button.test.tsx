@@ -12,14 +12,14 @@ vi.mock('@/lib/i18n/provider', () => {
   return { useI18n, I18nProvider };
 });
 
-import { CREATE_POSTS_HREF, NewPostButton } from '../day-section';
+import { NEW_POST_HREF, NewPostButton } from '../day-section';
 import { postsCalendarStrings } from '@/lib/i18n/posts-calendar-i18n';
 
 describe('NewPostButton', () => {
-  it('is a link to the recipes hub with the New post label', () => {
+  it('is a link to the web composer with the New post label', () => {
     render(<NewPostButton testId="new-post-button" />);
     const link = screen.getByRole('link', { name: 'posts.newPostAction' });
-    expect(link).toHaveAttribute('href', CREATE_POSTS_HREF);
+    expect(link).toHaveAttribute('href', NEW_POST_HREF);
     expect(screen.getByTestId('new-post-button')).toBe(link);
   });
 
@@ -32,12 +32,12 @@ describe('NewPostButton', () => {
     expect(link.className).toContain('whitespace-nowrap');
   });
 
-  it('says the calendar lists what the agent sent, and keeps the locales in sync', () => {
+  it('says the calendar lists web and agent posts, and keeps the locales in sync', () => {
     expect(postsCalendarStrings.pt.posts.subtitle).toBe(
-      'Calendário das publicações que o seu agente já mandou pelo MCP.',
+      'Calendário das publicações feitas pela web e pelo seu agente no MCP.',
     );
     expect(postsCalendarStrings.en.posts.subtitle).toBe(
-      'Calendar of the posts your agent already sent through the MCP.',
+      'Calendar of the posts made on the web and by your agent through the MCP.',
     );
     expect(Object.keys(postsCalendarStrings.pt.posts).sort()).toEqual(
       Object.keys(postsCalendarStrings.en.posts).sort(),

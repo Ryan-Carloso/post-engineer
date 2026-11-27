@@ -3,7 +3,7 @@
 import { Switch } from '@/components/ui/switch';
 import { usePersonaStore } from '@/lib/store';
 import { useI18n } from '@/lib/i18n/provider';
-import { SectionDivider } from './persona-section-parts';
+import { SectionDivider } from '@/components/ui/form-field';
 
 const PersonaAiLabelField = () => {
   const aiLabel = usePersonaStore((s) => s.aiLabel);

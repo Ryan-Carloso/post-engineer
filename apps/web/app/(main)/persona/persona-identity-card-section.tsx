@@ -8,7 +8,7 @@ import { usePersonaStore } from '@/lib/store';
 import { usePersonaIdentityCardQuery } from '@/lib/persona-identity-card-api';
 import { cardToText } from '@/lib/persona-identity-card-form';
 import { IDENTITY_CARD_MAX_BYTES } from '@/lib/contracts/persona-identity-card';
-import { InlineFieldError, SectionDivider } from './persona-section-parts';
+import { InlineFieldError, SectionDivider } from '@/components/ui/form-field';
 
 export function PersonaIdentityCardSection({ personaId }: { personaId: string | null }) {
   const { t } = useI18n();

@@ -102,11 +102,11 @@ describe('Posts calendar', () => {
     }).as('status');
   });
 
-  it('links New post to the recipes hub, with no onboard card or dialog', () => {
+  it('links New post to the web composer, with no onboard card or dialog', () => {
     visitPosts();
     cy.get('[data-testid=mcp-onboard-card]').should('not.exist');
     cy.get('[role=dialog]').should('not.exist');
-    cy.get('[data-testid=new-post-button]').should('have.attr', 'href', '/recipes');
+    cy.get('[data-testid=new-post-button]').should('have.attr', 'href', '/posts/new');
   });
 
   it('drives the calendar: pick a day, change month, go to today, refresh', () => {
