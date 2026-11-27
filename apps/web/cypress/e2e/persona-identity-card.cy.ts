@@ -121,7 +121,7 @@ describe('Persona — identity card', () => {
     description().type('{"version":3,"identity":{"description":""}}', { parseSpecialCharSequences: false });
     cy.contains('button', 'Salvar alterações').click();
 
-    cy.contains('Descreva a pessoa ou cole um cartão de identidade em JSON.').should('be.visible');
+    cy.contains('O cartão precisa de uma descrição.').should('be.visible');
     cy.then(() => expect(state.patches).to.equal(0));
   });
 });
