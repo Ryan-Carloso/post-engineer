@@ -42,6 +42,7 @@ import {
   releaseAsapLedger,
   type AsapLedger,
 } from './asap';
+import { replayAsapHold, scheduleAsapHold } from './asap-hold';
 import type { PublishExistingContext } from './context';
 import {
   checkPublishExistingSemantics,
@@ -154,7 +155,7 @@ async function scheduleExistingMedia(ctx: PublishExistingContext): Promise<NextR
     promptVersionId: input.promptVersionId,
   }).map((row) => ({
     ...row,
-    status: 'ready',
+    status: ctx.approvalMode === 'approval' ? 'awaiting_approval' : 'ready',
     media_kind: mediaKindValue,
     media_ref: mediaRef,
     media_content_type: mediaContentType,
@@ -162,7 +163,7 @@ async function scheduleExistingMedia(ctx: PublishExistingContext): Promise<NextR
   const { data: inserted, error: slotsError } = await supabase
     .from('scheduled_posts')
     .insert(rows)
-    .select('id, slot_at, title');
+    .select('id, slot_at, title, status');
   if (slotsError || inserted === null) {
     const uploadTaken = violatedConstraint(slotsError) === UPLOAD_SLOT_REFERENCE_INDEX;
     if (!uploadTaken) logger.error('[publish-existing] slot insert failed', slotsError, { scheduleId, userId });
@@ -268,11 +269,15 @@ async function postHandler(request: Request): Promise<NextResponse> {
     const replay = await replaySchedule(supabase, idem.scheduleId, userId, ROUTE, reconnectWarning);
     if (replay !== null) return replay;
   }
+  if (input.publishing.mode === 'asap' && auth.approvalMode === 'approval') {
+    const holdReplay = await replayAsapHold(supabase, idem.scheduleId, userId, ROUTE);
+    if (holdReplay !== null) return holdReplay;
+  }
   if (resolved instanceof NextResponse) return resolved;
   const { accountIds } = resolved;
 
   let ledger: AsapLedger | null = null;
-  if (input.publishing.mode === 'asap' && idem.clientSupplied) {
+  if (input.publishing.mode === 'asap' && idem.clientSupplied && auth.approvalMode !== 'approval') {
     try {
       ledger = await claimAsapLedger(asapScopeKey(idem.scheduleId), userId, input.publishing.providers, accountIds);
     } catch (error) {
@@ -310,9 +315,12 @@ async function postHandler(request: Request): Promise<NextResponse> {
     aiLabel = personaRow?.ai_label === true;
   }
 
-  const ctx: PublishExistingContext = { route: ROUTE, supabase, userId, request, input, accountIds, reconnectWarning, aiLabel, ...verified, logId, startTime };
+  const ctx: PublishExistingContext = { route: ROUTE, supabase, userId, request, input, accountIds, reconnectWarning, aiLabel, approvalMode: auth.approvalMode ?? 'yolo', ...verified, logId, startTime };
   if (input.publishing.mode === 'scheduled') {
     return scheduleExistingMedia(ctx);
+  }
+  if (ctx.approvalMode === 'approval') {
+    return scheduleAsapHold(ctx, idem.scheduleId);
   }
   return publishExistingMediaAsap(ctx, ledger);
 }

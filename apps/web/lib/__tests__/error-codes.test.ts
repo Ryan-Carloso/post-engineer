@@ -18,6 +18,7 @@ describe('error-codes', () => {
       'VALIDATION_FAILED',
       'TRIAL_EXPIRED',
       'SUBSCRIPTION_INACTIVE',
+      'SLOT_NOT_AWAITING_APPROVAL',
       'INTERNAL_ERROR',
     ] as const;
     for (const code of required) {

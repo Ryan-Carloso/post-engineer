@@ -3,23 +3,27 @@ import type { TranslationKey } from '@/lib/i18n';
 
 export const STATUS_STYLE: Record<string, string> = {
   ready: 'bg-warning-soft text-warning',
+  awaiting_approval: 'bg-warning-soft text-warning',
   publishing: 'bg-info-soft text-info',
   published: 'bg-success-soft text-success',
   failed: 'bg-destructive-soft text-destructive',
   expired: 'bg-line text-muted-foreground',
   paused: 'bg-sunken text-ink-soft',
+  cancelled: 'bg-line text-ink-soft',
 };
 
 export const STATUS_KEY: Record<string, TranslationKey> = {
   ready: 'posts.statusReady',
+  awaiting_approval: 'posts.statusAwaitingApproval',
   publishing: 'posts.statusPublishing',
   published: 'posts.statusPublished',
   failed: 'posts.statusFailed',
   expired: 'posts.statusExpired',
   paused: 'posts.statusPaused',
+  cancelled: 'posts.statusCancelled',
 };
 
-export type DisplayStatus = 'ready' | 'publishing' | 'published' | 'failed' | 'expired' | 'paused';
+export type DisplayStatus = 'ready' | 'awaiting_approval' | 'publishing' | 'published' | 'failed' | 'expired' | 'cancelled' | 'paused';
 
 export function slotDisplayStatus(status: string, hasAccess: boolean): string {
   if (!hasAccess && (status === 'ready' || status === 'publishing')) return 'paused';

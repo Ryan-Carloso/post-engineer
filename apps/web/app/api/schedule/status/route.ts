@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { isScopedApiKey } from '@/lib/api-keys';
 import { logger } from '@/lib/logger';
+import { resolveSlotMedia } from '@/lib/post-detail-media';
 
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 import {
@@ -24,6 +26,29 @@ function withPostUrl<T extends { id?: unknown }>(slots: T[]): (T & { postUrl: st
     ...slot,
     postUrl: typeof slot.id === 'string' ? postUrlFor(slot.id) : null,
   }));
+}
+
+async function withAwaitingMedia(
+  rows: Record<string, unknown>[],
+  service: SupabaseClient,
+  userId: string,
+): Promise<Record<string, unknown>[]> {
+  return Promise.all(
+    rows.map(async (row) => {
+      const { media_kind, media_ref, media_content_type, ...rest } = row;
+      const media = await resolveSlotMedia(service, typeof row.id === 'string' ? row.id : '', userId, {
+        media_kind: typeof media_kind === 'string' ? media_kind : null,
+        media_ref: typeof media_ref === 'string' ? media_ref : null,
+        media_content_type: typeof media_content_type === 'string' ? media_content_type : null,
+        status: typeof row.status === 'string' ? row.status : '',
+      });
+      return {
+        ...rest,
+        description: typeof row.description === 'string' ? row.description : null,
+        media,
+      };
+    }),
+  );
 }
 
 async function getHandler(request: Request): Promise<NextResponse> {
@@ -64,7 +89,7 @@ async function getHandler(request: Request): Promise<NextResponse> {
     if (scheduleIds.length === 0) {
       return range.kind === 'range'
         ? NextResponse.json({ success: true, slots: [], truncated: false })
-        : NextResponse.json({ success: true, upcoming: [], recent: [], hasAnyPost: false });
+        : NextResponse.json({ success: true, upcoming: [], recent: [], hasAnyPost: false, awaitingCount: 0 });
     }
   }
 
@@ -105,6 +130,12 @@ async function getHandler(request: Request): Promise<NextResponse> {
     .in('status', ['ready'])
     .gte('slot_at', nowIso)
     .order('slot_at', { ascending: true });
+  let awaitingQuery = supabase
+    .from('scheduled_posts')
+    .select('id, slot_at, status, title, description, error, published_at, schedule_id, media_kind, media_ref, media_content_type')
+    .eq('user_id', userId)
+    .in('status', ['awaiting_approval'])
+    .order('slot_at', { ascending: true });
   let recentQuery = supabase
     .from('scheduled_posts')
     .select(RESULT_SELECT)
@@ -119,35 +150,64 @@ async function getHandler(request: Request): Promise<NextResponse> {
     .contains('publish_outcomes', USER_NOTICE_OUTCOME_FILTER)
     .order('slot_at', { ascending: true });
   let anyPostQuery = supabase.from('scheduled_posts').select('id').eq('user_id', userId);
+  let awaitingCountQuery = supabase
+    .from('scheduled_posts')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .in('status', ['awaiting_approval']);
   if (scheduleIds) {
     upcomingQuery = upcomingQuery.in('schedule_id', scheduleIds);
+    awaitingQuery = awaitingQuery.in('schedule_id', scheduleIds);
     recentQuery = recentQuery.in('schedule_id', scheduleIds);
     publishingQuery = publishingQuery.in('schedule_id', scheduleIds);
     anyPostQuery = anyPostQuery.in('schedule_id', scheduleIds);
+    awaitingCountQuery = awaitingCountQuery.in('schedule_id', scheduleIds);
   }
 
-  const [upcoming, recent, publishing, anyPost] = await Promise.all([
+  const [upcoming, awaiting, recent, publishing, anyPost, awaitingCountResult] = await Promise.all([
     upcomingQuery.limit(limit),
+    awaitingQuery.limit(limit),
     recentQuery.limit(limit),
     publishingQuery.limit(limit),
     anyPostQuery.limit(1),
+    awaitingCountQuery,
   ]);
 
-  if (upcoming.error || recent.error || publishing.error || anyPost.error) {
-    logger.error('[api/schedule/status] query failed', upcoming.error ?? recent.error ?? publishing.error ?? anyPost.error, {
+  if (upcoming.error || awaiting.error || recent.error || publishing.error || anyPost.error || awaitingCountResult.error) {
+    logger.error('[api/schedule/status] query failed', upcoming.error ?? awaiting.error ?? recent.error ?? publishing.error ?? anyPost.error ?? awaitingCountResult.error, {
       upcoming: upcoming.error,
+      awaiting: awaiting.error,
       recent: recent.error,
       publishing: publishing.error,
       anyPost: anyPost.error,
+      awaitingCount: awaitingCountResult.error,
     });
     return NextResponse.json(
       { success: false, error: 'Failed to load schedule status.' },
       { status: 500 },
     );
   }
+  const presentedAwaiting = presentPublishRows(awaiting.data ?? []);
+  const awaitingRows =
+    presentedAwaiting.length === 0
+      ? presentedAwaiting
+      : await withAwaitingMedia(
+        presentedAwaiting,
+        auth.isApiKey === true || auth.isOAuth === true ? supabase : createSupabaseServiceClient(),
+        userId,
+      );
   const upcomingEnriched = withPostUrl(
-    mergeBySlotAt(presentPublishRows(publishing.data), presentPublishRows(upcoming.data), limit),
+    mergeBySlotAt(
+      mergeBySlotAt(
+        presentPublishRows(publishing.data),
+        presentPublishRows(upcoming.data ?? []),
+        limit,
+      ),
+      awaitingRows,
+      limit + awaitingRows.length,
+    ),
   );
+  const awaitingCount = awaitingCountResult.count ?? (awaiting.data ?? []).length;
   const recentEnriched = withPostUrl(presentPublishRows(recent.data));
 
   return NextResponse.json({
@@ -155,6 +215,7 @@ async function getHandler(request: Request): Promise<NextResponse> {
     upcoming: upcomingEnriched,
     recent: recentEnriched,
     hasAnyPost: (anyPost.data?.length ?? 0) > 0,
+    awaitingCount,
   });
 }
 

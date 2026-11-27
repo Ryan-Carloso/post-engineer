@@ -12,6 +12,7 @@ import type { PostJoins } from './post-joins';
 import {
   CALENDAR_GROUP_KEY,
   CALENDAR_GROUP_PILL,
+  STATUS_KEY,
   STATUS_STYLE,
   calendarGroupOf,
   slotDisplayStatus,
@@ -54,7 +55,7 @@ export function DayListRow({ slot, joins, hasAccess = true }: { slot: ScheduledS
   const isHistory = slot.status === 'published' || slot.status === 'failed' || slot.status === 'expired';
   const shownAt = isHistory && slot.status !== 'expired' && slot.publishedAt ? slot.publishedAt : slot.slotAt;
   const group = calendarGroupOf(displayStatus);
-  const chipLabel = t(CALENDAR_GROUP_KEY[group]);
+  const chipLabel = t(slot.status === 'cancelled' ? STATUS_KEY.cancelled : CALENDAR_GROUP_KEY[group]);
   const displayTitle = slot.title ?? t('posts.unknownTitle');
   return (
     <Link
@@ -71,6 +72,7 @@ export function DayListRow({ slot, joins, hasAccess = true }: { slot: ScheduledS
         status={displayStatus}
         label={chipLabel}
         style={STATUS_STYLE[displayStatus] ?? CALENDAR_GROUP_PILL[group]}
+        icon={slot.status === 'cancelled' ? CalendarX2 : undefined}
       />
     </Link>
   );

@@ -1,4 +1,4 @@
-export const CANCELLABLE_SLOT_STATUSES = ['pending', 'ready'] as const;
+export const CANCELLABLE_SLOT_STATUSES = ['pending', 'ready', 'awaiting_approval'] as const;
 
 export interface ScheduleCancelSlot {
   id: string;

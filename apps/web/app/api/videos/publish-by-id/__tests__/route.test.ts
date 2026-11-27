@@ -145,6 +145,18 @@ describe('POST /api/videos/publish-by-id', () => {
     expect(response.status).toBe(401);
   });
 
+  it('returns 403 for an approval-mode API key without publishing', async () => {
+    vi.mocked(requireSupabaseSession).mockResolvedValueOnce({
+      auth: { userId: 'user-uuid-1', accessToken: 'token', isApiKey: true, approvalMode: 'approval' },
+      error: null,
+    } as never);
+    const response = await POST(
+      jsonRequest({ uploadId: UPLOAD_ID, provider: 'instagram', accountIds: ['ig-1'], caption: 'hi' }),
+    );
+    expect(response.status).toBe(403);
+    expect(vi.mocked(publishUploadedVideo)).not.toHaveBeenCalled();
+  });
+
   it('rejects a body that is not JSON', async () => {
     const response = await POST(
       new Request('https://post-engineer.com/api/videos/publish-by-id', { method: 'POST', body: 'not json' }),

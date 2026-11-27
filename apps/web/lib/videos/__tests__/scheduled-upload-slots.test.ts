@@ -28,7 +28,7 @@ describe('listLiveUploadSlotTimes', () => {
     expect(fake.from).toHaveBeenCalledWith('scheduled_posts');
     expect(fake.eq).toHaveBeenCalledWith('media_kind', 'upload');
     expect(fake.inRef).toHaveBeenCalledWith('media_ref', ['u1', 'u2', 'u3']);
-    expect(fake.inStatus).toHaveBeenCalledWith('status', ['pending', 'generating', 'ready', 'publishing']);
+    expect(fake.inStatus).toHaveBeenCalledWith('status', ['pending', 'generating', 'ready', 'publishing', 'awaiting_approval']);
     expect([...times]).toEqual([
       ['u1', '2026-11-29T12:00:00+00:00'],
       ['u2', '2026-11-28T08:00:00+00:00'],
@@ -38,6 +38,10 @@ describe('listLiveUploadSlotTimes', () => {
   it('never counts a finished slot as live', () => {
     expect(LIVE_UPLOAD_SLOT_STATUSES).not.toContain('published');
     expect(LIVE_UPLOAD_SLOT_STATUSES).not.toContain('failed');
+  });
+
+  it('counts an awaiting-approval slot as live so its upload survives the sweep', () => {
+    expect(LIVE_UPLOAD_SLOT_STATUSES).toContain('awaiting_approval');
   });
 
   it('skips the query for an empty batch', async () => {

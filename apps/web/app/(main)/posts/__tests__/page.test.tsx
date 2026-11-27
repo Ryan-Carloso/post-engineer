@@ -27,6 +27,11 @@ vi.mock('@/lib/schedule-range', () => ({
   useHasAnyPostQuery: vi.fn(() => ({ data: true, isLoading: false, refetch: vi.fn() })),
 }));
 
+vi.mock('@/lib/approval-queue', () => ({
+  useApprovalQueue: vi.fn(() => ({ slots: [], count: 0, isLoading: false, isError: false })),
+  isSlotExpired: vi.fn(() => false),
+}));
+
 vi.mock('next/image', () => ({
   default: ({ alt, ...props }: React.ComponentProps<'img'>) => <img alt={alt} {...props} />,
 }));

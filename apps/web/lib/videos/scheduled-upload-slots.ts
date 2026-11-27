@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-export const LIVE_UPLOAD_SLOT_STATUSES = ['pending', 'generating', 'ready', 'publishing'] as const;
+export const LIVE_UPLOAD_SLOT_STATUSES = ['pending', 'generating', 'ready', 'publishing', 'awaiting_approval'] as const;
 
 export async function listLiveUploadSlotTimes(
   supabase: SupabaseClient,

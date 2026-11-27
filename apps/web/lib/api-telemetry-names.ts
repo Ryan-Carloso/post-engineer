@@ -64,6 +64,8 @@ table['POST /api/upload-content'] = 'content_uploaded';
 table['POST /api/videos/upload-url'] = 'video_upload_signed_url_created';
 table['POST /api/videos/uploads/[uploadId]/complete'] = 'video_upload_completed';
 table['POST /api/videos/publish-by-id'] = 'video_published_by_id';
+table['POST /api/schedule/slots/[slotId]/approve'] = 'schedule_slot_approved';
+table['POST /api/schedule/slots/[slotId]/reject'] = 'schedule_slot_rejected';
 table['PUT /api/persona/publishing-accounts'] = 'persona_publishing_accounts_updated';
 table['PUT /api/tool-config'] = 'tool_config_saved';
 

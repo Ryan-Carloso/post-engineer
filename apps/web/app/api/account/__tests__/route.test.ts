@@ -465,6 +465,7 @@ describe('GET /api/account', () => {
       userId: 'u1',
       keyId: 'key-1',
       personaIds: null,
+      approvalMode: 'yolo',
     });
     vi.mocked(listSocialAccounts).mockResolvedValue([
       {

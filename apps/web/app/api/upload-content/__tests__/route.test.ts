@@ -595,6 +595,18 @@ describe('POST /api/upload-content with a personal API key', () => {
     expect(userId).toBe(KEY_USER);
   });
 
+  it('returns 403 for an approval-mode API key without publishing', async () => {
+    mockRequireSupabaseSession.mockResolvedValue({
+      auth: { userId: KEY_USER, accessToken: 'pe_live_abc123', isApiKey: true, approvalMode: 'approval' },
+      error: null,
+    });
+
+    const res = await POST(await makeRequest({ userId: 'someone-else' }));
+
+    expect(res.status).toBe(403);
+    expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
+  });
+
   it('still accepts the engine shared secret after the API-key change', async () => {
     mockRequireSupabaseSession.mockResolvedValue({
       auth: null,
