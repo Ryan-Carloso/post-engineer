@@ -172,6 +172,7 @@ class BatchPublisher:
             publish_video=self.publish_video,
             persist_outcomes=persist_outcomes,
             content_type=content_type,
+            first_comment=str(slot.get("first_comment") or "").strip() or None,
         )
         if account_result.transport_error is not None:
             logger.warning(

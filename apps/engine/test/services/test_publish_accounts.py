@@ -281,6 +281,29 @@ class AccountRetryTests(unittest.TestCase):
         self.assertEqual(len(calls), 3)
         self.assertTrue(all(item.get("publish_scope_key") == expected_key for item in calls))
 
+    def test_slot_first_comment_reaches_the_publish_call_and_its_warning_the_outcome(self) -> None:
+        slot = self._slot(["instagram"])
+        slot["schedules"]["instagram_account_ids"] = ["ig-1"]
+        slot["first_comment"] = "  Link in bio  "
+        store = _MemoryStore(slot)
+        calls: list[dict] = []
+
+        def publish(**kwargs):
+            calls.append(kwargs)
+            return {
+                "success": True,
+                "results": [{
+                    "accountId": "ig-1", "success": True, "postId": "ig-post-1",
+                    "warnings": ["FIRST_COMMENT_FAILED"],
+                }],
+            }
+
+        self._scheduler(store, publish).publish_due(NOW)
+        self.assertEqual(calls[0]["first_comment"], "Link in bio")
+        outcome = store.slot["publish_outcomes"][0]
+        self.assertEqual(outcome["warnings"], ["FIRST_COMMENT_FAILED"])
+        self.assertEqual(store.slot["status"], "published")
+
     def test_in_progress_wait_capped_as_unknown(self) -> None:
         slot = self._slot(["instagram"])
         slot["schedules"]["instagram_account_ids"] = ["ig-1"]

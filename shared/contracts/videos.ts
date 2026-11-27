@@ -75,6 +75,7 @@ export const PublishByIdBodySchema = z.object({
   privacyStatus: optionalContractString('privacyStatus'),
   caption: optionalContractString('caption'),
   boardId: optionalContractString('boardId'),
+  firstComment: optionalContractString('firstComment'),
 });
 
 export const mintVideoUpload = defineEndpoint({

@@ -55,3 +55,5 @@ SCHEDULE_ACCOUNT_COLUMNS: dict[str, str] = {
 }
 
 URL_MEDIA_PROVIDERS: frozenset[str] = frozenset({"instagram", "threads", "facebook"})
+
+COMMENT_PROVIDERS: frozenset[str] = frozenset({"youtube", "instagram", "bluesky", "linkedin", "threads", "facebook", "telegram"})

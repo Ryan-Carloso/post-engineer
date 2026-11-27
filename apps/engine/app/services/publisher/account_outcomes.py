@@ -191,6 +191,15 @@ def _apply_links(outcome: dict[str, Any], source: dict[str, Any]) -> None:
             outcome[name] = source[name]
 
 
+def _apply_warnings(outcome: dict[str, Any], source: dict[str, Any]) -> None:
+    raw = source.get("warnings")
+    warnings = [item for item in raw if isinstance(item, str) and item] if isinstance(raw, list) else []
+    if warnings:
+        outcome["warnings"] = warnings
+    else:
+        outcome.pop("warnings", None)
+
+
 def _fail_outcome(
     outcome: dict[str, Any],
     message: str,
@@ -257,6 +266,7 @@ def _publish_outcome(outcome: dict[str, Any], source: dict[str, Any]) -> None:
     outcome["error"] = None
     outcome["retryAt"] = None
     _apply_links(outcome, source)
+    _apply_warnings(outcome, source)
 
 
 def _blank(provider: str, account_id: str, video: str, attempts: int) -> dict[str, Any]:

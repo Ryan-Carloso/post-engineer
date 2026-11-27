@@ -1061,6 +1061,12 @@
                     "type": "uuid",
                     "default": null,
                     "notNull": false
+                },
+                {
+                    "name": "first_comment",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
                 }
             ],
             "policies": {
@@ -1074,7 +1080,8 @@
                 "scheduled_posts_pkey": "PRIMARY KEY (id)",
                 "scheduled_posts_media_ref_check": "CHECK (((media_kind IS NULL) OR (media_ref IS NOT NULL)))",
                 "scheduled_posts_media_kind_check": "CHECK (((media_kind IS NULL) OR (media_kind = ANY (ARRAY['upload'::text, 'image'::text]))))",
-                "scheduled_posts_prompt_version_id_fkey": "FOREIGN KEY (prompt_version_id) REFERENCES prompt_versions(id) ON DELETE SET NULL"
+                "scheduled_posts_prompt_version_id_fkey": "FOREIGN KEY (prompt_version_id) REFERENCES prompt_versions(id) ON DELETE SET NULL",
+                "scheduled_posts_first_comment_length_check": "CHECK (((first_comment IS NULL) OR ((char_length(first_comment) >= 1) AND (char_length(first_comment) <= 1000))))"
             }
         },
         "social_accounts": {

@@ -456,6 +456,7 @@ export interface Database {
         media_content_type: string | null;
         media_claimed_at: string | null;
         prompt_version_id: string | null;
+        first_comment: string | null;
         };
         Insert: {
         id?: string;
@@ -477,6 +478,7 @@ export interface Database {
         media_content_type?: string | null;
         media_claimed_at?: string | null;
         prompt_version_id?: string | null;
+        first_comment?: string | null;
         };
         Update: {
         id?: string;
@@ -498,6 +500,7 @@ export interface Database {
         media_content_type?: string | null;
         media_claimed_at?: string | null;
         prompt_version_id?: string | null;
+        first_comment?: string | null;
         };
         Relationships: [];
       };

@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 from app.providers import (
+    COMMENT_PROVIDERS,
     PROVIDER_LABELS,
     SCHEDULE_ACCOUNT_COLUMNS,
     SOCIAL_PROVIDERS,
@@ -54,6 +55,10 @@ class ProvidersMirrorTest(unittest.TestCase):
     def test_url_media_providers_are_known_providers(self) -> None:
         self.assertEqual(URL_MEDIA_PROVIDERS, frozenset({"instagram", "threads", "facebook"}))
         self.assertTrue(URL_MEDIA_PROVIDERS <= set(SOCIAL_PROVIDERS))
+
+    def test_comment_providers_equal_the_shared_subset(self) -> None:
+        self.assertEqual(COMMENT_PROVIDERS, frozenset(_shared_array("COMMENT_PROVIDERS")))
+        self.assertTrue(COMMENT_PROVIDERS <= set(SOCIAL_PROVIDERS))
 
     def test_repo_root_walks_up_past_mutants_tree(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

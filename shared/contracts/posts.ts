@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { defineEndpoint } from './endpoint.js';
+import { FirstCommentWarningSchema } from './first-comment.js';
 import { SOCIAL_PROVIDERS } from './providers.js';
 
 export const PublishLinkSchema = z.object({
@@ -35,6 +36,8 @@ export const SlotPostSchema = z.object({
   publishLinks: z.array(PublishLinkSchema),
   userNotices: z.array(PublishUserNoticeSchema),
   providerFailures: z.array(PublishProviderFailureSchema),
+  firstComment: z.string().nullable(),
+  commentWarnings: z.array(FirstCommentWarningSchema),
   postUrl: z.string().nullable(),
   media: z
     .object({
