@@ -12,6 +12,7 @@ import { resolveYouTubeMetricsTarget } from '@/lib/metrics/youtube-account-resol
 import { trackApiEvent } from '@/lib/analytics';
 import { flushPostHog } from '@/lib/posthog-server';
 import { logger } from '@/lib/logger';
+import { announcePublishScheduler, runPublishDueTick } from '@/lib/publisher/job';
 import { createScheduler, type SchedulerHandle, type SchedulerJob } from '@/lib/scheduler';
 import {
   createSupabaseVideoUploadStorage,
@@ -113,6 +114,14 @@ export const SCHEDULER_TICK_MS = 60 * 1000;
 
 export const SCHEDULER_JOBS: SchedulerJob[] = [
   {
+    name: 'publish-due',
+    dueAfterMs: 0,
+    leaseTtlSeconds: 120,
+    successEvent: null,
+    routeLabel: 'internal:publish-due',
+    run: runPublishDueTick,
+  },
+  {
     name: 'post-metrics',
     dueAfterMs: 60 * 60 * 1000,
     leaseTtlSeconds: 30 * 60,
@@ -171,6 +180,7 @@ export function startInternalScheduler(): SchedulerHandle | null {
     now: () => Date.now(),
   });
   handle.start();
+  announcePublishScheduler();
   logger.info('[scheduler] started', {
     jobs: SCHEDULER_JOBS.map((job) => job.name),
   });

@@ -14,6 +14,10 @@ const { createSchedulerMock, schedulerHandle, createdDeps } = vi.hoisted(() => {
 });
 
 vi.mock('../scheduler', () => ({ createScheduler: createSchedulerMock }));
+vi.mock('../publisher/job', () => ({
+  runPublishDueTick: vi.fn().mockResolvedValue(undefined),
+  announcePublishScheduler: vi.fn(),
+}));
 vi.mock('../scheduler-lease', () => ({
   tryAcquireSchedulerLease: vi.fn().mockResolvedValue(true),
   getSchedulerLastSuccess: vi.fn().mockResolvedValue(null),
@@ -74,6 +78,7 @@ import { isUnauthorizedError } from '../account-break';
 import { collectPostMetrics, createPostMetricsStore } from '../metrics/post-metrics';
 import { collectPostMetricsDaily } from '../metrics/post-metrics-daily';
 import { logger } from '../logger';
+import { announcePublishScheduler, runPublishDueTick } from '../publisher/job';
 import { getSchedulerLastSuccess, releaseSchedulerLease, tryAcquireSchedulerLease } from '../scheduler-lease';
 import {
   createSupabaseVideoUploadStorage,
@@ -253,6 +258,31 @@ describe('startInternalScheduler', () => {
     };
     const result = await deps.acquireLease('post-metrics', 1800, 'h1');
     expect(result).toEqual({ acquired: true, lastSuccessAt: null });
+  });
+
+  it('registers the publish-due job: due every tick, no success event, the publisher tick as its run', () => {
+    process.env.SCHEDULER_ENABLED = 'true';
+    startInternalScheduler();
+    const deps = createdDeps[0] as {
+      jobs: Array<{ name: string; dueAfterMs: number; leaseTtlSeconds: number; successEvent: string | null; run: unknown }>;
+    };
+    const job = deps.jobs.find((j) => j.name === 'publish-due');
+    expect(job).toMatchObject({ dueAfterMs: 0, leaseTtlSeconds: 120, successEvent: null });
+    expect(job?.run).toBe(runPublishDueTick);
+  });
+
+  it('announces the publish scheduler once when it starts', () => {
+    process.env.SCHEDULER_ENABLED = 'true';
+    vi.mocked(announcePublishScheduler).mockClear();
+    startInternalScheduler();
+    expect(announcePublishScheduler).toHaveBeenCalledTimes(1);
+  });
+
+  it('announces nothing when the scheduler is disabled', () => {
+    process.env.SCHEDULER_ENABLED = 'false';
+    vi.mocked(announcePublishScheduler).mockClear();
+    expect(startInternalScheduler()).toBeNull();
+    expect(announcePublishScheduler).not.toHaveBeenCalled();
   });
 
   it('wires the lease release to the release RPC', async () => {

@@ -328,6 +328,19 @@ describe('createScheduler', () => {
     scheduler.stop();
   });
 
+  it('does not track a success event for a job without one', async () => {
+    const deps = makeDeps({ lastSuccessAt: null, jobs: [makeJob({ successEvent: null, name: 'publish-due', dueAfterMs: 0 })] });
+    const scheduler = createScheduler(deps);
+    scheduler.start();
+    vi.mocked(deps.track).mockClear();
+
+    await settleImmediateTick();
+    expect(deps.jobs[0].run).toHaveBeenCalledTimes(1);
+    expect(deps.recordSuccess).toHaveBeenCalledWith('publish-due');
+    expect(deps.track).not.toHaveBeenCalled();
+    scheduler.stop();
+  });
+
   it('stop() clears the timers so nothing runs afterwards', async () => {
     const deps = makeDeps({ lastSuccessAt: null, jobs: [makeJob()] });
     const scheduler = createScheduler(deps);

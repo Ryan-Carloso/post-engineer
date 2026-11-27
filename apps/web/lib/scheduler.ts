@@ -2,7 +2,7 @@ export interface SchedulerJob {
   name: string;
   dueAfterMs: number;
   leaseTtlSeconds: number;
-  successEvent: string;
+  successEvent: string | null;
   routeLabel: string;
   run: () => Promise<unknown>;
 }
@@ -77,7 +77,7 @@ export function createScheduler(deps: SchedulerDeps): SchedulerHandle {
       }
       await job.run();
       await deps.recordSuccess(job.name);
-      deps.track(job.successEvent, { route: job.routeLabel, status: 200 });
+      if (job.successEvent !== null) deps.track(job.successEvent, { route: job.routeLabel, status: 200 });
     } catch (error) {
       deps.logger.error(`[scheduler] ${job.name}: run failed`, error, {});
     } finally {
