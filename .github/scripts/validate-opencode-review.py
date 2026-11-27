@@ -6,11 +6,9 @@ Run: python3 .github/scripts/validate-opencode-review.py
 Guards the design decisions of the OpenCode review workflow:
 - direct `opencode run` (verified against the installed CLI: there is no
   --standalone flag), no third-party wrapper
-- runtime model chain via select-review-models.py and model-preferences.json
-  (free models first, paid fallbacks last); glm-4.5-flash was dropped
-- OpenRouter free tier uses the special router id (no hardcoded model list
-  to rot), one
-  OPENROUTER_API_KEY serving both tiers
+- static model chain in REVIEW_MODELS: the OpenRouter free router first
+  (no hardcoded model list to rot), one OpenCode free model as fallback,
+  15 minutes per attempt
 - the job always runs (free OpenCode models need no secret); each paid tier
   is skipped when its key is missing (secret gating via step outputs)
 - both keys masked in logs and scrubbed from review.md before the comment
@@ -21,7 +19,6 @@ Guards the design decisions of the OpenCode review workflow:
 """
 from __future__ import annotations
 
-import json
 import re
 import sys
 from pathlib import Path
@@ -94,25 +91,27 @@ def main() -> int:
         and "OPENCODE_ZEN_API_KEY" in text[text.index("Scrub secrets from review output") :],
     )
     check("no ZHIPU_API_KEY references", "ZHIPU_API_KEY" not in text)
+    chain_match = re.search(r"^  REVIEW_MODELS: \$\{\{ vars\.REVIEW_MODELS \|\| '([^']+)' \}\}$", text, re.M)
+    chain = chain_match.group(1).split(",") if chain_match else []
     check(
-        "OPENCODE_MODEL default is OpenCode free",
-        "OPENCODE_MODEL: opencode/glm-5.3-flash-free" in text,
+        "REVIEW_MODELS default starts with the OpenRouter free router",
+        chain[:1] == ["openrouter/openrouter/free"],
+        f"chain={chain}",
     )
     check(
-        "REVIEW_MODEL_PRIMARY default is OpenCode free",
-        "opencode/glm-5.3-flash-free" in text
-        and "REVIEW_MODEL_PRIMARY:" in text,
+        "REVIEW_MODELS default falls back to an OpenCode free model",
+        len(chain) == 2 and chain[1].startswith("opencode/") and chain[1].endswith("-free"),
+        f"chain={chain}",
     )
     check(
-        "REVIEW_MODEL_VERIFY default is a different OpenCode free model",
-        "REVIEW_MODEL_VERIFY:" in text
-        and "opencode/deepseek-v4.1-flash-free" in text,
+        "REVIEW_MODEL_VERIFY default is the OpenRouter free router",
+        "REVIEW_MODEL_VERIFY: ${{ vars.REVIEW_MODEL_VERIFY || 'openrouter/openrouter/free' }}" in text,
     )
     env_defaults = [
         line
         for line in text.splitlines()
         if re.match(
-            r"^\s+(REVIEW_MODEL_PRIMARY|REVIEW_MODEL_VERIFY|OPENCODE_MODEL|OPENROUTER_MODEL|ZAI_FREE_MODEL):",
+            r"^\s+(REVIEW_MODELS|REVIEW_MODEL_VERIFY|OPENROUTER_MODEL|ZAI_FREE_MODEL):",
             line,
         )
     ]
@@ -142,11 +141,6 @@ def main() -> int:
     )
 
     check(
-        "OPENROUTER_FREE_MODEL default set",
-        "OPENROUTER_FREE_MODEL: openrouter/free" in text,
-        "must use the OpenRouter free router id, not a concrete model",
-    )
-    check(
         "no OPENROUTER_MODEL paid z-ai default",
         "OPENROUTER_MODEL: z-ai/glm-5.3-flash" not in text,
     )
@@ -159,26 +153,20 @@ def main() -> int:
         text.count('"npm": "@ai-sdk/openai-compatible"') >= 1,
         "the openrouter provider must use the openai-compatible package",
     )
-    prefs_path = Path(__file__).resolve().parent.parent / "review" / "model-preferences.json"
-    check("model preferences file exists", prefs_path.is_file(), str(prefs_path))
-    prefs = json.loads(prefs_path.read_text()) if prefs_path.is_file() else {}
-    paid_keys = [spec.get("key") for spec in prefs.get("paidFallbacks") or []]
     check(
-        "model preferences have no zai paidFallback keys",
-        "zai" not in paid_keys,
-        f"keys={paid_keys}",
+        "no runtime model discovery",
+        "select-review-models.py" not in text
+        and "model-preferences.json" not in text
+        and "review-model-chain.json" not in text,
+        "the chain is the static REVIEW_MODELS list",
     )
     check(
-        "select-review-models.py invoked in workflow",
-        "select-review-models.py" in text,
+        "pass 1 reads attempts from REVIEW_MODELS",
+        'read -r -a attempts <<< "$REVIEW_MODELS"' in text,
     )
     check(
-        "pass 1 loads attempts from review-model-chain.json",
-        "review-model-chain.json" in text and "mapfile -t attempts" in text,
-    )
-    check(
-        "free-model banner uses chain freeModels list",
-        "freeModels" in text and "mapfile -t FREE_MODELS" in text,
+        "free-model banner matches free ids and the free router",
+        '[[ "$1" == *-free || "$1" == *:free || "$1" == openrouter/openrouter/free ]]' in text,
     )
     check(
         "opencode run closes stdin",
@@ -190,33 +178,25 @@ def main() -> int:
         text.find("Review attempt order:") != -1
         and text.find("Review attempt order:") < text.find("Attempting review with"),
     )
-    max_chain = int(prefs.get("maxChainLength") or 8)
     check(
-        "pass 1 first-attempt timeout is 30m",
-        "limit=30m" in text,
-        "the first attempt needs room for 120 steps",
+        "pass 1 attempt timeout is 15m",
+        "limit=15m" in text and "limit=20m" not in text and "limit=30m" not in text,
+        "a working review finishes in under 10 minutes; a hung model must not hold the job longer",
     )
     check(
-        "pass 1 fallback timeout is 20m",
-        "limit=20m" in text,
-        "fallback attempts need room for 120 steps",
+        "pass 2 timeout is 15m",
+        "timeout 15m opencode run" in text,
     )
-    check(
-        "pass 2 timeout is 20m",
-        "timeout 20m opencode run" in text,
-        "pass 2 uses the same reviewer agent, so the same budget applies",
-    )
-    pass1_minutes = 30 + max(max_chain - 1, 0) * 20
-    pass2_minutes = 20
+    attempt_minutes = 15
     overhead_minutes = 5
-    required_minutes = pass1_minutes + pass2_minutes + overhead_minutes
+    required_minutes = attempt_minutes * len(chain) + attempt_minutes + overhead_minutes
     timeout_match = re.search(r"^\s*timeout-minutes:\s*(\d+)\s*$", text, re.M)
     timeout_minutes = int(timeout_match.group(1)) if timeout_match else 0
     check(
         "job timeout covers max chain plus pass 2",
         timeout_minutes >= required_minutes,
-        f"timeout-minutes is {timeout_minutes}; max chain {max_chain} needs at "
-        f"least {required_minutes}m",
+        f"timeout-minutes is {timeout_minutes}; {len(chain)} attempts plus pass 2 "
+        f"need at least {required_minutes}m",
     )
     check(
         "review is not skipped when paid keys are missing",
@@ -255,9 +235,7 @@ def main() -> int:
     )
     check(
         "pass 2 OpenCode free needs no paid key",
-        '[[ "$verify" == *-free ]]' in text
-        and "preferredFree" in text
-        and 'grep -F -q "\\"$verify\\""' not in text,
+        '[[ "$verify" == *-free ]]' in text,
     )
     check(
         "pass 2 paid OpenCode still needs zen key",
@@ -404,8 +382,8 @@ def main() -> int:
         "review-instructions.md" in text,
     )
     check(
-        "primary model comes from a repo variable",
-        "vars.REVIEW_MODEL_PRIMARY" in text,
+        "model chain comes from a repo variable",
+        "vars.REVIEW_MODELS" in text,
     )
     check("heuristic script invoked", "review-heuristics.py" in text)
     check("review context script invoked", "review-context.py" in text)
