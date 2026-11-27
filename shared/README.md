@@ -17,17 +17,13 @@ imports the shared file directly (it has no imports, and Node strips the
 types; `contracts/package.json` marks the folder as ES modules). Never type
 the list again anywhere: the `provider-lists` lint
 (`.github/scripts/provider-lists/check.mjs`, CI workflow `provider-lists`)
-reads the web, MCP, shared, scripts, Apify and engine sources and fails on a
+reads the web, MCP, shared and scripts sources and fails on a
 hand-typed provider list (any array, union, tuple or `Literal` of three or
 more networks outside this file), on a per-provider ternary/if/switch chain
 (use a `Record<SocialProvider, …>`), and on a per-provider map or select
 string that skips a network (give every network an entry, `null` when it has
 nothing to do, or match a named subset exported here). A new subset is a
 fact of its own: export it here, `satisfies readonly SocialProvider[]`.
-The Python engine (`apps/engine/app/providers.py`) and the stand-alone Apify
-Actor keep one mirror each, and the lint checks the mirror equals
-SOCIAL_PROVIDERS.
-
 `contracts/*.ts` are the shared endpoint contracts: one `defineEndpoint`
 per web API exchange (`method`, `path`, optional `body`/`query`, `response`
 schemas) plus the `BodyOf`/`QueryOf`/`ResponseOf`/`ParamsOf` types derived

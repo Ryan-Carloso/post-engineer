@@ -96,8 +96,6 @@ beforeEach(() => {
   Reflect.deleteProperty(globalThis, '__rateLimitStore');
   vi.clearAllMocks();
   vi.stubGlobal('fetch', fetchMock);
-  vi.stubEnv('MONEYPRINT_API_URL', 'http://engine.test');
-  vi.stubEnv('MONEYPRINT_API_SECRET', 'engine-secret');
   vi.mocked(requireSupabaseSession).mockResolvedValue({ auth: { userId: USER_ID, accessToken: 'k', isApiKey: true }, error: null } as never);
   vi.mocked(createSupabaseServerClient).mockResolvedValue({
     auth: { getUser: vi.fn(async () => ({ data: { user: { id: USER_ID } }, error: null })) },

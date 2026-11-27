@@ -56,7 +56,6 @@ _TS_TEST = re.compile(
     r"(?m)^[ \t]*(?:it|test|describe)(?:\.(?:only|skip|todo|each|concurrent))?"
     r"[ \t]*\([ \t]*['\"]([^'\"]+)['\"]"
 )
-_FAIL_UNDER = re.compile(r"(?m)^fail_under\s*=\s*(\d+)\s*$")
 _THRESHOLD = re.compile(r"threshold:\s*(\d+(?:\.\d+)?)%")
 _TARGET = re.compile(r"target:\s*(\d+(?:\.\d+)?)%")
 _VITEST_FLOOR = re.compile(
@@ -83,7 +82,7 @@ _CONDITIONAL: tuple[tuple[str, re.Pattern[str]], ...] = (
 )
 _PRAGMA = re.compile(r"pragma:\s*no cover|istanbul ignore|c8 ignore|v8 ignore")
 
-_COVERAGE_PATHS = {"codecov.yml", "apps/engine/pyproject.toml"}
+_COVERAGE_PATHS = {"codecov.yml"}
 _MAX_FINDINGS = 40
 
 
@@ -327,11 +326,6 @@ def _coverage_config(change: FileChange) -> list[Finding]:
     if change.status not in {"A", "M", "R"} or not _is_coverage_config(change.path):
         return []
     findings: list[Finding] = []
-    if change.path.endswith("pyproject.toml"):
-        findings.extend(_series(
-            change, "fail_under", _ints(_FAIL_UNDER, change.base_text), _ints(_FAIL_UNDER, change.head_text),
-            weaker=lambda old, new: new < old,
-        ))
     if change.path == "codecov.yml":
         findings.extend(_series(
             change, "threshold", _floats(_THRESHOLD, change.base_text), _floats(_THRESHOLD, change.head_text),
@@ -478,10 +472,6 @@ def _is_comment(line: str) -> bool:
         or stripped.startswith("*")
         or stripped.startswith("/*")
     )
-
-
-def _ints(pattern: re.Pattern[str], text: str) -> list[float]:
-    return [float(value) for value in pattern.findall(text)]
 
 
 def _floats(pattern: re.Pattern[str], text: str) -> list[float]:

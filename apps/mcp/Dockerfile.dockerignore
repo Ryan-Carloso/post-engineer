@@ -12,5 +12,4 @@
 .git
 **/coverage
 **/.stryker-tmp
-apps/engine
 apps/web

@@ -47,3 +47,16 @@ export async function recordSchedulerSuccess(job: string): Promise<void> {
     );
   }
 }
+
+export async function releaseSchedulerLease(job: string, holder: string): Promise<void> {
+  const supabase = createSupabaseServiceClient();
+  const { error } = await supabase.rpc('release_scheduler_lease', {
+    p_job: job,
+    p_holder: holder,
+  });
+  if (error) {
+    throw new Error(
+      `[scheduler-lease] ${job}: release rpc failed: ${redactCredentialFragments(error.message)}`,
+    );
+  }
+}

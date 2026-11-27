@@ -14,7 +14,7 @@ const ignoreIssues = Object.fromEntries(untouchableExports.map((pattern) => [pat
 
 const config: KnipConfig = {
   ignoreIssues,
-  ignoreBinaries: ['uv', 'psql', 'mkfifo', 'vitest', 'cypress', 'next', 'stryker', 'dev'],
+  ignoreBinaries: ['psql', 'mkfifo', 'vitest', 'cypress', 'next', 'stryker', 'dev'],
   workspaces: {
     '.': {
       entry: [

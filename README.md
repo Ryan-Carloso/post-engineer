@@ -45,18 +45,16 @@ accounts get a 7-day free trial.
 
 ## Repository layout
 
-This is a pnpm/Nx monorepo — web, engine, and MCP live together:
+This is a pnpm/Nx monorepo — the web app and the MCP server live together:
 
 ```text
-apps/web/       Next.js 15 dashboard + API routes (TypeScript)
-apps/engine/    Python/FastAPI publish worker
+apps/web/       Next.js 15 dashboard, API routes and the publish scheduler (TypeScript)
 apps/mcp/       MCP server for AI agents (npm package: post-engineer-mcp)
 ```
 
 The web app owns authentication, personas, scheduling, uploads, OAuth, the
-free trial and the API. The engine is the publish worker: every minute it
-publishes the scheduled slots that are due, posting each one back through the
-web upload API (authenticated with a shared secret, `MONEYPRINT_API_SECRET`).
+free trial, the API and publishing: an in-process scheduler claims each due
+slot in Postgres and publishes it through the same upload core the API uses.
 The MCP server talks to the web API with a user API key. Postgres (via
 Supabase) is the system of record: personas, schedules, uploads, OAuth tokens
 (encrypted at rest) and API keys.
@@ -64,7 +62,6 @@ Supabase) is the system of record: personas, schedules, uploads, OAuth tokens
 ## Prerequisites
 
 - **Node.js** 20+ and **pnpm** 10 (`npm install -g pnpm` or via corepack)
-- **Python** 3.11–3.12 and **uv** (`curl -LsSf astral.sh/uv/install.sh | sh`)
 - A **Supabase** project (hosted at [supabase.com](https://supabase.com), or
   self-hosted) with a Postgres database
 - API keys for the external services you plan to use (see the table below)
@@ -92,22 +89,18 @@ pnpm install
    > **Email:** [madebyryandev@gmail.com](mailto:madebyryandev@gmail.com) ·
    > **WhatsApp:** [+351 962 248 268](https://wa.me/351962248268)
 
-### 3. Create the three env files (never commit these)
+### 3. Create the env file (never commit it)
 
-There are exactly three env files by design — copy each from its example and
-fill in your own values:
+There is exactly one env file by design — copy it from its example and fill in
+your own values:
 
 ```bash
 cp apps/web/.env.example apps/web/.env
-cp apps/engine/.env.example apps/engine/.env
-cp apps/engine/config.example.toml apps/engine/config.toml
 ```
 
 | File | Purpose | Key variables |
 |---|---|---|
-| `apps/web/.env` | Web app + API routes | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (server-only), `R2_ACCOUNT_ID` + `R2_ACCESS_KEY_ID` + `R2_SECRET_ACCESS_KEY` (same as the engine; Instagram/Threads/Facebook fetch the video from a presigned R2 URL), `TOKEN_ENCRYPTION_KEY` (generate: `openssl rand -base64 32`), `MONEYPRINT_API_SECRET`, `MONEYPRINT_API_URL`, OAuth client ids/secrets + redirect URIs, Stripe keys, `MCP_OAUTH_PRIVATE_KEY_PEM` |
-| `apps/engine/.env` | Engine runtime | `MONEYPRINT_API_SECRET` (must be **identical** to the web value), `MPT_UPLOAD_API_BASE_URL` (the web URL the publisher posts to), `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (the in-process publish scheduler), optional `DISCORD_WEBHOOK_URL`, optional `RESEND_API_KEY` + `ACCOUNT_BREAK_FROM` (owner failure email), optional `POSTHOG_API_KEY` |
-| `apps/engine/config.toml` | Engine server config | `listen_host`, `listen_port` (default `8080`), `log_level` |
+| `apps/web/.env` | Web app, API routes and scheduler | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (server-only), `R2_ACCOUNT_ID` + `R2_ACCESS_KEY_ID` + `R2_SECRET_ACCESS_KEY` (Instagram/Threads/Facebook fetch the video from a presigned R2 URL), `TOKEN_ENCRYPTION_KEY` (generate: `openssl rand -base64 32`), OAuth client ids/secrets + redirect URIs, Stripe keys, `MCP_OAUTH_PRIVATE_KEY_PEM`, optional `DISCORD_WEBHOOK_URL`, optional `RESEND_API_KEY` + `ACCOUNT_BREAK_FROM` (owner failure email), optional `POSTHOG_API_KEY` |
 
 The app fails fast on missing variables (no silent fallbacks) — see
 `apps/web/.env.example` for the full documented list.
@@ -169,9 +162,6 @@ To connect YouTube, Instagram, or LinkedIn accounts you need OAuth apps whose
 These are yours to create — nothing to register:
 
 ```bash
-# Web <-> engine shared secret (identical in both .env files)
-openssl rand -hex 32
-
 # OAuth token encryption key (AES-256-GCM)
 openssl rand -base64 32
 
@@ -183,21 +173,19 @@ openssl ecparam -genkey -name prime256v1 -noout | openssl pkcs8 -topk8 -nocrypt
 
 ```bash
 pnpm dev:web      # dashboard at http://localhost:3434
-pnpm dev:engine   # video engine API at http://127.0.0.1:8080 (see /docs there)
 ```
 
 Useful commands (all verified against `package.json` / `project.json`):
 
 ```bash
-pnpm test        # all tests (web + engine + MCP, via Nx)
-pnpm lint        # ESLint (web + MCP) + ruff (engine)
-pnpm typecheck   # tsc --noEmit (web + MCP) + engine checks
+pnpm test        # all tests (web + MCP, via Nx)
+pnpm lint        # ESLint (web + MCP)
+pnpm typecheck   # tsc --noEmit (web + MCP)
 pnpm build       # production build of the web app
 pnpm graph       # Nx project graph
 ```
 
 Per-app details: [apps/web/README.md](apps/web/README.md),
-[apps/engine/README.md](apps/engine/README.md),
 [apps/mcp/README.md](apps/mcp/README.md).
 
 ## MCP server
@@ -238,7 +226,6 @@ full tool list, OpenCode timeout tips, and local development).
 | Google OAuth app | For YouTube publishing | OAuth client id/secret | Google Cloud Console |
 | Instagram (Meta) app | For Instagram publishing | OAuth client id/secret | developers.facebook.com |
 | LinkedIn app | For LinkedIn publishing | OAuth client id/secret | developer.linkedin.com |
-| `MONEYPRINT_API_SECRET` | **Yes** | Web ↔ engine auth | Generate yourself (`openssl rand -hex 32`) |
 | `TOKEN_ENCRYPTION_KEY` | **Yes** | Encrypts OAuth tokens at rest | Generate yourself (`openssl rand -base64 32`) |
 | `MCP_OAUTH_PRIVATE_KEY_PEM` | For MCP server OAuth | Signs MCP tokens | Generate yourself (EC key, see above) |
 | PostHog | Optional | Error tracking + product analytics | `NEXT_PUBLIC_POSTHOG_KEY` (browser), `POSTHOG_API_KEY` (server), `NEXT_PUBLIC_POSTHOG_HOST` — see `apps/web/.env.example` |
@@ -256,8 +243,3 @@ Questions, get in touch:
 
 Licensed under the [Apache License, Version 2.0](LICENSE) — see
 [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
-
-## Credits
-
-The engine is derived from [MoneyPrinterTurbo](https://github.com/harry0703/MoneyPrinterTurbo)
-(MIT © 2024 Harry). It now only schedules and publishes.

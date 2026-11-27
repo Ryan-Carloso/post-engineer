@@ -166,11 +166,11 @@ describe('selectSources', () => {
       'apps/mcp/README.md',
       '.github/scripts/x.mjs',
       'supabase/migrations/001.sql',
-      'apps/engine/app/c.py',
-      'apps/engine/test/test_c.py',
+      '.github/scripts/c.py',
+      '.github/scripts/tests/test_c.py',
     ]);
     assert.deepEqual(ts, ['apps/web/lib/a.ts', 'apps/mcp/src/b.ts']);
-    assert.deepEqual(py, ['apps/engine/app/c.py']);
+    assert.deepEqual(py, ['.github/scripts/c.py']);
   });
 });
 

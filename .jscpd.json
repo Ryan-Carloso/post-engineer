@@ -1,6 +1,6 @@
 {
   "format": ["typescript", "tsx", "javascript", "python"],
-  "path": ["apps/web", "apps/mcp", "apps/engine", "shared", "scripts", ".github/scripts"],
+  "path": ["apps/web", "apps/mcp", "shared", "scripts", ".github/scripts"],
   "ignore": [
     "**/node_modules/**",
     "**/dist/**",

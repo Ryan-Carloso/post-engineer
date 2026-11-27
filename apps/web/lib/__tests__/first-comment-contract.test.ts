@@ -12,6 +12,7 @@ import {
 } from '@/lib/contracts/first-comment';
 import { COMMENT_PROVIDERS, SOCIAL_PROVIDERS, isCommentProvider } from '@/lib/contracts/providers';
 import { FIRST_COMMENT_MAX } from '@/lib/first-comment/limits';
+import { appendFirstComment } from '@/lib/first-comment/form-field';
 import { THREADS_SCOPES } from '@/lib/threads';
 import { FACEBOOK_SCOPES } from '@/lib/facebook';
 import { GOOGLE_OAUTH_SCOPES } from '@/lib/youtube';
@@ -94,9 +95,11 @@ describe('comment networks', () => {
   });
 });
 
-describe('the wire field the engine sends', () => {
-  it('is the literal the engine publisher appends', () => {
-    expect(read('apps/engine/app/services/upload_publisher.py')).toContain(`FIRST_COMMENT_FIELD: str = "${FIRST_COMMENT_FIELD}"`);
+describe('the wire field the publisher sends', () => {
+  it('carries the text under FIRST_COMMENT_FIELD for a commenting provider', () => {
+    const form = new FormData();
+    appendFirstComment(form, 'youtube', 'hello');
+    expect(form.get(FIRST_COMMENT_FIELD)).toBe('hello');
   });
 });
 

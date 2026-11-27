@@ -18,6 +18,7 @@ const SCHEDULER_LEASE_FUNCTIONS = new Set([
   'try_acquire_scheduler_lease',
   'get_scheduler_last_success',
   'record_scheduler_success',
+  'release_scheduler_lease',
 ]);
 
 interface ParsedFunction {
@@ -126,10 +127,12 @@ describe('definer-function-grants', () => {
     expect([...definers].sort()).toEqual(
       [
         'apply_subscription_access',
+        'claim_next_publish_slot',
         'claim_owner_alert',
         'claim_publish_ledger',
         'create_share_link',
         'delete_slot_if_not_last',
+        'expire_inactive_ready_slots',
         'find_post_metrics_daily_due',
         'find_post_metrics_due',
         'link_stripe_customer',
