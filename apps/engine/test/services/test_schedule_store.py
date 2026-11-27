@@ -176,18 +176,27 @@ class StoreRequestsTests(unittest.TestCase):
         self.assertEqual(last_params.count(","), 49)
 
     def test_expire_ready_slot_is_conditional_on_ready(self):
+        now = datetime(2026, 9, 6, 12, 0, tzinfo=timezone.utc)
         self.requests.request.return_value = _response(json_data=[{"id": "slot-1", "status": "expired"}])
-        self.assertTrue(self.store.expire_ready_slot("slot-1"))
+        self.assertTrue(self.store.expire_ready_slot("slot-1", now))
         method, url, kwargs = self._last_call()
         self.assertEqual(method, "PATCH")
         self.assertEqual(url, "https://supabase.example/rest/v1/scheduled_posts")
-        self.assertEqual(kwargs["params"], {"id": "eq.slot-1", "status": "eq.ready"})
+        self.assertEqual(kwargs["params"], {"id": "eq.slot-1", "status": "eq.ready", "slot_at": f"lte.{now.isoformat()}"})
         self.assertEqual(kwargs["json"], {"status": "expired", "publish_not_before": None})
         self.assertEqual(kwargs["headers"]["Prefer"], "return=representation")
 
     def test_expire_ready_slot_returns_false_when_another_tick_won(self):
+        now = datetime(2026, 9, 6, 12, 0, tzinfo=timezone.utc)
         self.requests.request.return_value = _response(json_data=[])
-        self.assertFalse(self.store.expire_ready_slot("slot-1"))
+        self.assertFalse(self.store.expire_ready_slot("slot-1", now))
+
+    def test_expire_ready_slot_skips_a_slot_rescheduled_to_the_future(self):
+        now = datetime(2026, 9, 6, 12, 0, tzinfo=timezone.utc)
+        self.requests.request.return_value = _response(json_data=[])
+        self.assertFalse(self.store.expire_ready_slot("slot-1", now))
+        _, _, kwargs = self._last_call()
+        self.assertEqual(kwargs["params"]["slot_at"], f"lte.{now.isoformat()}")
 
     def test_non_dict_rows_filtered(self):
         self.requests.request.return_value = _response(json_data=[{"id": "s1"}, "junk", 42])

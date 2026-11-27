@@ -199,12 +199,20 @@ class ScheduleStore:
                     result[str(row["id"])] = row.get("access_until")
         return result
 
-    def expire_ready_slot(self, slot_id: str) -> bool:
+    def expire_ready_slot(self, slot_id: str, now_utc: datetime) -> bool:
+        """Atomic ready→expired transition for a due slot whose owner lost access.
+
+        Conditional PATCH: only transitions if the slot is STILL 'ready'
+        AND still due (slot_at <= now). The due re-check closes the
+        reschedule race (issue #555), same as claim_ready_slot: a ready slot
+        rescheduled to the future between the due snapshot and this call
+        must not expire at its old time.
+        """
         rows = self._request(
             "PATCH",
             "scheduled_posts",
             json={"status": SLOT_EXPIRED, "publish_not_before": None},
-            params={"id": f"eq.{slot_id}", "status": f"eq.{SLOT_READY}"},
+            params={"id": f"eq.{slot_id}", "status": f"eq.{SLOT_READY}", "slot_at": f"lte.{now_utc.isoformat()}"},
             headers={**self._headers, "Prefer": "return=representation"},
         )
         return bool(rows)

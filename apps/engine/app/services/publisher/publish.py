@@ -109,7 +109,7 @@ class BatchPublisher:
         for slot in res_active:
             published += self._publish_one(slot, now, resumed=True)
         for slot in due_inactive:
-            if self._expire_slot(slot):
+            if self._expire_slot(slot, now):
                 expired += 1
         skipped = len(due_unknown) + len(res_unknown) + len(res_inactive)
         if published or expired or skipped:
@@ -143,11 +143,11 @@ class BatchPublisher:
             return None
         return ("videos", storage_path)
 
-    def _expire_slot(self, slot: dict[str, Any]) -> bool:
+    def _expire_slot(self, slot: dict[str, Any], now: datetime) -> bool:
         expire = getattr(self.store, "expire_ready_slot", None)
         if callable(expire):
             try:
-                won = bool(expire(str(slot["id"])))
+                won = bool(expire(str(slot["id"]), now))
             except Exception as exc:
                 logger.warning(
                     f"publisher: slot {slot['id']} expire failed: {notify_module.safe_diagnostic(exc)}"

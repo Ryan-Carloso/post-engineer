@@ -91,7 +91,7 @@ class AccessPauseTests(unittest.TestCase):
             self.assertEqual(publisher.run(NOW), 0)
             store.ready_due_slots.return_value = []
             self.assertEqual(publisher.run(NOW), 0)
-        store.expire_ready_slot.assert_called_once_with("slot-1")
+        store.expire_ready_slot.assert_called_once_with("slot-1", NOW)
         notify_owner.assert_not_called()
         self.assertFalse(any(call.args and call.args[0] == "video_publish_failed" for call in track.call_args_list))
 
@@ -101,7 +101,7 @@ class AccessPauseTests(unittest.TestCase):
         with patch.object(BatchPublisher, "_publish_one", return_value=1) as publish_one:
             self.assertEqual(publisher.run(NOW), 0)
         publish_one.assert_not_called()
-        store.expire_ready_slot.assert_called_once_with("slot-1")
+        store.expire_ready_slot.assert_called_once_with("slot-1", NOW)
 
     def test_refunded_subscription_expires_a_due_slot(self):
         store = _store(due=[_slot()], access={"user-1": (NOW - timedelta(hours=3)).isoformat()})
@@ -109,7 +109,7 @@ class AccessPauseTests(unittest.TestCase):
         with patch.object(BatchPublisher, "_publish_one", return_value=1) as publish_one:
             self.assertEqual(publisher.run(NOW), 0)
         publish_one.assert_not_called()
-        store.expire_ready_slot.assert_called_once_with("slot-1")
+        store.expire_ready_slot.assert_called_once_with("slot-1", NOW)
 
     def test_expire_is_terminal_only_when_claim_wins(self):
         store = _store(due=[_slot()], access={"user-1": PAST})
@@ -176,14 +176,14 @@ class AccessPauseTests(unittest.TestCase):
         publisher = _publisher(store)
         publisher.run(NOW)
         store.remove_storage_object.assert_not_called()
-        store.expire_ready_slot.assert_called_once_with("slot-1")
+        store.expire_ready_slot.assert_called_once_with("slot-1", NOW)
 
     def test_expire_survives_an_upload_lookup_failure_without_cleanup(self):
         store = _store(due=[_slot(media_kind="upload")], access={"user-1": PAST})
         store.get_video_upload.side_effect = RuntimeError("db down")
         publisher = _publisher(store)
         self.assertEqual(publisher.run(NOW), 0)
-        store.expire_ready_slot.assert_called_once_with("slot-1")
+        store.expire_ready_slot.assert_called_once_with("slot-1", NOW)
         store.remove_storage_object.assert_not_called()
 
     def test_expire_skips_cleanup_when_the_upload_row_is_not_a_dict(self):
