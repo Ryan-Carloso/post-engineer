@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { PublishUploadedVideoInput, PublishVideoDirectInput } from './client-types.js';
-import { PUBLISH_ACCOUNT_FIELDS, isTitleProvider } from './contracts/providers.js';
+import { FIRST_COMMENT_FIELD } from './contracts/first-comment.js';
+import { PUBLISH_ACCOUNT_FIELDS, isCommentProvider, isTitleProvider } from './contracts/providers.js';
 
 export type DirectPublishFieldInput = PublishVideoDirectInput | PublishUploadedVideoInput;
 
@@ -11,6 +12,7 @@ export interface DirectPublishFields {
   privacyStatus: string;
   caption: string;
   boardId: string;
+  firstComment: string;
 }
 
 function requireTitleAndDescription(input: DirectPublishFieldInput): { title: string; description: string } {
@@ -61,7 +63,8 @@ export function requireDirectPublishFields(input: DirectPublishFieldInput): Dire
     }
     caption = input.caption.trim();
   }
-  return { title, description, tags, privacyStatus, caption, boardId };
+  const firstComment = input.firstComment?.trim() ?? '';
+  return { title, description, tags, privacyStatus, caption, boardId, firstComment };
 }
 
 export function buildDirectPublishForm(
@@ -72,6 +75,9 @@ export function buildDirectPublishForm(
 ): FormData {
   const formData = new FormData();
   formData.append('provider', input.provider);
+  if (fields.firstComment !== '' && isCommentProvider(input.provider)) {
+    formData.append(FIRST_COMMENT_FIELD, fields.firstComment);
+  }
   if (input.provider === 'youtube') {
     formData.append('video', videoBlob, filename);
     formData.append('title', fields.title);

@@ -38,6 +38,7 @@ export interface HeldSlot {
   media_ref: string | null;
   media_kind: string | null;
   media_content_type: string | null;
+  first_comment: string | null;
 }
 
 interface PublishScheduleRow {
@@ -219,6 +220,7 @@ export async function publishHeldSlot(options: {
     tags: undefined,
     privacyStatus: undefined,
     caption: undefined,
+    firstComment: slot.first_comment ?? null,
     promptVersionId: undefined,
     idempotencyKey: undefined,
   };

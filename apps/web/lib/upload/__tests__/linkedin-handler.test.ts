@@ -70,6 +70,15 @@ function mockOrgTokens() {
   });
 }
 
+let commentResponse: () => Response = () =>
+  new Response(JSON.stringify({ commentUrn: 'urn:li:comment:(urn:li:share:789,1)' }), { status: 201 });
+
+function commentCalls(): Array<{ url: string; body: unknown }> {
+  return mockFetch.mock.calls
+    .filter(([input]) => String(input).includes('/socialActions/'))
+    .map(([input, init]) => ({ url: String(input), body: JSON.parse(String((init as RequestInit).body)) as unknown }));
+}
+
 function mockHappyFetch() {
   mockFetch.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -96,6 +105,9 @@ function mockHappyFetch() {
     }
     if (url.includes('/rest/posts') && method === 'POST') {
       return new Response(JSON.stringify({ id: 'urn:li:share:789' }), { status: 201 });
+    }
+    if (url.includes('/rest/socialActions/') && url.endsWith('/comments') && method === 'POST') {
+      return commentResponse();
     }
     return new Response('{}', { status: 404 });
   });
@@ -267,5 +279,53 @@ describe('handleLinkedinUpload', () => {
     expect(results[0]).toMatchObject({ success: false, errorCode: 'token_missing' });
     expect(markAccountNeedsReconnect).toHaveBeenCalledWith(USER_ID, 'linkedin', MEMBER_ID);
     expect(mockFetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('handleLinkedinUpload first comment', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFetch.mockReset();
+    mockMemberTokens();
+    mockHappyFetch();
+    commentResponse = () =>
+      new Response(JSON.stringify({ commentUrn: 'urn:li:comment:(urn:li:share:789,1)' }), { status: 201 });
+  });
+
+  it('comments on the new post URN as the member', async () => {
+    const res = await handleLinkedinUpload(formData({ firstComment: 'Link in bio' }), USER_ID);
+    expect(res.results[0]).toEqual({ accountId: MEMBER_ID, success: true, postId: 'urn:li:share:789' });
+    expect(commentCalls()).toEqual([
+      {
+        url: 'https://api.linkedin.com/rest/socialActions/urn%3Ali%3Ashare%3A789/comments',
+        body: { actor: `urn:li:person:${MEMBER_ID}`, object: 'urn:li:share:789', message: { text: 'Link in bio' } },
+      },
+    ]);
+  });
+
+  it('does not comment without a first comment', async () => {
+    await handleLinkedinUpload(formData(), USER_ID);
+    expect(commentCalls()).toEqual([]);
+  });
+
+  it('keeps the post published and asks to reconnect on a 403', async () => {
+    commentResponse = () => new Response(JSON.stringify({ status: 403, message: 'Not enough permissions' }), { status: 403 });
+    const res = await handleLinkedinUpload(formData({ firstComment: 'Link in bio' }), USER_ID);
+    expect(res.success).toBe(true);
+    expect(res.results[0]).toMatchObject({ success: true, postId: 'urn:li:share:789', warnings: ['FIRST_COMMENT_RECONNECT_REQUIRED'] });
+    expect(trackApiEvent).not.toHaveBeenCalled();
+    expect(markAccountNeedsReconnect).not.toHaveBeenCalled();
+  });
+
+  it('warns FIRST_COMMENT_FAILED on a server error', async () => {
+    commentResponse = () => new Response('{}', { status: 500 });
+    const res = await handleLinkedinUpload(formData({ firstComment: 'Link in bio' }), USER_ID);
+    expect(res.results[0].warnings).toEqual(['FIRST_COMMENT_FAILED']);
+  });
+
+  it('comments as the organization when the account is one', async () => {
+    mockOrgTokens();
+    await handleLinkedinUpload(formData({ linkedinAccountIds: [ORG_URN], firstComment: 'Link in bio' }), USER_ID);
+    expect(commentCalls()[0].body).toEqual({ actor: ORG_URN, object: 'urn:li:share:789', message: { text: 'Link in bio' } });
   });
 });

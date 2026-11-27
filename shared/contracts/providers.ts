@@ -50,6 +50,13 @@ export function isAiLabelProvider(value: unknown): value is AiLabelProvider {
   return typeof value === 'string' && (AI_LABEL_PROVIDERS as readonly string[]).includes(value);
 }
 
+export const COMMENT_PROVIDERS = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'telegram'] as const satisfies readonly SocialProvider[];
+export type CommentProvider = (typeof COMMENT_PROVIDERS)[number];
+
+export function isCommentProvider(value: unknown): value is CommentProvider {
+  return typeof value === 'string' && (COMMENT_PROVIDERS as readonly string[]).includes(value);
+}
+
 export const PUBLISH_ACCOUNT_FIELDS: Record<SocialProvider, string> = {
   youtube: 'accountIds',
   instagram: 'igAccountIds',

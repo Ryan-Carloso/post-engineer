@@ -9,6 +9,9 @@ import {
   createLinkedInOrganizationPost,
   uploadLinkedInImage,
 } from '@/lib/linkedin';
+import { attemptFirstComment, readFirstCommentField } from '@/lib/first-comment/attempt';
+import { postLinkedInFirstComment } from '@/lib/first-comment/linkedin';
+import type { FirstCommentWarningCode } from '@/lib/contracts/first-comment';
 import { accountFailure } from '@/lib/upload/account-error';
 import { rememberDeadCredential, reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
@@ -22,6 +25,7 @@ interface LinkedinAccountResult {
   postId?: string;
   error?: string;
   errorCode?: string;
+  warnings?: FirstCommentWarningCode[];
 }
 
 export interface LinkedinUploadResponse {
@@ -34,6 +38,10 @@ export async function handleLinkedinUpload(
   ownerUserId: string,
 ): Promise<LinkedinUploadResponse> {
   const accountIds = getAccountIdsFromFormData(formData, 'linkedinAccountIds');
+  const firstComment = readFirstCommentField(formData);
+  if (!firstComment.ok) {
+    return { success: false, results: [accountFailure('', firstComment.error, 'publish_rejected')] };
+  }
   const captionRaw = formData.get('caption');
   const rawFile = formData.get('video');
 
@@ -94,7 +102,15 @@ export async function handleLinkedinUpload(
         : await createLinkedInMemberPost(accessToken, accountId, mediaUrn, captionRaw.trim());
 
       await touchSocialAccount(supabase, ownerUserId, 'linkedin', accountId);
-      results.push({ accountId, success: true, postId });
+      results.push({
+        accountId,
+        success: true,
+        postId,
+        ...(await attemptFirstComment({ provider: 'linkedin', accountId, text: firstComment.text }, async (text) => {
+          await postLinkedInFirstComment({ accessToken, actorUrn: ownerUrn, postUrn: postId, text });
+          return 'posted';
+        })),
+      });
     } catch (error) {
       reportAccountUnauthorized('linkedin', accountId, ownerUserId, error);
       results.push(accountFailure(accountId, error));

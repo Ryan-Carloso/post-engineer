@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { detectMagicMimeType } from '@/lib/media/magic-bytes';
+import { checkFirstComment } from '@/lib/contracts/first-comment';
 import { IMAGE_PROVIDERS, isImageProvider } from '@/lib/contracts/providers';
 import { MAX_IMAGE_UPLOAD_BYTES } from '@/lib/contracts/videos';
 import { resolveTitle } from './request-title';
@@ -63,6 +64,7 @@ const BodySchema = z
     tags: z.array(z.string()).optional(),
     privacyStatus: z.string().optional(),
     caption: z.string().optional(),
+    firstComment: z.string().nullable().optional(),
     promptVersionId: z.string().regex(UUID_PATTERN, 'promptVersionId must be a UUID.').optional(),
     idempotencyKey: z.string().optional(),
   })
@@ -85,6 +87,7 @@ export interface PublishExistingRequest {
   tags: string[] | undefined;
   privacyStatus: string | undefined;
   caption: string | undefined;
+  firstComment: string | null;
   promptVersionId: string | undefined;
   idempotencyKey: string | undefined;
 }
@@ -135,6 +138,9 @@ export function checkPublishExistingSemantics(
   const description = resolveDescription(input.description);
   if (!description.ok) issues.push(...description.issues);
 
+  const firstComment = checkFirstComment(input.firstComment);
+  if (!firstComment.ok) issues.push(invalid(firstComment.error, 'firstComment'));
+
   const providers = validateProviders(input.publishing.providers);
   if (!providers.ok) issues.push(...providers.issues);
   const board = validatePinterestBoard(input.publishing.providers, input.publishing.pinterestBoardId);
@@ -166,7 +172,7 @@ export function checkPublishExistingSemantics(
     }
   }
 
-  if (issues.length > 0 || !title.ok || !description.ok || !providers.ok || !board.ok) {
+  if (issues.length > 0 || !title.ok || !description.ok || !providers.ok || !board.ok || !firstComment.ok) {
     return { ok: false, issues };
   }
   return {
@@ -186,6 +192,7 @@ export function checkPublishExistingSemantics(
       tags: input.tags,
       privacyStatus: input.privacyStatus,
       caption: input.caption,
+      firstComment: firstComment.value,
       promptVersionId: input.promptVersionId,
       idempotencyKey: input.idempotencyKey,
     },

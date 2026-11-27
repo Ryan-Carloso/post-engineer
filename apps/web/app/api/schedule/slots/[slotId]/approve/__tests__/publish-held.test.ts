@@ -85,6 +85,7 @@ const awaitingSlot: HeldSlot = {
   media_ref: 'upload-1',
   media_kind: 'upload',
   media_content_type: 'video/mp4',
+  first_comment: null,
 };
 
 const scheduleRow = {
@@ -217,6 +218,17 @@ describe('publishHeldSlot', () => {
     const heldCtx = mockPublishHeldMedia.mock.calls[0]?.[0] as { aiLabel?: boolean; uploadRow?: { id?: string } } | undefined;
     expect(heldCtx?.aiLabel).toBe(true);
     expect(heldCtx?.uploadRow?.id).toBe('upload-1');
+  });
+
+  it('forwards the held slot first comment to the publish input', async () => {
+    const { client } = mockServiceClient();
+    const slot = { ...awaitingSlot, first_comment: 'Link in bio' };
+
+    const response = await publishHeldSlot({ request: request(), serviceClient: client as never, userId: USER_ID, slot, route: ROUTE });
+
+    expect(response.status).toBe(200);
+    const heldCtx = mockPublishHeldMedia.mock.calls[0]?.[0] as { input?: { firstComment?: string | null } } | undefined;
+    expect(heldCtx?.input?.firstComment).toBe('Link in bio');
   });
 
   it('marks the slot failed when every provider fails, without a published_at', async () => {

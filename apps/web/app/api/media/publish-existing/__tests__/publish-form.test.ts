@@ -12,6 +12,7 @@ const BASE_FIELDS = {
   boardId: '123456',
   accountIds: ['acc-1', 'acc-2'],
   aiLabel: true,
+  firstComment: null,
 };
 
 function formEntries(form: FormData): Array<[string, string]> {
@@ -102,5 +103,23 @@ describe('buildExistingMediaForm', () => {
     expect(entries).toContainEqual(['title', 'Porto walk']);
     expect(entries).toContainEqual(['description', 'Walking the riverside at sunset.']);
     expect(entries).toContainEqual(['rumbleAccountIds', 'acc-1']);
+  });
+
+  it.each(['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'telegram'] as const)(
+    'sends the first comment to %s',
+    (provider) => {
+      const form = buildExistingMediaForm(provider, { ...BASE_FIELDS, firstComment: 'Link in bio' }, Buffer.from([1, 2]), 'video/mp4');
+      expect(formEntries(form)).toContainEqual(['firstComment', 'Link in bio']);
+    },
+  );
+
+  it.each(['pinterest', '3speak', 'rumble', 'fanvue'] as const)('leaves the first comment out for %s, which has no comment API', (provider) => {
+    const form = buildExistingMediaForm(provider, { ...BASE_FIELDS, firstComment: 'Link in bio' }, Buffer.from([1, 2]), 'video/mp4');
+    expect(form.has('firstComment')).toBe(false);
+  });
+
+  it('sends no first comment field when there is none', () => {
+    const form = buildExistingMediaForm('youtube', BASE_FIELDS, Buffer.from([1, 2]), 'video/mp4');
+    expect(form.has('firstComment')).toBe(false);
   });
 });

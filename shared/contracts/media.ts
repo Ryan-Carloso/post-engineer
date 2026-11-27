@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { defineEndpoint } from './endpoint.js';
+import { FIRST_COMMENT_WARNING_CODES } from './first-comment.js';
 
 export const DirectPublishAccountResultSchema = z.object({
   accountId: z.string(),
@@ -10,6 +11,7 @@ export const DirectPublishAccountResultSchema = z.object({
   permalink: z.string().optional(),
   error: z.string().optional(),
   errorCode: z.string().optional(),
+  warnings: z.array(z.enum(FIRST_COMMENT_WARNING_CODES)).optional(),
 });
 export type DirectPublishAccountResult = z.infer<typeof DirectPublishAccountResultSchema>;
 

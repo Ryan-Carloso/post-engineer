@@ -657,6 +657,87 @@ describe('POST /api/media/publish-existing', () => {
     );
   });
 
+  it('stores the first comment on the scheduled slot', async () => {
+    const client = fakeSupabase({ socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }] });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    mockUploadStore({ uploadRow: uploadRow() });
+
+    const response = await POST(
+      jsonRequest({
+        media: { kind: 'upload', uploadId: UPLOAD_ID },
+        title: 'Ready video',
+        description: 'Edited outside.',
+        publishing: {
+          mode: 'scheduled',
+          providers: ['youtube'],
+          accounts: { youtube: ['UC1'] },
+          schedule: { publishAt: futurePublishAt(48), timezone: 'UTC' },
+        },
+        tags: ['ready'],
+        privacyStatus: 'public',
+        firstComment: '  Link in bio  ',
+        idempotencyKey: 'key-comment',
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect((client.__insertedSlots[0] as Record<string, unknown>).first_comment).toBe('Link in bio');
+  });
+
+  it('stores no first comment when none is sent', async () => {
+    const client = fakeSupabase({ socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }] });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    mockUploadStore({ uploadRow: uploadRow() });
+    await POST(
+      jsonRequest({
+        media: { kind: 'upload', uploadId: UPLOAD_ID },
+        title: 'Ready video',
+        description: 'Edited outside.',
+        publishing: { mode: 'scheduled', providers: ['youtube'], accounts: { youtube: ['UC1'] }, schedule: { publishAt: futurePublishAt(48), timezone: 'UTC' } },
+        tags: ['ready'],
+        privacyStatus: 'public',
+        idempotencyKey: 'key-no-comment',
+      }),
+    );
+    expect((client.__insertedSlots[0] as Record<string, unknown>).first_comment).toBeNull();
+  });
+
+  it('answers 400 for an over-length first comment before touching the upload', async () => {
+    const response = await POST(
+      jsonRequest({
+        media: { kind: 'upload', uploadId: UPLOAD_ID },
+        title: 'Ready video',
+        description: 'Edited outside.',
+        publishing: { mode: 'asap', providers: ['youtube'], accounts: { youtube: ['UC1'] } },
+        tags: ['ready'],
+        privacyStatus: 'public',
+        firstComment: 'x'.repeat(1001),
+      }),
+    );
+    expect(response.status).toBe(400);
+    expect(JSON.stringify(await response.json())).toContain('firstComment');
+    expect(vi.mocked(claimUploadForPublish)).not.toHaveBeenCalled();
+    expect(vi.mocked(dispatchPublish)).not.toHaveBeenCalled();
+  });
+
+  it('sends the first comment to the handler form of an ASAP publish', async () => {
+    const client = fakeSupabase({ socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }, { provider: 'pinterest', provider_account_id: 'p1' }] });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    mockUploadStore({ uploadRow: uploadRow() });
+    await POST(
+      jsonRequest({
+        media: { kind: 'upload', uploadId: UPLOAD_ID },
+        title: 'Ready video',
+        description: 'Edited outside.',
+        publishing: { mode: 'asap', providers: ['youtube'], accounts: { youtube: ['UC1'] } },
+        tags: ['ready'],
+        privacyStatus: 'public',
+        firstComment: 'Link in bio',
+      }),
+    );
+    const form = vi.mocked(dispatchPublish).mock.calls[0]?.[1] as FormData;
+    expect(form.get('firstComment')).toBe('Link in bio');
+  });
+
   it('schedules an approval-key upload as awaiting_approval instead of ready', async () => {
     const publishAt = futurePublishAt(48);
     const client = fakeSupabase({

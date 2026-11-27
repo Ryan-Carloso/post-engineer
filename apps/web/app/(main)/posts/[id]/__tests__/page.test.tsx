@@ -29,6 +29,10 @@ vi.mock('@/lib/api', () => ({
   useDeleteSlotMutation: vi.fn(),
 }));
 
+vi.mock('@/lib/api-first-comment', () => ({
+  useUpdateFirstCommentMutation: vi.fn(),
+}));
+
 vi.mock('@/lib/access-query', () => ({
   useAccessQuery: vi.fn(() => ({ data: { active: true, endsAt: '2030-01-01T00:00:00.000Z', daysLeft: 1, reason: 'trial' } })),
 }));
@@ -49,6 +53,8 @@ vi.mock('@/lib/fanvue-accounts', () => ({
 }));
 
 vi.mock('@/lib/ui', () => ({
+  INPUT_CLASS: 'input-class',
+  SECTION_LABEL_CLASS: 'section-label-class',
   SpinnerIcon: () => <span data-testid="icon-spinner" />,
   ExternalLinkIcon: () => <span data-testid="icon-external-link" />,
   GoogleIcon: () => <span data-testid="icon-google" />,
@@ -77,6 +83,7 @@ import {
 import { useParams } from 'next/navigation';
 import { useI18n } from '@/lib/i18n/provider';
 import { useRescheduleSlotMutation } from '@/lib/api-slot-reschedule';
+import { useUpdateFirstCommentMutation } from '@/lib/api-first-comment';
 
 const SLOT_SCHEDULE = {
   id: 's1',
@@ -105,6 +112,8 @@ function slotPayload(
       publishLinks: [],
       userNotices: [],
       providerFailures: [],
+      firstComment: null,
+      commentWarnings: [],
       postUrl: null,
       ...overrides,
     },
@@ -184,6 +193,15 @@ function mockMutations() {
       options?.onSuccess?.();
     }),
     mutateAsync: vi.fn().mockResolvedValue(undefined),
+    isPending: false,
+    isError: false,
+    error: null,
+  } as never);
+  vi.mocked(useUpdateFirstCommentMutation).mockReturnValue({
+    mutate: vi.fn((...args: unknown[]) => {
+      const options = args[args.length - 1] as { onSuccess?: () => void } | undefined;
+      options?.onSuccess?.();
+    }),
     isPending: false,
     isError: false,
     error: null,
@@ -632,4 +650,111 @@ describe('PostDetailPage — status badge', () => {
     expect(badge.className).toContain(style);
   });
 
+});
+
+describe('PostDetailPage — first comment', () => {
+  function updateMutate(): ReturnType<typeof vi.fn> {
+    return vi.mocked(useUpdateFirstCommentMutation).mock.results[0].value.mutate as ReturnType<typeof vi.fn>;
+  }
+
+  it('offers the first comment next to the caption of a ready slot, with the networks that take it', async () => {
+    const user = userEvent.setup();
+    render(<DetailPage />);
+
+    expect(screen.getByText('posts.firstCommentNone')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'posts.editFirstComment' }));
+    expect(screen.getByRole('textbox', { name: 'posts.firstCommentLabel' })).toHaveValue('');
+    expect(mockT).toHaveBeenCalledWith('posts.firstCommentHint', {
+      networks: 'YouTube, Instagram, Bluesky, LinkedIn, Threads, Facebook, Telegram',
+      max: 1000,
+    });
+  });
+
+  it('saves the trimmed first comment through its own mutation', async () => {
+    const user = userEvent.setup();
+    render(<DetailPage />);
+
+    await user.click(screen.getByRole('button', { name: 'posts.editFirstComment' }));
+    await user.type(screen.getByRole('textbox', { name: 'posts.firstCommentLabel' }), '  Link in bio ');
+    await user.click(screen.getAllByRole('button', { name: 'posts.save' })[0]);
+
+    expect(updateMutate()).toHaveBeenCalledWith({ slotId: 'u1', firstComment: 'Link in bio' }, expect.anything());
+  });
+
+  it('clears the first comment when the text is emptied', async () => {
+    const user = userEvent.setup();
+    mockQueries({ slot: slotPayload({ firstComment: 'Old comment' }) });
+    render(<DetailPage />);
+
+    expect(screen.getByText('Old comment')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'posts.editFirstComment' }));
+    await user.clear(screen.getByRole('textbox', { name: 'posts.firstCommentLabel' }));
+    await user.click(screen.getAllByRole('button', { name: 'posts.save' })[0]);
+
+    expect(updateMutate()).toHaveBeenCalledWith({ slotId: 'u1', firstComment: null }, expect.anything());
+  });
+
+  it('shows the save error and keeps the editor open when the mutation fails', async () => {
+    const user = userEvent.setup();
+    vi.mocked(useUpdateFirstCommentMutation).mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      isError: true,
+      error: new Error('Failed to fetch'),
+    } as never);
+    render(<DetailPage />);
+
+    await user.click(screen.getByRole('button', { name: 'posts.editFirstComment' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('posts.firstCommentSaveError');
+    expect(screen.queryByText('Failed to fetch')).not.toBeInTheDocument();
+  });
+
+  it('shows the comment read-only, without an edit button, once the slot is published', () => {
+    mockQueries({ slot: slotPayload({ id: 'r1', status: 'published', firstComment: 'Link in bio' }) });
+    vi.mocked(useParams).mockReturnValue({ id: 'r1' });
+    render(<DetailPage />);
+
+    expect(screen.getByText('Link in bio')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'posts.editFirstComment' })).not.toBeInTheDocument();
+  });
+
+  it('shows nothing for a published slot that had no first comment', () => {
+    mockQueries({ slot: slotPayload({ id: 'r1', status: 'published' }) });
+    vi.mocked(useParams).mockReturnValue({ id: 'r1' });
+    render(<DetailPage />);
+
+    expect(screen.queryByText('posts.firstCommentLabel')).not.toBeInTheDocument();
+  });
+
+  it('renders each comment warning amber with its own message and provider', () => {
+    mockQueries({
+      slot: slotPayload({
+        id: 'r1',
+        status: 'published',
+        firstComment: 'Link in bio',
+        commentWarnings: [
+          { provider: 'youtube', accountId: 'UC1', code: 'FIRST_COMMENT_RECONNECT_REQUIRED' },
+          { provider: 'telegram', accountId: 'c1', code: 'FIRST_COMMENT_UNSUPPORTED_CHAT' },
+          { provider: 'facebook', accountId: 'f1', code: 'FIRST_COMMENT_FAILED' },
+          { provider: 'threads', accountId: 't1', code: 'FIRST_COMMENT_TOO_LONG' },
+        ],
+      }),
+    });
+    vi.mocked(useParams).mockReturnValue({ id: 'r1' });
+    const { container } = render(<DetailPage />);
+
+    const shown = [...container.querySelectorAll('[data-first-comment-warning]')];
+    expect(shown.map((node) => node.getAttribute('data-first-comment-warning'))).toEqual([
+      'FIRST_COMMENT_RECONNECT_REQUIRED',
+      'FIRST_COMMENT_UNSUPPORTED_CHAT',
+      'FIRST_COMMENT_FAILED',
+      'FIRST_COMMENT_TOO_LONG',
+    ]);
+    for (const node of shown) {
+      expect(node.className).toContain('bg-warning-soft');
+      expect(node.className).not.toContain('destructive');
+    }
+    expect(mockT).toHaveBeenCalledWith('posts.commentWarningReconnect', { provider: 'YouTube' });
+    expect(mockT).toHaveBeenCalledWith('posts.commentWarningUnsupportedChat', { provider: 'Telegram' });
+  });
 });

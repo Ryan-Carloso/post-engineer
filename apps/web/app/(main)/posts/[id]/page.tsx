@@ -28,6 +28,7 @@ import { Button } from '@/components/ui/button';
 import { STATUS_KEY, STATUS_STYLE, slotDisplayStatus } from '../status';
 import { useAccessQuery } from '@/lib/access-query';
 import { PostFailureNotice } from './post-failure-notice';
+import { FirstCommentSection } from './first-comment-section';
 
 export default function PostDetailPage() {
   const { t, locale } = useI18n();
@@ -262,6 +263,13 @@ export const SlotDetail = ({
           </p>
         )}
       </div>
+
+      <FirstCommentSection
+        slotId={slot.id}
+        firstComment={slot.firstComment}
+        warnings={slot.commentWarnings}
+        canEdit={canEdit}
+      />
 
       <PostIdSection postId={slot.id} />
 

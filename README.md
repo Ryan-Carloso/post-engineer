@@ -132,11 +132,13 @@ To connect YouTube, Instagram, or LinkedIn accounts you need OAuth apps whose
   The "Access the Threads API" use case of the Meta app has its own App ID and
   App Secret (`THREADS_CLIENT_ID` / `THREADS_CLIENT_SECRET`), different from
   Instagram's. Add the Threads product (`threads_basic`,
-  `threads_content_publish` and `threads_manage_insights` permissions) and
+  `threads_content_publish`, `threads_manage_insights` and
+  `threads_manage_replies` permissions) and
   register `THREADS_REDIRECT_URI`.
 - **Facebook Pages** — [Meta for Developers](https://developers.facebook.com):
   add Facebook Login for Business with the `pages_show_list`,
-  `pages_read_engagement` and `pages_manage_posts` permissions, set
+  `pages_read_engagement`, `pages_manage_posts` and
+  `pages_manage_engagement` permissions, set
   `FACEBOOK_CLIENT_ID` / `FACEBOOK_CLIENT_SECRET` and register
   `FACEBOOK_REDIRECT_URI`. Connecting once adds every Page the user manages.
 - **Fanvue** — [Fanvue Developer Area](https://www.fanvue.com/dev): create an

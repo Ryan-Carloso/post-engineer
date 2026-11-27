@@ -7,6 +7,7 @@ vi.mock('@/lib/logger', () => ({ logger: { warn: vi.fn(), info: vi.fn(), error: 
 vi.mock('@/lib/analytics', () => ({ trackApiEvent: vi.fn() }));
 vi.mock('@/lib/account-needs-reconnect', () => ({ markAccountNeedsReconnect: vi.fn(async () => undefined) }));
 vi.mock('@/lib/owner-alert-mail', () => ({ notifyAccountBreak: vi.fn(async () => undefined) }));
+vi.mock('@/lib/first-comment/telegram', () => ({ postTelegramFirstComment: vi.fn() }));
 vi.mock('@/lib/telegram', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/telegram')>()),
   publishToTelegram: vi.fn(),
@@ -15,6 +16,7 @@ vi.mock('@/lib/telegram', async (importOriginal) => ({
 import { trackApiEvent } from '@/lib/analytics';
 import { markAccountNeedsReconnect } from '@/lib/account-needs-reconnect';
 import { TelegramError } from '@/lib/errors';
+import { postTelegramFirstComment } from '@/lib/first-comment/telegram';
 import { handleTelegramUpload } from '@/lib/upload/telegram-handler';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
 import { publishToTelegram, TELEGRAM_CAPTION_MAX_LENGTH, TELEGRAM_FILE_MAX_BYTES } from '@/lib/telegram';
@@ -137,5 +139,39 @@ describe('handleTelegramUpload', () => {
     vi.mocked(publishToTelegram).mockRejectedValue(new TelegramError('publish_failed', 'TELEGRAM_REQUEST_FAILED: timeout', 502));
     const result = await handleTelegramUpload(formData(), 'user-1');
     expect(result.results[0]).toMatchObject({ success: false, errorCode: 'transient' });
+  });
+});
+
+describe('handleTelegramUpload first comment', () => {
+  function withComment(text: string): FormData {
+    const fd = formData();
+    fd.append('firstComment', text);
+    return fd;
+  }
+
+  it('comments on the group post with the stored bot token', async () => {
+    vi.mocked(postTelegramFirstComment).mockResolvedValue('posted');
+    const result = await handleTelegramUpload(withComment('Link in bio'), 'user-1');
+    expect(postTelegramFirstComment).toHaveBeenCalledWith({ botToken: TOKEN, chatId: '-1001', messageId: 9, text: 'Link in bio' });
+    expect(result.results[0].warnings).toBeUndefined();
+  });
+
+  it('skips a channel and says so', async () => {
+    vi.mocked(postTelegramFirstComment).mockResolvedValue('unsupported_chat');
+    const result = await handleTelegramUpload(withComment('Link in bio'), 'user-1');
+    expect(result.success).toBe(true);
+    expect(result.results[0]).toMatchObject({ success: true, postId: '9', warnings: ['FIRST_COMMENT_UNSUPPORTED_CHAT'] });
+  });
+
+  it('keeps the post published when the bot cannot comment and never asks to reconnect', async () => {
+    vi.mocked(postTelegramFirstComment).mockRejectedValue(new TelegramError('no_permission', 'TELEGRAM_API_ERROR: not enough rights', 403));
+    const result = await handleTelegramUpload(withComment('Link in bio'), 'user-1');
+    expect(result.results[0]).toMatchObject({ success: true, warnings: ['FIRST_COMMENT_FAILED'] });
+    expect(markAccountNeedsReconnect).not.toHaveBeenCalled();
+  });
+
+  it('does not comment without a first comment', async () => {
+    await handleTelegramUpload(formData(), 'user-1');
+    expect(postTelegramFirstComment).not.toHaveBeenCalled();
   });
 });

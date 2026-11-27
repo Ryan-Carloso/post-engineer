@@ -7,6 +7,7 @@ export interface SlotRowInput {
   scheduleId: string;
   userId: string;
   promptVersionId?: string;
+  firstComment: string | null;
 }
 
 export function buildSlotRows(input: SlotRowInput) {
@@ -18,5 +19,6 @@ export function buildSlotRows(input: SlotRowInput) {
     title: input.title,
     description: input.description,
     prompt_version_id: input.promptVersionId ?? null,
+    first_comment: input.firstComment,
   }));
 }

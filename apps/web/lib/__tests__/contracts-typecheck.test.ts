@@ -76,7 +76,7 @@ describe('contracts typecheck', () => {
       success: true,
       slot: {
         id: 'slot-1', scheduleId: 'sched-1', slotAt: '2026-11-07T00:00:00Z', status: 'published', title: 'Gym',
-        error: null, publishedAt: '2026-11-07T00:01:00Z', publishLinks: [], userNotices: [], providerFailures: [], postUrl: null,
+        error: null, publishedAt: '2026-11-07T00:01:00Z', publishLinks: [], userNotices: [], providerFailures: [], firstComment: null, commentWarnings: [], postUrl: null,
       },
       schedule: {
         id: 'sched-1', personaId: null, providers: ['youtube'], youtubeAccountIds: ['UC-1'], instagramAccountIds: [],
@@ -199,7 +199,7 @@ describe('contracts typecheck', () => {
       slot: {
         id: 'slot-1', scheduleId: 'sched-1', slotAt: '2026-10-10T20:00:00Z', status: 'ready',
         title: 'T', error: null, publishedAt: null,
-        postUrl: null, publishLinks: [], userNotices: [], providerFailures: [],
+        postUrl: null, publishLinks: [], userNotices: [], providerFailures: [], firstComment: null, commentWarnings: [],
       },
       schedule: {
         id: 'sched-1', personaId: null, providers: [], youtubeAccountIds: [],

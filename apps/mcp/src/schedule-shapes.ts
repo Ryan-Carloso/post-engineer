@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { FIRST_COMMENT_MAX_LENGTH } from './contracts/first-comment.js';
 
 export const ListSchedulesShape = {};
 
@@ -45,11 +46,21 @@ export const UpdateSlotTitleShape = {
     .describe('The slot ID (the slotId field from posts (action: list) or publish_video (action: publish_existing)).'),
   title: z
     .string()
-    .min(1, 'title is required')
+    .min(1, 'title must not be empty')
+    .optional()
     .describe('The new title text for the slot. Only a slot that is still ready (not yet publishing) can be edited; published or mid-flight slots are rejected.'),
+  firstComment: z
+    .string()
+    .trim()
+    .max(FIRST_COMMENT_MAX_LENGTH, `firstComment must be at most ${FIRST_COMMENT_MAX_LENGTH} characters`)
+    .optional()
+    .describe('The new first comment of a ready slot, posted on the post right after it publishes. An empty string removes it. Pass title, firstComment or both.'),
 };
 
-export const UpdateSlotTitleSchema = z.object(UpdateSlotTitleShape);
+export const UpdateSlotTitleSchema = z.object(UpdateSlotTitleShape).refine(
+  (value) => value.title !== undefined || value.firstComment !== undefined,
+  { message: 'Provide title, firstComment or both.' },
+);
 
 export const DeleteSlotShape = {
   slotId: z

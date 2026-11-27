@@ -39,6 +39,7 @@ export const PublishUploadedVideoShape = {
   privacyStatus: PublishVideoDirectShape.privacyStatus,
   caption: PublishVideoDirectShape.caption,
   boardId: PublishVideoDirectShape.boardId,
+  firstComment: PublishVideoDirectShape.firstComment,
 };
 
 export const PublishUploadedVideoSchema = z.object(PublishUploadedVideoShape).strict();

@@ -6,7 +6,7 @@ import { readMetaErrorCode, readMetaErrorSubcode } from '@/lib/meta-error-code';
 export const THREADS_TEXT_MAX_CHARS = 500;
 export const THREADS_VIDEO_MAX_BYTES = 1024 * 1024 * 1024;
 
-export const THREADS_SCOPES = ['threads_basic', 'threads_content_publish', 'threads_manage_insights'] as const;
+export const THREADS_SCOPES = ['threads_basic', 'threads_content_publish', 'threads_manage_insights', 'threads_manage_replies'] as const;
 
 const THREADS_AUTHORIZE_URL = 'https://threads.com/oauth/authorize';
 const THREADS_API = 'https://graph.threads.com';

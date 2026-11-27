@@ -4,6 +4,8 @@ import { ValidationError } from '@/lib/errors';
 import { logger } from '@/lib/logger';
 import { isSocialProvider, type SocialProvider } from '@/lib/providers/registry';
 import { PUBLISH_ACCOUNT_FIELDS, isTitleProvider } from '@/lib/contracts/providers';
+import { checkFirstComment } from '@/lib/contracts/first-comment';
+import { appendFirstComment, narrowFirstCommentWarnings } from '@/lib/first-comment/form-field';
 import { PUBLISH_HANDLERS } from '@/lib/upload/publish-handlers';
 import type { ContentUploadAccountResult } from '@/lib/upload/content-upload-result';
 import {
@@ -23,6 +25,7 @@ export interface PublishUploadedInput {
   privacyStatus?: string;
   caption?: string;
   boardId?: string;
+  firstComment?: string;
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -64,6 +67,8 @@ export function parsePublishBody(body: unknown): PublishUploadedInput {
   if (tags !== undefined && (!Array.isArray(tags) || tags.some((tag) => typeof tag !== 'string'))) {
     throw new ValidationError('tags must be a list of strings.', 'tags');
   }
+  const firstComment = checkFirstComment(body.firstComment);
+  if (!firstComment.ok) throw new ValidationError(firstComment.error, 'firstComment');
   const input: PublishUploadedInput = {
     uploadId,
     provider,
@@ -74,6 +79,7 @@ export function parsePublishBody(body: unknown): PublishUploadedInput {
     privacyStatus: optionalString(body, 'privacyStatus'),
     caption: optionalString(body, 'caption'),
     boardId: optionalString(body, 'boardId'),
+    ...(firstComment.value === null ? {} : { firstComment: firstComment.value }),
   };
   validatePublishFields(input);
   return input;
@@ -124,6 +130,7 @@ export function buildPublishForm(
   const file = new File([new Uint8Array(buffer)], `upload.${extension}`, { type: contentType });
   const formData = new FormData();
   formData.append('provider', input.provider);
+  appendFirstComment(formData, input.provider, input.firstComment);
   if (input.provider === 'youtube') {
     formData.append('video', file);
     formData.append('title', (input.title ?? '').trim());
@@ -184,6 +191,8 @@ function normalizePublishResponse(
     if (typeof item.mediaId === 'string') result.mediaId = item.mediaId;
     if (typeof item.permalink === 'string') result.permalink = item.permalink;
     if (typeof item.error === 'string') result.error = item.error;
+    const warnings = narrowFirstCommentWarnings(item.warnings);
+    if (warnings.length > 0) result.warnings = warnings;
     results.push(result);
   }
   return {

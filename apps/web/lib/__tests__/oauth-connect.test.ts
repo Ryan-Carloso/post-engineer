@@ -206,6 +206,7 @@ describe('buildOAuthConnectUrl — facebook', () => {
       expect(url.searchParams.get('client_id')).toBe('fb-app-id');
       expect(url.searchParams.get('redirect_uri')).toBe('https://app.example/facebook/callback');
       expect(url.searchParams.get('scope')).toContain('pages_manage_posts');
+      expect(url.searchParams.get('scope')).toContain('pages_manage_engagement');
       expect(url.searchParams.get('state')).toBe(result.state);
       expect(decodeOAuthState(result.state)).toMatchObject({ provider: 'facebook', redirectUri: 'https://app.example/facebook/callback' });
     }

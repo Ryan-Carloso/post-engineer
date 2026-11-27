@@ -99,8 +99,9 @@ export const operationSchemas = {
     response: success({}),
   },
   'PATCH /api/schedule/slots/[slotId]': {
-    request: object({ title: { type: 'string', minLength: 1 } }, ['title']),
-    response: success({ title: str }),
+    description: 'Send title, firstComment or both. firstComment is posted as a comment on the post right after it publishes (YouTube, Instagram, Bluesky, LinkedIn, Threads, Facebook and Telegram; other networks skip it); null or an empty string removes it.',
+    request: object({ title: { type: 'string', minLength: 1 }, firstComment: { type: 'string', nullable: true, maxLength: 1000 } }),
+    response: success({ title: str, firstComment: { type: 'string', nullable: true } }),
   },
   'DELETE /api/schedule/slots/[slotId]': { response: ok },
   'GET /api/account': {
@@ -225,6 +226,11 @@ export const operationSchemas = {
         tags: strArray,
         privacyStatus: str,
         caption: str,
+        firstComment: {
+          type: 'string',
+          maxLength: 1000,
+          description: 'Posted as a comment on the new post of each network that has a comment API (YouTube, Instagram, Bluesky, LinkedIn, Threads, Facebook, Telegram); the others skip it. A failed comment never fails the post: the account result carries a warnings code. It cannot be pinned.',
+        },
         idempotencyKey: {
           type: 'string',
           description: 'Retry with the same key: scheduled replays the schedule, asap replays the recorded posts per account.',

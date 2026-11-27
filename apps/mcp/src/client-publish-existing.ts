@@ -152,6 +152,7 @@ export async function publishExisting(
   if (input.tags !== undefined) body.tags = input.tags;
   if (input.privacyStatus !== undefined) body.privacyStatus = input.privacyStatus;
   if (input.caption !== undefined) body.caption = input.caption;
+  if (input.firstComment !== undefined) body.firstComment = input.firstComment;
   if (input.promptVersionId !== undefined) body.promptVersionId = input.promptVersionId;
 
   const result: unknown = await client.request(

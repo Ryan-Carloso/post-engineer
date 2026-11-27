@@ -92,6 +92,7 @@ export async function publishUploadedVideo(
   if (fields.boardId !== '') body.boardId = fields.boardId;
   if (fields.tags.length > 0) body.tags = fields.tags;
   if (fields.privacyStatus !== '') body.privacyStatus = fields.privacyStatus;
+  if (fields.firstComment !== '') body.firstComment = fields.firstComment;
 
   const raw: unknown = await client.request(
     '/api/videos/publish-by-id',

@@ -48,7 +48,7 @@ function codeFor(errorCode: number, description: string): TelegramError['code'] 
   return 'publish_failed';
 }
 
-async function callBotApi(
+export async function callBotApi(
   botToken: string,
   method: string,
   init: { form?: FormData; json?: Record<string, unknown> },

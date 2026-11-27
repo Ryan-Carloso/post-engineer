@@ -11,6 +11,7 @@ describe('buildSlotRows', () => {
       description: 'Agent description.',
       scheduleId: 'sched-1',
       userId: 'user-1',
+      firstComment: null,
     });
     expect(rows).toEqual([
       {
@@ -21,6 +22,7 @@ describe('buildSlotRows', () => {
         title: 'Porto walks',
         description: 'Agent description.',
         prompt_version_id: null,
+        first_comment: null,
       },
     ]);
   });
@@ -33,7 +35,20 @@ describe('buildSlotRows', () => {
       scheduleId: 'sched-1',
       userId: 'user-1',
       promptVersionId: 'version-1',
+      firstComment: null,
     });
     expect(rows.map((row) => row.prompt_version_id)).toEqual(['version-1', 'version-1']);
+  });
+
+  it('stores the first comment on every slot row', () => {
+    const rows = buildSlotRows({
+      slots: [SLOT, { ...SLOT, slotAtISO: '2026-09-09T09:00:00.000Z', dayIndex: 1 }],
+      title: 'Porto walks',
+      description: 'd',
+      scheduleId: 'sched-1',
+      userId: 'user-1',
+      firstComment: 'Link in bio',
+    });
+    expect(rows.map((row) => row.first_comment)).toEqual(['Link in bio', 'Link in bio']);
   });
 });

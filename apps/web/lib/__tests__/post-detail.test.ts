@@ -45,6 +45,7 @@ const SLOT_ROW = {
   published_at: null,
   publish_outcomes: null,
   prompt_version_id: null,
+  first_comment: null,
 };
 
 const SCHEDULE_ROW = {
@@ -77,7 +78,7 @@ describe('getSlotPost', () => {
     const detail = await getSlotPost(supabase, 'slot-1', 'user-1', null);
     expect(detail?.slot.id).toBe('slot-1');
     expect(chains['scheduled_posts'].select).toHaveBeenCalledWith(
-      'id, schedule_id, slot_at, status, title, description, error, published_at, publish_outcomes, prompt_version_id, media_kind, media_ref, media_content_type'
+      'id, schedule_id, slot_at, status, title, description, error, published_at, publish_outcomes, prompt_version_id, media_kind, media_ref, media_content_type, first_comment'
     );
     expect(chains['schedules'].select).toHaveBeenCalledWith(
       'id, persona_id, providers, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, threads_account_ids, facebook_account_ids, pinterest_account_ids, pinterest_board_id, threespeak_account_ids, rumble_account_ids, fanvue_account_ids, telegram_account_ids, timezone, publish_mode'
@@ -88,6 +89,41 @@ describe('getSlotPost', () => {
     expect(detail?.prompt).toBeNull();
     expect(detail).not.toHaveProperty('generation');
     expect(detail?.slot).not.toHaveProperty('progress');
+  });
+
+  it('returns the first comment and the comment warnings of the published outcomes', async () => {
+    const { supabase } = mockSupabase({
+      scheduled_posts: {
+        data: {
+          ...SLOT_ROW,
+          status: 'published',
+          first_comment: 'Link in bio',
+          publish_outcomes: [
+            { provider: 'facebook', accountId: 'page-1', status: 'published', warnings: ['FIRST_COMMENT_FAILED'] },
+            { provider: 'bluesky', accountId: 'did:plc:a', status: 'published' },
+          ],
+        },
+        error: null,
+      },
+      schedules: { data: SCHEDULE_ROW, error: null },
+      personas: { data: { id: 'persona-1', name: 'Viva Leve' }, error: null },
+    });
+    const detail = await getSlotPost(supabase, 'slot-1', 'user-1', null);
+    expect(detail?.slot.firstComment).toBe('Link in bio');
+    expect(detail?.slot.commentWarnings).toEqual([
+      { provider: 'facebook', accountId: 'page-1', code: 'FIRST_COMMENT_FAILED' },
+    ]);
+  });
+
+  it('returns a null first comment and no warnings when the slot has none', async () => {
+    const { supabase } = mockSupabase({
+      scheduled_posts: { data: SLOT_ROW, error: null },
+      schedules: { data: SCHEDULE_ROW, error: null },
+      personas: { data: { id: 'persona-1', name: 'Viva Leve' }, error: null },
+    });
+    const detail = await getSlotPost(supabase, 'slot-1', 'user-1', null);
+    expect(detail?.slot.firstComment).toBeNull();
+    expect(detail?.slot.commentWarnings).toEqual([]);
   });
 
   it('returns postUrl built from the public app URL', async () => {

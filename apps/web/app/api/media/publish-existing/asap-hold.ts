@@ -174,6 +174,7 @@ export async function scheduleAsapHold(ctx: PublishExistingContext, scheduleId: 
     scheduleId,
     userId,
     promptVersionId: input.promptVersionId,
+    firstComment: input.firstComment,
   }).map((row) => ({
     ...row,
     status: 'awaiting_approval',

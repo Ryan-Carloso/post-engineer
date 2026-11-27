@@ -1,3 +1,4 @@
+import type { FirstCommentWarningCode } from '@/lib/contracts/first-comment';
 import type { SocialProvider } from '@/lib/types';
 
 export interface ContentUploadAccountResult {
@@ -11,6 +12,7 @@ export interface ContentUploadAccountResult {
   permalink?: string;
   error?: string;
   errorCode?: string;
+  warnings?: FirstCommentWarningCode[];
 }
 
 export interface ContentUploadSuccess {

@@ -122,6 +122,19 @@ describe('parsePublishBody', () => {
     ).toBe('b1');
   });
 
+  it('keeps a trimmed first comment and drops a blank one', () => {
+    const base = { uploadId: UPLOAD_ID, provider: 'instagram', accountIds: ['ig-1'], caption: 'c' };
+    expect(parsePublishBody({ ...base, firstComment: '  Link in bio ' }).firstComment).toBe('Link in bio');
+    expect(parsePublishBody({ ...base, firstComment: '   ' })).not.toHaveProperty('firstComment');
+    expect(parsePublishBody(base)).not.toHaveProperty('firstComment');
+  });
+
+  it('rejects an over-length or non-string first comment', () => {
+    const base = { uploadId: UPLOAD_ID, provider: 'instagram', accountIds: ['ig-1'], caption: 'c' };
+    expect(() => parsePublishBody({ ...base, firstComment: 'x'.repeat(1001) })).toThrow(/firstComment/);
+    expect(() => parsePublishBody({ ...base, firstComment: 3 })).toThrow(/firstComment/);
+  });
+
   it('rejects a non-object body, non-string fields and blank provider gaps', () => {
     expect(() => parsePublishBody(null)).toThrow(ValidationError);
     expect(() => parsePublishBody([])).toThrow(ValidationError);
@@ -439,6 +452,28 @@ describe('buildPublishForm', () => {
   });
 });
 
+describe('buildPublishForm first comment', () => {
+  it.each(['youtube', 'instagram', 'threads'] as const)('adds the first comment for %s', (provider) => {
+    const form = buildPublishForm(
+      { uploadId: UPLOAD_ID, provider, accountIds: ['a'], title: 'T', description: 'D', tags: ['t'], privacyStatus: 'public', caption: 'c', firstComment: 'Link in bio' },
+      MP4,
+      'video/mp4',
+    );
+    expect(form.get('firstComment')).toBe('Link in bio');
+  });
+
+  it('leaves it out for a network without a comment API and when absent', () => {
+    const pinterest = buildPublishForm(
+      { uploadId: UPLOAD_ID, provider: 'pinterest', accountIds: ['a'], caption: 'c', boardId: 'b', firstComment: 'Link in bio' },
+      MP4,
+      'video/mp4',
+    );
+    expect(pinterest.has('firstComment')).toBe(false);
+    const plain = buildPublishForm({ uploadId: UPLOAD_ID, provider: 'instagram', accountIds: ['a'], caption: 'c' }, MP4, 'video/mp4');
+    expect(plain.has('firstComment')).toBe(false);
+  });
+});
+
 describe('publishUploadedVideo', () => {
   it('claims the ready upload exactly once through the conditional update', async () => {
     const claimStatuses: VideoUploadStatus[] = [];
@@ -624,5 +659,25 @@ describe('publishUploadedVideo', () => {
       expect(result.success).toBe(true);
       expect(vi.mocked(HANDLER_BY_PROVIDER[provider])).toHaveBeenCalledTimes(1);
     }
+  });
+});
+
+describe('publishUploadedVideo first comment warnings', () => {
+  it('keeps the warning codes of the handler answer and drops unknown ones', async () => {
+    vi.mocked(handleInstagramUpload).mockResolvedValueOnce({
+      success: true,
+      results: [{ accountId: 'ig-1', success: true, postId: 'p', warnings: ['FIRST_COMMENT_FAILED', 'made-up'] }],
+    } as never);
+    const { store, storage } = readyFixture();
+    const published = await publishUploadedVideo(
+      store,
+      storage,
+      USER,
+      { uploadId: UPLOAD_ID, provider: 'instagram', accountIds: ['ig-1'], caption: 'hi', firstComment: 'Link in bio' },
+      'log-1',
+      1,
+      new Date(),
+    );
+    expect(published.results[0].warnings).toEqual(['FIRST_COMMENT_FAILED']);
   });
 });

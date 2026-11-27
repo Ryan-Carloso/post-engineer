@@ -54,6 +54,20 @@ export const postsCalendarStrings = {
       loadErrorSupporting: 'Não foi possível carregar as informações das publicações.',
       loadErrorRetry: 'Tentar de novo',
       loadingPosts: 'Carregando as publicações…',
+      firstCommentLabel: 'Primeiro comentário',
+      firstCommentHint:
+        'Publicado como comentário logo após o post sair em {networks}. As outras redes ignoram este campo. Máximo de {max} caracteres.',
+      firstCommentNone: 'Sem primeiro comentário',
+      editFirstComment: 'Editar primeiro comentário',
+      firstCommentSaveError: 'Não foi possível salvar o primeiro comentário. Tente de novo.',
+      commentWarningFailed:
+        '{provider} publicou o post, mas o primeiro comentário não saiu. O post continua no ar.',
+      commentWarningReconnect:
+        '{provider} publicou o post, mas o primeiro comentário precisa de uma permissão nova. Reconecte a conta do {provider} e tente de novo.',
+      commentWarningUnsupportedChat:
+        '{provider} publicou o post, mas o bot não consegue comentar em post de canal, então o primeiro comentário foi ignorado. Em grupos, ele responde ao post.',
+      commentWarningTooLong:
+        '{provider} publicou o post, mas o primeiro comentário passa do limite de caracteres da rede e foi ignorado.',
     },
   },
   en: {
@@ -110,6 +124,20 @@ export const postsCalendarStrings = {
       loadErrorSupporting: 'Could not load the post details.',
       loadErrorRetry: 'Try again',
       loadingPosts: 'Loading posts…',
+      firstCommentLabel: 'First comment',
+      firstCommentHint:
+        'Posted as a comment right after the post goes live on {networks}. Other networks ignore this field. Up to {max} characters.',
+      firstCommentNone: 'No first comment',
+      editFirstComment: 'Edit first comment',
+      firstCommentSaveError: 'Could not save the first comment. Try again.',
+      commentWarningFailed:
+        '{provider} published the post, but the first comment did not go through. The post is still live.',
+      commentWarningReconnect:
+        '{provider} published the post, but the first comment needs a new permission. Reconnect the {provider} account and try again.',
+      commentWarningUnsupportedChat:
+        '{provider} published the post, but a bot cannot comment on a channel post, so the first comment was skipped. In groups it replies to the post.',
+      commentWarningTooLong:
+        '{provider} published the post, but the first comment is over the network character limit and was skipped.',
     },
   },
 } as const;

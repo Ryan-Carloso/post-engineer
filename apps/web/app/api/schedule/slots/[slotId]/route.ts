@@ -9,6 +9,7 @@ import { isPersonaAllowed } from '@/lib/api-keys';
 import { resolveSlotUuid } from '@/lib/schedule-slot-id';
 import { validateScheduleWindow } from '@/lib/schedule-window';
 import { hasExplicitOffset } from '@/lib/timezone';
+import { checkFirstComment } from '@/lib/contracts/first-comment';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 import { assertAccessActive } from '@/lib/access';
@@ -23,6 +24,7 @@ interface SlotRow {
   media_ref: string | null;
   media_kind: string | null;
   media_content_type: string | null;
+  first_comment: string | null;
 }
 
 interface ScheduleRow {
@@ -40,7 +42,7 @@ export async function loadOwnedSlot(
 ): Promise<{ slot: SlotRow; publishMode: 'scheduled' | 'asap' } | { error: NextResponse }> {
   const { data: slot, error } = await supabase
     .from('scheduled_posts')
-    .select('id, schedule_id, status, title, description, slot_at, media_ref, media_kind, media_content_type')
+    .select('id, schedule_id, status, title, description, slot_at, media_ref, media_kind, media_content_type, first_comment')
     .eq('id', slotId)
     .eq('user_id', userId)
     .single();
@@ -229,22 +231,32 @@ async function patchHandler(
   }
   const rawTitle = (body as { title?: unknown } | null)?.title;
   const rawSlotAt = (body as { slotAt?: unknown } | null)?.slotAt;
-  if (rawTitle === undefined && rawSlotAt === undefined) {
-    return apiErrorResponse(400, 'Provide title or slotAt to update.', {
+  const rawFirstComment = (body as { firstComment?: unknown } | null)?.firstComment;
+  if (rawTitle === undefined && rawSlotAt === undefined && rawFirstComment === undefined) {
+    return apiErrorResponse(400, 'Provide title, slotAt or firstComment to update.', {
       route: 'PATCH /api/schedule/slots',
     });
   }
-  if (slot.status === 'awaiting_approval' && rawTitle !== undefined) {
+  if (slot.status === 'awaiting_approval' && (rawTitle !== undefined || rawFirstComment !== undefined)) {
     return apiErrorResponse(409, 'An awaiting-approval slot can only move its scheduled time.', {
       route: 'PATCH /api/schedule/slots',
       metadata: { status: slot.status },
     });
   }
+  const patch: { title?: string; slot_at?: string; first_comment?: string | null } = {};
+  let firstComment: string | null | undefined;
+  if (rawFirstComment !== undefined) {
+    const checked = checkFirstComment(rawFirstComment);
+    if (!checked.ok) {
+      return apiErrorResponse(400, checked.error, { route: 'PATCH /api/schedule/slots' });
+    }
+    firstComment = checked.value;
+    patch.first_comment = firstComment;
+  }
   if (rawSlotAt !== undefined) {
     const blocked = await assertAccessActive(auth.userId, { route: 'PATCH /api/schedule/slots' });
     if (blocked) return blocked;
   }
-  const patch: { title?: string; slot_at?: string } = {};
   let title: string | undefined;
   if (rawTitle !== undefined) {
     if (typeof rawTitle !== 'string' || rawTitle.trim() === '') {
@@ -308,6 +320,7 @@ async function patchHandler(
     success: true,
     ...(title !== undefined ? { title } : {}),
     ...(slotAt !== undefined ? { slotAt } : {}),
+    ...(firstComment !== undefined ? { firstComment } : {}),
   });
 }
 

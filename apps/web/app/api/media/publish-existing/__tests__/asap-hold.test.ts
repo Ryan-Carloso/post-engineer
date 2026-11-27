@@ -282,4 +282,17 @@ describe('scheduleAsapHold', () => {
     expect(response.status).toBe(500);
     expect(client.__deletedSchedules).toContain(SCHEDULE_ID);
   });
+
+  it('stores the first comment on the held slot', async () => {
+    const client = fakeSupabase();
+    const updateUpload = vi.fn(async () => true);
+    mockStore(updateUpload);
+    const ctx = holdContext(client);
+    ctx.input = { ...ctx.input, firstComment: 'Link in bio' };
+
+    const response = await scheduleAsapHold(ctx, SCHEDULE_ID);
+
+    expect(response.status).toBe(200);
+    expect((client.__insertedSlots[0] as Record<string, unknown>).first_comment).toBe('Link in bio');
+  });
 });

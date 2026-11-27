@@ -1,3 +1,4 @@
+import type { FirstCommentWarningCode } from './contracts/first-comment.js';
 import type { SocialProvider } from './contracts/providers.js';
 import type { IdentityCard } from './contracts/persona-identity-card.js';
 
@@ -34,6 +35,7 @@ export interface PublishVideoDirectInput {
   privacyStatus?: 'public' | 'private' | 'unlisted';
   caption?: string;
   boardId?: string;
+  firstComment?: string;
   idempotencyKey?: string;
 }
 
@@ -47,6 +49,7 @@ export interface PublishUploadedVideoInput {
   privacyStatus?: 'public' | 'private' | 'unlisted';
   caption?: string;
   boardId?: string;
+  firstComment?: string;
 }
 
 export interface MintedVideoUpload {
@@ -72,6 +75,7 @@ export interface PublishExistingInput {
   title: string;
   description: string;
   caption?: string;
+  firstComment?: string;
   personaId?: string;
   mode: 'asap' | 'scheduled';
   publishAt?: string;
@@ -139,6 +143,7 @@ export interface DirectPublishAccountResult {
   permalink?: string;
   error?: string;
   errorCode?: string;
+  warnings?: FirstCommentWarningCode[];
 }
 
 export interface DirectPublishResult {

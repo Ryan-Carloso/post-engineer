@@ -29,6 +29,9 @@ application/x-www-form-urlencoded when ``videoStoragePath`` replaces it):
   repeated ``fanvueAccountIds`` fields (see ``publish_fanvue``; validated by ``publisher/metadata.py``).
 - Telegram: ``provider=telegram``, ``video`` (file), ``caption``, repeated ``telegramAccountIds`` fields (see ``publish_telegram``; validated by ``publisher/metadata.py``).
 
+Every provider in ``COMMENT_PROVIDERS`` also takes an optional ``firstComment``
+field, the text the handler posts as a comment on the published post.
+
 This module owns only types, validation and form-data part builders
 (multipart when a file part is sent, urlencoded when ``videoStoragePath``
 replaces it); the HTTP transport lives in the client function of the
@@ -59,7 +62,7 @@ from app.services.publish_threespeak import (
 )
 from app.services.publish_rumble import RUMBLE_PROVIDER, RumbleMetadata, rumble_fields, validate_rumble_metadata
 from app.services.upload_publisher_failure import application_failure_reason
-from app.providers import SOCIAL_PROVIDERS
+from app.providers import COMMENT_PROVIDERS, SOCIAL_PROVIDERS
 
 VALID_PRIVACY_STATUSES: tuple[str, ...] = ("public", "private", "unlisted")
 
@@ -349,6 +352,7 @@ class PublishError(Exception):
         self.response_body = response_body
 
 
+FIRST_COMMENT_FIELD: str = "firstComment"
 DEFAULT_UPLOAD_PATH: str = "/api/upload-content"
 DEFAULT_MAX_ATTEMPTS: int = 3
 DEFAULT_TIMEOUT_SECONDS: int = 600
@@ -385,6 +389,7 @@ def publish_video(
     sleep: Callable[[float], None] = time.sleep,
     surface_application_failure: bool = False,
     publish_scope_key: str | None = None,
+    first_comment: str | None = None,
 ) -> dict[str, Any]:
     """Publish one finished video through the internal upload API.
 
@@ -409,6 +414,8 @@ def publish_video(
     parts.fields.append(("userId", owner_user_id))
     if publish_scope_key:
         parts.fields.append(("publishScopeKey", publish_scope_key))
+    if first_comment and provider in COMMENT_PROVIDERS:
+        parts.fields.append((FIRST_COMMENT_FIELD, first_comment))
 
     if video_bytes is None:
         raise PublishError("video bytes are required for this provider")

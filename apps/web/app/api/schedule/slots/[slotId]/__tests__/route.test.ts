@@ -581,7 +581,7 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
     expect(client.calls.some((c) => c.op === 'update')).toBe(false);
   });
 
-  it('returns 400 when neither title nor slotAt is provided', async () => {
+  it('returns 400 when none of title, slotAt or firstComment is provided', async () => {
     const client = mockSlotsClient({
       slot: { id: 'slot-1', schedule_id: 's1', status: 'ready', title: 'Old' },
       schedule: { id: 's1', user_id: USER_ID },
@@ -593,6 +593,81 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
 
     expect(response.status).toBe(400);
     expect(client.calls.some((c) => c.op === 'update')).toBe(false);
+  });
+
+  describe('first comment', () => {
+    function readySlot() {
+      const client = mockSlotsClient({
+        slot: { id: 'slot-1', schedule_id: 's1', status: 'ready', title: 'Old' },
+        schedule: { id: 's1', user_id: USER_ID },
+      });
+      mockAuth();
+      vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+      return client;
+    }
+
+    it('stores the trimmed first comment of a ready slot', async () => {
+      const client = readySlot();
+      const response = await patchSlot(SLOT_ID, { firstComment: '  Link in bio  ' });
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as unknown;
+      expect(UpdateSlotResponseSchema.safeParse(body).success).toBe(true);
+      expect(body).toEqual({ success: true, firstComment: 'Link in bio' });
+      expect(client.calls.find((c) => c.op === 'update')?.args?.[0]).toEqual({ first_comment: 'Link in bio' });
+    });
+
+    it.each([null, '', '   '])('clears the first comment for %j', async (value) => {
+      const client = readySlot();
+      const response = await patchSlot(SLOT_ID, { firstComment: value });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ success: true, firstComment: null });
+      expect(client.calls.find((c) => c.op === 'update')?.args?.[0]).toEqual({ first_comment: null });
+    });
+
+    it('updates the first comment together with the title', async () => {
+      const client = readySlot();
+      await patchSlot(SLOT_ID, { title: 'New', firstComment: 'Hi' });
+      expect(client.calls.find((c) => c.op === 'update')?.args?.[0]).toEqual({ title: 'New', first_comment: 'Hi' });
+    });
+
+    it('returns 400 over the length limit and never writes', async () => {
+      const client = readySlot();
+      const response = await patchSlot(SLOT_ID, { firstComment: 'x'.repeat(1001) });
+      expect(response.status).toBe(400);
+      expect(((await response.json()) as { error: string }).error).toContain('1000');
+      expect(client.calls.some((c) => c.op === 'update')).toBe(false);
+    });
+
+    it('returns 400 for a non-string first comment and never writes', async () => {
+      const client = readySlot();
+      const response = await patchSlot(SLOT_ID, { firstComment: 42 });
+      expect(response.status).toBe(400);
+      expect(client.calls.some((c) => c.op === 'update')).toBe(false);
+    });
+
+    it('returns 409 for a slot that is no longer ready', async () => {
+      const client = mockSlotsClient({
+        slot: { id: 'slot-1', schedule_id: 's1', status: 'published', title: 'Old' },
+        schedule: { id: 's1', user_id: USER_ID },
+      });
+      mockAuth();
+      vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+      const response = await patchSlot(SLOT_ID, { firstComment: 'Hi' });
+      expect(response.status).toBe(409);
+      expect(client.calls.some((c) => c.op === 'update')).toBe(false);
+    });
+
+    it('returns 409 when editing the first comment of an awaiting_approval slot', async () => {
+      const client = mockSlotsClient({
+        slot: { id: 'slot-1', schedule_id: 's1', status: 'awaiting_approval', title: 'Old' },
+        schedule: { id: 's1', user_id: USER_ID },
+      });
+      mockAuth();
+      vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+      const response = await patchSlot(SLOT_ID, { firstComment: 'Hi' });
+      expect(response.status).toBe(409);
+      expect(client.calls.some((c) => c.op === 'update')).toBe(false);
+    });
   });
 
   it('returns 409 when the slot dispatches between the status check and the update', async () => {
@@ -1228,7 +1303,7 @@ describe('slot id normalization', () => {
       client.calls
         .filter((c) => c.table === 'scheduled_posts' && c.op === 'select')
         .map((c) => c.args),
-    ).toEqual([['id, schedule_id, slot_at, status, title, description, error, published_at, publish_outcomes, prompt_version_id, media_kind, media_ref, media_content_type']]);
+    ).toEqual([['id, schedule_id, slot_at, status, title, description, error, published_at, publish_outcomes, prompt_version_id, media_kind, media_ref, media_content_type, first_comment']]);
     expect(
       client.calls
         .filter((c) => c.table === 'scheduled_posts' && c.op === 'eq')
@@ -1342,5 +1417,50 @@ describe('slot id normalization', () => {
     expect(session.calls.some((call) => call.op === 'update')).toBe(false);
     expect(service.calls.find((call) => call.op === 'update')?.args?.[0]).toEqual({ title: 'Novo tema' });
     expect(service.calls.some((call) => call.op === 'eq' && call.args[0] === 'user_id' && call.args[1] === USER_ID)).toBe(true);
+  });
+});
+
+describe('GET /api/schedule/slots/[slotId] first comment', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockAuth();
+  });
+
+  it('returns the first comment and the warnings the publish recorded', async () => {
+    const client = mockSlotsClient({
+      slot: {
+        ...SLOT_DETAIL_ROW,
+        status: 'published',
+        first_comment: 'Link in bio',
+        publish_outcomes: [
+          { provider: 'youtube', accountId: 'UC1', status: 'published', warnings: ['FIRST_COMMENT_RECONNECT_REQUIRED'] },
+          { provider: 'instagram', accountId: 'ig1', status: 'published' },
+        ],
+      },
+      schedule: SCHEDULE_ROW,
+      persona: { id: 'p1', name: 'Viva Leve' },
+    });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
+      params: Promise.resolve({ slotId: SLOT_ID }),
+    });
+    const body = (await response.json()) as { slot: { firstComment: string | null; commentWarnings: unknown } };
+    expect(GetSlotResponseSchema.safeParse(body).success).toBe(true);
+    expect(body.slot.firstComment).toBe('Link in bio');
+    expect(body.slot.commentWarnings).toEqual([
+      { provider: 'youtube', accountId: 'UC1', code: 'FIRST_COMMENT_RECONNECT_REQUIRED' },
+    ]);
+    expect(client.calls.find((c) => c.op === 'select' && String(c.args[0]).includes('first_comment'))).toBeDefined();
+  });
+
+  it('returns a null first comment and no warnings for a slot without one', async () => {
+    const client = mockSlotsClient({ slot: SLOT_DETAIL_ROW, schedule: SCHEDULE_ROW, persona: { id: 'p1', name: 'Viva Leve' } });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
+      params: Promise.resolve({ slotId: SLOT_ID }),
+    });
+    const body = (await response.json()) as { slot: { firstComment: unknown; commentWarnings: unknown } };
+    expect(body.slot.firstComment).toBeNull();
+    expect(body.slot.commentWarnings).toEqual([]);
   });
 });

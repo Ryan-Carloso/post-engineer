@@ -64,6 +64,7 @@ def publish_slot_accounts(
     publish_video: Callable[..., Any],
     persist_outcomes: PersistOutcomes,
     content_type: str = "video/mp4",
+    first_comment: str | None = None,
 ) -> AccountPublishResult:
     """Publish every account that does not already have a terminal outcome.
 
@@ -141,6 +142,7 @@ def publish_slot_accounts(
                     result.first_error = str(exc)
                 persist_outcomes(outcomes, {"publish_attempts": max_attempts})
                 continue
+            comment_kwargs = {"first_comment": first_comment} if first_comment else {}
             try:
                 body = publish_video(
                     base_url=base_url,
@@ -153,6 +155,7 @@ def publish_slot_accounts(
                     max_attempts=1,
                     surface_application_failure=True,
                     publish_scope_key=f"slot:{slot['id']}:video:{video_name}",
+                    **comment_kwargs,
                 )
             except upload_publisher.PublishError as exc:
                 parsed = _json_accounts(getattr(exc, "response_body", None))

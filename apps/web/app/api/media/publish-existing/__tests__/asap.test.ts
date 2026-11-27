@@ -63,6 +63,7 @@ function imageCtx(): PublishExistingContext {
       tags: undefined,
       privacyStatus: undefined,
       caption: undefined,
+      firstComment: null,
       promptVersionId: undefined,
       idempotencyKey: undefined,
     },

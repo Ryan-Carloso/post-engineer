@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { defineEndpoint } from './endpoint.js';
+import { FIRST_COMMENT_MAX_LENGTH } from './first-comment.js';
 import {
   PublishProviderFailureSchema,
   PublishUserNoticeSchema,
@@ -175,15 +176,21 @@ export const UpdateSlotBodySchema = z
         message: 'slotAt must carry an explicit timezone offset (Z or ±hh:mm).',
       })
       .optional(),
+    firstComment: z
+      .string()
+      .max(FIRST_COMMENT_MAX_LENGTH, `firstComment must be at most ${FIRST_COMMENT_MAX_LENGTH} characters.`)
+      .nullable()
+      .optional(),
   })
-  .refine((value) => value.title !== undefined || value.slotAt !== undefined, {
-    message: 'Provide title or slotAt to update.',
+  .refine((value) => value.title !== undefined || value.slotAt !== undefined || value.firstComment !== undefined, {
+    message: 'Provide title, slotAt or firstComment to update.',
   });
 
 export const UpdateSlotResponseSchema = z.object({
   success: z.literal(true),
   title: z.string().optional(),
   slotAt: z.string().optional(),
+  firstComment: z.string().nullable().optional(),
 });
 
 export const DeleteSlotResponseSchema = z.object({

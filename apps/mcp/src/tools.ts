@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { noticeSummary } from './publish-notices.js';
+import { firstCommentWarningSuffix } from './first-comment-warnings.js';
 import {
   CancelScheduleSchema,
   CancelScheduleShape,
@@ -132,14 +133,34 @@ export async function handleUpdateSlotTitle(
   client: PostEngineerClient,
   args: z.infer<typeof UpdateSlotTitleSchema>
 ): Promise<McpToolResponse> {
+  const parsed = UpdateSlotTitleSchema.safeParse(args);
+  if (!parsed.success) {
+    return {
+      content: [{ type: 'text', text: `Error updating slot title: ${parsed.error.issues.map((issue) => issue.message).join('; ')}` }],
+      isError: true,
+    };
+  }
   try {
-    const result = await client.updateSlotTitle(args.slotId, args.title);
+    const result = await client.updateSlotTitle(args.slotId, args.title, args.firstComment);
     const title = result.title ?? args.title;
+    const firstComment = result.firstComment ?? null;
+    const changed = [
+      ...(title === undefined ? [] : [`title updated to "${title}"`]),
+      ...(args.firstComment === undefined ? [] : [firstComment === null ? 'first comment removed' : `first comment set to "${firstComment}"`]),
+    ].join(', ');
     return {
       content: [
         {
           type: 'text',
-          text: `Slot ${args.slotId} title updated to "${title}".\n${JSON.stringify({ success: true, title }, null, 2)}`,
+          text: `Slot ${args.slotId} ${changed}.\n${JSON.stringify(
+            {
+              success: true,
+              ...(title === undefined ? {} : { title }),
+              ...(args.firstComment === undefined ? {} : { firstComment }),
+            },
+            null,
+            2,
+          )}`,
         },
       ],
     };
@@ -289,12 +310,12 @@ export async function handlePublishVideoDirect(
       description: args.description,
       tags: args.tags,
       privacyStatus: args.privacyStatus,
-      caption: args.caption, boardId: args.boardId, idempotencyKey: args.idempotencyKey,
+      caption: args.caption, boardId: args.boardId, firstComment: args.firstComment, idempotencyKey: args.idempotencyKey,
     });
     const lines = result.results.map((account) => {
       if (account.success) {
         const link = account.videoUrl ?? account.permalink ?? account.postId ?? account.videoId ?? '';
-        return `- ${account.accountId}: published${link ? ` (${link})` : ''}`;
+        return `- ${account.accountId}: published${link ? ` (${link})` : ''}${firstCommentWarningSuffix(account)}`;
       }
       return `- ${account.accountId}: FAILED — ${account.error ?? 'unknown error'}`;
     });
