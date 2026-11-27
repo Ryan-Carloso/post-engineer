@@ -1,13 +1,13 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-export type Call = [string, ...unknown[]];
+type Call = [string, ...unknown[]];
 
 export interface QueryResult {
   data: unknown;
   error: { message: string } | null;
 }
 
-export interface TableCalls {
+interface TableCalls {
   table: string;
   calls: Call[];
 }

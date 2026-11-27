@@ -3,8 +3,6 @@ import { FIRST_COMMENT_MAX_LENGTH } from './contracts/first-comment.js';
 
 export const ListSchedulesShape = {};
 
-export const ListSchedulesSchema = z.object(ListSchedulesShape);
-
 const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/;
 const isoInstant = (what: string) =>
   z.string().regex(ISO_INSTANT, `${what} must be an ISO-8601 timestamp with a UTC offset, e.g. 2026-11-01T00:00:00-03:00.`);

@@ -5,8 +5,8 @@ const require = createRequire(fileURLToPath(new URL('../../../apps/web/package.j
 const ts = require('typescript');
 
 export const HTTP_METHODS = ['GET', 'HEAD', 'OPTIONS', 'POST', 'PUT', 'PATCH', 'DELETE'];
-export const LIMITER = 'applyRateLimit';
-export const PROFILES = 'RATE_LIMITS';
+const LIMITER = 'applyRateLimit';
+const PROFILES = 'RATE_LIMITS';
 
 function isFunctionLike(node) {
   return ts.isArrowFunction(node) || ts.isFunctionExpression(node) || ts.isFunctionDeclaration(node);

@@ -12,7 +12,7 @@ export interface TextDiff {
   granularity: 'word' | 'line' | 'block';
 }
 
-export const MAX_DIFF_CELLS = 4_000_000;
+const MAX_DIFF_CELLS = 4_000_000;
 
 const WORD_TOKENS = /\s+|[^\s]+/g;
 const LINE_TOKENS = /[^\n]*\n|[^\n]+/g;

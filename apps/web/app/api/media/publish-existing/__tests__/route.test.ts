@@ -5,7 +5,6 @@ import { NextResponse } from 'next/server';
 vi.mock('@/lib/access', () => ({ assertAccessActive: vi.fn(async () => null) }));
 vi.mock('@/lib/request-auth', () => ({
   requireSupabaseSession: vi.fn(),
-  engineAuthHeaders: vi.fn(() => ({ Authorization: 'Bearer secret', 'x-user-id': 'user-uuid-1' })),
 }));
 vi.mock('@/lib/rate-limit', () => ({
   applyRateLimit: vi.fn(async () => null),
@@ -149,7 +148,6 @@ function fakeSupabase(config: FakeConfig = {}) {
   class Query {
     private table: string;
     private op: 'select' | 'insert' | 'delete' | 'update' = 'select';
-    private values: unknown = null;
     private liveUploadRead = false;
     private selectedColumns: string[] | null = null;
 
@@ -186,7 +184,6 @@ function fakeSupabase(config: FakeConfig = {}) {
 
     insert(values: unknown): this {
       this.op = 'insert';
-      this.values = values;
       if (this.table === 'schedules') {
         insertedSchedules.push(values as Record<string, unknown>);
         scheduleInsertAttempts += 1;
@@ -195,9 +192,8 @@ function fakeSupabase(config: FakeConfig = {}) {
       return this;
     }
 
-    update(values: unknown): this {
+    update(_values: unknown): this {
       this.op = 'update';
-      this.values = values;
       return this;
     }
 

@@ -1,4 +1,4 @@
-export class StreamError extends Error {}
+class StreamError extends Error {}
 
 export async function streamLlmJson({
   baseUrl,
@@ -76,7 +76,7 @@ async function readWithTimeout(reader, timeoutMs, isTotal) {
   }
 }
 
-export async function accumulateLlmStream(body, { silenceMs, totalMs, startedAt = Date.now() } = {}) {
+async function accumulateLlmStream(body, { silenceMs, totalMs, startedAt = Date.now() } = {}) {
   if (!body || typeof body.getReader !== 'function') {
     throw new StreamError('write-script: LLM stream has no readable body');
   }

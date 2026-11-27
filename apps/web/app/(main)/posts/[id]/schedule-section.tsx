@@ -3,7 +3,7 @@
 import { useI18n } from '@/lib/i18n/provider';
 import type { ScheduledSlot, SlotDetailPayload } from '@/lib/api';
 
-export function formatDateTime(value: string, locale: 'pt' | 'en', timeZone?: string | null): string {
+function formatDateTime(value: string, locale: 'pt' | 'en', timeZone?: string | null): string {
   const tag = locale === 'pt' ? 'pt-BR' : 'en-US';
   if (timeZone) {
     try {

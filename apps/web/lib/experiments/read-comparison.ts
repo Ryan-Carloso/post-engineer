@@ -11,7 +11,7 @@ export interface ComparisonQuery {
   personaIds: string[] | null;
 }
 
-export interface ComparisonView {
+interface ComparisonView {
   window: MetricsWindow;
   accounts: AccountResult[];
   truncated: boolean;

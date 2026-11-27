@@ -34,7 +34,7 @@ export async function listSlashPrompts(client: PostEngineerClient): Promise<List
   }
 }
 
-export async function getSlashPrompt(client: PostEngineerClient, slug: string): Promise<GetPromptResult> {
+async function getSlashPrompt(client: PostEngineerClient, slug: string): Promise<GetPromptResult> {
   try {
     const prompt = await trackedGet({ client, slug });
     return {

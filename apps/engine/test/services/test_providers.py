@@ -12,7 +12,6 @@ from app.providers import (
     PROVIDER_LABELS,
     SCHEDULE_ACCOUNT_COLUMNS,
     SOCIAL_PROVIDERS,
-    URL_MEDIA_PROVIDERS,
 )
 
 
@@ -51,10 +50,6 @@ class ProvidersMirrorTest(unittest.TestCase):
     def test_every_provider_has_a_label(self) -> None:
         self.assertEqual(list(PROVIDER_LABELS), list(SOCIAL_PROVIDERS))
         self.assertTrue(all(label.strip() for label in PROVIDER_LABELS.values()))
-
-    def test_url_media_providers_are_known_providers(self) -> None:
-        self.assertEqual(URL_MEDIA_PROVIDERS, frozenset({"instagram", "threads", "facebook"}))
-        self.assertTrue(URL_MEDIA_PROVIDERS <= set(SOCIAL_PROVIDERS))
 
     def test_comment_providers_equal_the_shared_subset(self) -> None:
         self.assertEqual(COMMENT_PROVIDERS, frozenset(_shared_array("COMMENT_PROVIDERS")))

@@ -3,7 +3,7 @@ import { actionDescription, actionShape, byAction, type ActionOptions, offeredSp
 import type { PostEngineerClient } from './client.js';
 import { optionalPersonaRefShape, withOptionalPersona } from './refs.js';
 import { CompleteVideoUploadShape, CreateVideoUploadShape, PublishUploadedVideoShape } from './publish-uploaded-shape.js';
-import { PublishExistingLocalShape, PublishExistingRemoteShape, PublishExistingShape } from './publish-existing-shape.js';
+import { PublishExistingRemoteShape, PublishExistingShape } from './publish-existing-shape.js';
 import { IMAGE_PROVIDERS } from './contracts/providers.js';
 import { handlePublishExisting } from './tools-publish-existing.js';
 import { DESTRUCTIVE, READ_ONLY } from './tool-annotations.js';
@@ -41,7 +41,7 @@ export function registerContentTools(server: McpServer, client: PostEngineerClie
 
   const publishOptions: ActionOptions<typeof PUBLISH_SPECS> = remote
     ? { unavailable: ['from_file'], variants: { publish_existing: optionalPersonaRefShape(PublishExistingRemoteShape) } }
-    : { variants: { publish_existing: optionalPersonaRefShape(PublishExistingLocalShape) } };
+    : { variants: { publish_existing: optionalPersonaRefShape(PublishExistingShape) } };
   server.tool(
     'publish_video',
     actionDescription(

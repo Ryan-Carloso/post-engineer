@@ -4,7 +4,7 @@ import { defineEndpoint } from './endpoint.js';
 
 export const SHARE_LINK_MAX_ACTIVE = 10;
 export const SHARE_LINK_MAX_EXPIRY_DAYS = 365;
-export const SHARE_LINK_MAX_PERSONAS = 50;
+const SHARE_LINK_MAX_PERSONAS = 50;
 
 export const CreateShareLinkBodySchema = z
   .object({
@@ -13,7 +13,7 @@ export const CreateShareLinkBodySchema = z
   })
   .strict();
 
-export const ShareLinkSchema = z.object({
+const ShareLinkSchema = z.object({
   id: z.string(),
   personaIds: z.array(z.string()).nullable(),
   createdAt: z.string(),

@@ -18,7 +18,7 @@ export interface TokenRefreshCandidate {
   updatedAt: string;
 }
 
-export interface RefreshedToken {
+interface RefreshedToken {
   accessToken: string;
   expiresInSeconds: number;
 }
@@ -39,9 +39,9 @@ export interface TokenRefreshStore {
   ): Promise<SaveRefreshedResult>;
 }
 
-export type TokenRefresher = (accessToken: string) => Promise<RefreshedToken>;
+type TokenRefresher = (accessToken: string) => Promise<RefreshedToken>;
 
-export interface TokenRefreshLogger {
+interface TokenRefreshLogger {
   info(message: string, metadata?: Record<string, unknown>): void;
   error(message: string, cause: unknown, metadata?: Record<string, unknown>): void;
 }

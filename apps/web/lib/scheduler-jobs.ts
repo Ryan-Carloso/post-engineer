@@ -108,7 +108,7 @@ async function runSocialTokenRefreshTick(): Promise<void> {
   await flushPostHog();
 }
 
-export const SCHEDULER_TICK_MS = 60 * 60 * 1000;
+const SCHEDULER_TICK_MS = 60 * 60 * 1000;
 
 export const SCHEDULER_JOBS: SchedulerJob[] = [
   {

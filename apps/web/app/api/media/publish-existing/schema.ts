@@ -21,7 +21,7 @@ export const IMAGE_MAX_BYTES = MAX_IMAGE_UPLOAD_BYTES;
 export const SCHEDULED_MEDIA_KINDS = ['upload', 'image'] as const;
 export type ScheduledMediaKind = (typeof SCHEDULED_MEDIA_KINDS)[number];
 
-export const IMAGE_CONTENT_TYPES = ['image/jpeg', 'image/png'] as const;
+const IMAGE_CONTENT_TYPES = ['image/jpeg', 'image/png'] as const;
 export type ImageContentType = (typeof IMAGE_CONTENT_TYPES)[number];
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -70,7 +70,7 @@ const BodySchema = z
   })
   .strict();
 
-export type PublishExistingMediaInput = z.infer<typeof MediaSchema>;
+type PublishExistingMediaInput = z.infer<typeof MediaSchema>;
 
 export interface PublishExistingRequest {
   media: PublishExistingMediaInput;

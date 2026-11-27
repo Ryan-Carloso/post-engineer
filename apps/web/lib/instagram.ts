@@ -14,9 +14,9 @@ export interface InstagramLongLivedToken {
   expiresIn: number;
 }
 
-export const INSTAGRAM_PROFILE_TIMEOUT_MS = 8000;
+const INSTAGRAM_PROFILE_TIMEOUT_MS = 8000;
 
-export const INSTAGRAM_PROFILE_FIELDS =
+const INSTAGRAM_PROFILE_FIELDS =
   'id,username,name,profile_picture_url,followers_count,media_count';
 
 export interface InstagramProfile {

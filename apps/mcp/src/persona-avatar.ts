@@ -7,7 +7,7 @@ import { getErrorMessage, ImageTooLargeError } from './errors.js';
 import { mimeTypeForImagePath } from './image-guards.js';
 import { MAX_PERSONA_PHOTO_BYTES, MAX_PERSONA_PHOTO_MB } from './limits.js';
 
-export async function imageFormFile(path: string): Promise<Blob> {
+async function imageFormFile(path: string): Promise<Blob> {
   const mimeType = mimeTypeForImagePath(path);
   let read;
   try {

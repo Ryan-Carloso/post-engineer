@@ -2,7 +2,7 @@ import type { ScheduledSlot } from '@/lib/api';
 import type { DetailedCalendarEvent, EventColor } from '@/components/calendar-types';
 import { calendarGroupOf, type CalendarGroup } from './status';
 
-export const CALENDAR_GROUP_EVENT_COLOR: Record<CalendarGroup, EventColor> = {
+const CALENDAR_GROUP_EVENT_COLOR: Record<CalendarGroup, EventColor> = {
   failed: 'red',
   published: 'green',
   inProgress: 'blue',

@@ -78,8 +78,6 @@ export const PublishExistingRemoteShape = {
   ...remoteFields,
 };
 
-export const PublishExistingLocalShape = PublishExistingShape;
-
 export const PublishExistingSchema = z.object(PublishExistingShape).strict().superRefine((value, ctx) => {
   if (value.mediaKind === 'upload' && value.uploadId === undefined) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['uploadId'], message: 'uploadId is required when mediaKind is upload.' });

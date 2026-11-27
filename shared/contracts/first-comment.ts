@@ -22,7 +22,7 @@ export const FirstCommentWarningSchema = z.object({
 
 export const FIRST_COMMENT_FIELD = 'firstComment';
 
-export type FirstCommentCheck = { ok: true; value: string | null } | { ok: false; error: string };
+type FirstCommentCheck = { ok: true; value: string | null } | { ok: false; error: string };
 
 export function checkFirstComment(raw: unknown): FirstCommentCheck {
   if (raw === undefined || raw === null) return { ok: true, value: null };

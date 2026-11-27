@@ -47,7 +47,7 @@ function isSocialProvider(value: unknown): value is SocialProvider {
   );
 }
 
-export function normalizePublishingAccountsInput(
+function normalizePublishingAccountsInput(
   accounts: unknown,
 ): PersonaDefaultAccounts {
   if (typeof accounts !== 'object' || accounts === null || Array.isArray(accounts)) {
@@ -96,7 +96,7 @@ export function parsePublishingAccountsField(
   return { ok: true, accounts };
 }
 
-export async function validateOwnedAccounts(
+async function validateOwnedAccounts(
   supabase: SupabaseClient,
   userId: string,
   wanted: PersonaDefaultAccounts,

@@ -170,7 +170,7 @@ export const IdentityCardV1Schema = z.strictObject({
     }),
 });
 
-export const IdentityCardV2Schema = z.strictObject({
+const IdentityCardV2Schema = z.strictObject({
   version: z.literal(2),
   identity: IdentityV2Schema,
   defaults: z
@@ -183,7 +183,7 @@ export const IdentityCardV2Schema = z.strictObject({
 
 const IdentityV3Schema = z.strictObject({ description: descriptionText });
 
-export const IdentityCardV3Schema = z.strictObject({
+const IdentityCardV3Schema = z.strictObject({
   version: z.literal(3),
   identity: IdentityV3Schema,
   defaults: z
@@ -299,14 +299,12 @@ export function parseSceneJson(raw: string, root = 'scene'): ParsedCardInput<Sce
   return parseJson(parseSceneValue, raw, root, SCENE_MAX_BYTES);
 }
 
-export const GetIdentityCardQuerySchema = z.object({ personaId: z.string().min(1) });
-
 export const GetIdentityCardResponseSchema = z.object({
   success: z.literal(true),
   identityCard: IdentityCardSchema.nullable(),
 });
 
-export const RenderIdentityPromptBodySchema = z.strictObject({
+const RenderIdentityPromptBodySchema = z.strictObject({
   personaId: z.string().min(1),
   scene: SceneSchema,
 });

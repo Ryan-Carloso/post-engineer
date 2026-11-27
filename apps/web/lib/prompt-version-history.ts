@@ -10,7 +10,7 @@ type Db = SupabaseClient<Database>;
 
 const PROMPT_COLUMNS = 'id, owner_id, slug, title, description, body, visibility, verified, created_at, updated_at';
 
-export interface PromptVersionSummary {
+interface PromptVersionSummary {
   versionId: string;
   version: number;
   title: string;

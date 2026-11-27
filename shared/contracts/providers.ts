@@ -30,21 +30,21 @@ export function isOAuthConnectProvider(value: unknown): value is OAuthConnectPro
 }
 
 export const IMAGE_PROVIDERS = ['instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'pinterest', 'telegram'] as const satisfies readonly SocialProvider[];
-export type ImageProvider = (typeof IMAGE_PROVIDERS)[number];
+type ImageProvider = (typeof IMAGE_PROVIDERS)[number];
 
 export function isImageProvider(value: unknown): value is ImageProvider {
   return typeof value === 'string' && (IMAGE_PROVIDERS as readonly string[]).includes(value);
 }
 
 export const TITLE_PROVIDERS = ['youtube', 'rumble', 'fanvue'] as const satisfies readonly SocialProvider[];
-export type TitleProvider = (typeof TITLE_PROVIDERS)[number];
+type TitleProvider = (typeof TITLE_PROVIDERS)[number];
 
 export function isTitleProvider(value: unknown): value is TitleProvider {
   return typeof value === 'string' && (TITLE_PROVIDERS as readonly string[]).includes(value);
 }
 
 export const AI_LABEL_PROVIDERS = ['youtube', 'instagram', 'threads', 'facebook', 'pinterest'] as const satisfies readonly SocialProvider[];
-export type AiLabelProvider = (typeof AI_LABEL_PROVIDERS)[number];
+type AiLabelProvider = (typeof AI_LABEL_PROVIDERS)[number];
 
 export function isAiLabelProvider(value: unknown): value is AiLabelProvider {
   return typeof value === 'string' && (AI_LABEL_PROVIDERS as readonly string[]).includes(value);

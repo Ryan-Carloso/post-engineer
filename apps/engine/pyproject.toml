@@ -43,6 +43,7 @@ dev = [
     "pre-commit>=4.0.0",
     "pytest>=9.1.1",
     "ruff>=0.11.0",
+    "vulture>=2.14",
 ]
 
 [tool.mypy]
@@ -74,6 +75,12 @@ module = [
     "toml.*",
 ]
 ignore_missing_imports = true
+
+[tool.vulture]
+paths = ["app", "main.py", "scripts"]
+min_confidence = 0
+ignore_decorators = ["@app.get", "@app.on_event"]
+ignore_names = ["reset_for_testing", "max_retries"]
 
 [tool.ruff]
 target-version = "py311"
@@ -115,9 +122,6 @@ also_copy = [
     "scripts/ast_changed.py",
     "scripts/changed_functions.py",
     "scripts/audit_secrets.py",
-    "scripts/export_openapi.py",
-    # Committed OpenAPI snapshot read by test_export_openapi's drift test.
-    "openapi.json",
 ]
 # Test exclusions for mutmut runs (these still run in the main engine CI job):
 # - test_mypy_config.py pins the CI workflow file layout (.github/workflows/),

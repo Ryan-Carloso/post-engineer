@@ -55,8 +55,8 @@ export const CancelScheduleResponseSchema = z.object({
   cancelledSlotIds: z.array(z.string()),
 });
 
-export const STATUS_LIMIT_DEFAULT = 10;
-export const STATUS_LIMIT_MAX = 500;
+const STATUS_LIMIT_DEFAULT = 10;
+const STATUS_LIMIT_MAX = 500;
 
 export function parseStatusLimit(value: string | null): number {
   if (value === null || !/^\d+$/.test(value)) return STATUS_LIMIT_DEFAULT;
@@ -77,7 +77,7 @@ export const RANGE_STATUSES = [
   'cancelled',
 ] as const;
 
-export type RangeParseResult =
+type RangeParseResult =
   | { kind: 'none' }
   | { kind: 'range'; from: string; to: string }
   | { kind: 'error'; message: string };
@@ -122,7 +122,7 @@ export function hasExplicitOffset(value: string): boolean {
   return /(?:Z|[+-]\d{2}:?\d{2})$/.test(value.trim());
 }
 
-export const StatusSlotSchema = z.object({
+const StatusSlotSchema = z.object({
   id: z.string(),
   slot_at: z.string(),
   status: z.enum([

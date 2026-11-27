@@ -3,7 +3,7 @@ import 'server-only';
 import type { OAuth2Client } from 'google-auth-library';
 import { getYouTubeClient } from '@/lib/youtube';
 
-export const YOUTUBE_CHANNEL_TIMEOUT_MS = 15_000;
+const YOUTUBE_CHANNEL_TIMEOUT_MS = 15_000;
 
 export interface YouTubeChannelProfile {
   id: string;

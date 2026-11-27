@@ -19,30 +19,6 @@ CONNECT_RETRIES = 2
 CONNECT_RETRY_BACKOFF_SECONDS = 0.5
 
 
-def retry_sleep_seconds(count: int = CONNECT_RETRIES) -> float:
-    """Total time urllib3 sleeps between attempts under this policy.
-
-    ``backoff_factor * (2 ** 1 + ... + 2 ** (count - 1))``: measured against
-    urllib3 2.x, count=2 sleeps 0 then 1.0 (not 0.5) for a 1.0 total.
-    """
-    return CONNECT_RETRY_BACKOFF_SECONDS * sum(2**k for k in range(1, max(count, 1)))
-
-
-def worst_case_seconds(connect_timeout: float, read_timeout: float) -> float:
-    """Upper bound on one request's wall time under this policy.
-
-    ``count`` retries means ``count + 1`` ATTEMPTS, each able to burn the full
-    connect timeout, plus the backoff sleeps: a blackholed network pays that,
-    a healthy one is bounded by the single read timeout (read errors are never
-    retried, so the read timeout is paid once). Callers that hold a lock across
-    a request rely on this staying small.
-    """
-    return max(
-        (CONNECT_RETRIES + 1) * connect_timeout + retry_sleep_seconds(),
-        read_timeout,
-    )
-
-
 def connect_retry(count: int = CONNECT_RETRIES) -> Any:
     """``urllib3.Retry`` policy: *count* connect retries, nothing else.
 

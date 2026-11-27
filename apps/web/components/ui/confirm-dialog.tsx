@@ -5,7 +5,7 @@ import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { SpinnerIcon } from '@/lib/ui';
 import { cn } from '@/lib/utils';
 
-export type ConfirmDialogTone = 'default' | 'destructive';
+type ConfirmDialogTone = 'default' | 'destructive';
 
 export interface ConfirmDialogProps {
   open: boolean;

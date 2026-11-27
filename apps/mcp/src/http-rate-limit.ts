@@ -1,5 +1,5 @@
 import type { IncomingMessage } from 'node:http';
-export interface HttpRateLimitResult {
+interface HttpRateLimitResult {
   allowed: boolean;
   retryAfterSeconds: number;
 }
@@ -46,7 +46,7 @@ export function createHttpRateLimiter(options: HttpRateLimiterOptions): HttpRate
 }
 
 export const PRE_AUTH_IP_LIMIT_PER_MINUTE = 300;
-export const PRE_AUTH_IP_WINDOW_MS = 60_000;
+const PRE_AUTH_IP_WINDOW_MS = 60_000;
 
 export function createPreAuthIpRateLimiter(
   options: Partial<HttpRateLimiterOptions> = {},

@@ -14,6 +14,8 @@
     "lint": "node .github/scripts/comments/check.mjs && pnpm exec nx run-many -t lint",
     "lint:comments": "node .github/scripts/comments/check.mjs",
     "lint:comments:fix": "node .github/scripts/comments/check.mjs --fix",
+    "lint:dead-code": "knip --no-progress && node .github/scripts/dead-code/contracts.mjs && (cd apps/engine && uv run vulture)",
+    "lint:dead-code:fix": "knip --fix --fix-type exports,types,duplicates --no-progress && node .github/scripts/dead-code/contracts.mjs --fix",
     "lint:fix": "pnpm exec nx run web:lint:fix && pnpm exec nx run-many -t lint typecheck",
     "typecheck": "node scripts/sync-contracts.mjs && pnpm exec nx run-many -t typecheck",
     "graph": "pnpm exec nx graph",
@@ -23,6 +25,7 @@
   },
   "devDependencies": {
     "husky": "^9.1.7",
+    "knip": "6.45.1",
     "nx": "^21.6.11"
   },
   "pnpm": {

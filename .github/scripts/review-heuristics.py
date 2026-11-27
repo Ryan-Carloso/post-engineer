@@ -39,7 +39,7 @@ FREE_TEXT_KEY = re.compile(
     re.IGNORECASE,
 )
 SCRUB = re.compile(r"scrub_(?:error_text|secret_values)\(")
-TELEMETRY_CALL = re.compile(r"\b(track_event|track_ai_request|capture)\s*\(")
+TELEMETRY_CALL = re.compile(r"\b(track_event|capture)\s*\(")
 TEST_FILE = re.compile(r"(^|/)test_[^/]+\.py$|_test\.py$")
 
 

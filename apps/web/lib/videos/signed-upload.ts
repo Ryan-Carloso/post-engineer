@@ -9,7 +9,6 @@ import {
   MAX_VIDEO_UPLOAD_BYTES,
   UPLOAD_CONTENT_TYPE_MESSAGE,
   UPLOAD_CONTENT_TYPES,
-  VIDEO_UPLOAD_CONTENT_TYPES,
   isImageUploadContentType,
   type UploadContentType,
   type VideoUploadContentType,
@@ -18,11 +17,11 @@ import { IMAGE_PROVIDERS, isImageProvider } from '@/lib/contracts/providers';
 import { SCHEDULED_UPLOAD_EXPIRY_MS } from '@/lib/videos/upload-expiry';
 import { listLiveUploadSlotTimes } from '@/lib/videos/scheduled-upload-slots';
 
-export { MAX_VIDEO_UPLOAD_BYTES, VIDEO_UPLOAD_CONTENT_TYPES, type UploadContentType, type VideoUploadContentType };
+export { MAX_VIDEO_UPLOAD_BYTES, type UploadContentType, type VideoUploadContentType };
 
 export const VIDEO_UPLOAD_BUCKET = 'videos';
 export const VIDEO_UPLOAD_TTL_MS = 15 * 60 * 1000;
-export const VIDEO_UPLOAD_SWEEP_LIMIT = 20;
+const VIDEO_UPLOAD_SWEEP_LIMIT = 20;
 export const VIDEO_UPLOAD_STATUSES = ['pending', 'ready', 'consumed'] as const;
 
 export type VideoUploadStatus = (typeof VIDEO_UPLOAD_STATUSES)[number];
@@ -83,7 +82,7 @@ const EXTENSIONS: Record<UploadContentType, string> = {
   'image/png': 'png',
 };
 
-export function maxUploadBytes(contentType: UploadContentType): number {
+function maxUploadBytes(contentType: UploadContentType): number {
   return isImageUploadContentType(contentType) ? MAX_IMAGE_UPLOAD_BYTES : MAX_VIDEO_UPLOAD_BYTES;
 }
 

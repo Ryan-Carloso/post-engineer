@@ -5,7 +5,7 @@ import { create } from 'zustand';
 import { logClientError } from '@/lib/client-logger';
 import { ONBOARDING_WIZARD_SEEN_KEY, ONBOARDING_WIZARD_SEEN_METADATA_KEY } from '@/lib/onboarding-wizard-keys';
 
-export const ONBOARDING_WIZARD_STEPS = 4;
+const ONBOARDING_WIZARD_STEPS = 4;
 
 export interface OnboardingAuthClient {
   auth: {
@@ -22,7 +22,7 @@ export function readOnboardingWizardSeen(): boolean {
   return window.localStorage.getItem(ONBOARDING_WIZARD_SEEN_KEY) === '1';
 }
 
-export function markOnboardingWizardSeenLocally(): void {
+function markOnboardingWizardSeenLocally(): void {
   window.localStorage.setItem(ONBOARDING_WIZARD_SEEN_KEY, '1');
 }
 

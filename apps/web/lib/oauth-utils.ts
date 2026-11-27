@@ -6,9 +6,9 @@ import { NextResponse } from 'next/server';
 import type { OAuthProvider } from '@/lib/providers/registry';
 import { isOAuthProvider } from '@/lib/providers/registry';
 
-export const OAUTH_NONCE_COOKIE = 'oauth_state_nonce';
+const OAUTH_NONCE_COOKIE = 'oauth_state_nonce';
 
-export const FANVUE_CODE_VERIFIER_COOKIE = 'fanvue_code_verifier';
+const FANVUE_CODE_VERIFIER_COOKIE = 'fanvue_code_verifier';
 
 const OAUTH_NONCE_MAX_AGE = 600;
 

@@ -30,13 +30,3 @@ def test_track_event_with_api_key_set_never_builds_real_client(
     assert client.capture.call_args.kwargs["event"] == "guard_probe"
 
 
-def test_track_ai_request_with_api_key_set_never_builds_real_client(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("POSTHOG_API_KEY", "phc_guard_probe_key")
-    analytics.reset_for_testing()
-    analytics.track_ai_request({"backend": "llm", "success": True})
-    client = analytics._get_client()
-    assert isinstance(client, MagicMock)
-    events = [call.kwargs["event"] for call in client.capture.call_args_list]
-    assert events == ["ai_request", "$ai_generation"]

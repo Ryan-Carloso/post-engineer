@@ -1,6 +1,6 @@
 import { readMetaErrorCode, readMetaErrorSubcode } from '@/lib/meta-error-code';
 
-export const FIRST_COMMENT_TIMEOUT_MS = 15_000;
+const FIRST_COMMENT_TIMEOUT_MS = 15_000;
 
 export class FirstCommentError extends Error {
   readonly statusCode: number;

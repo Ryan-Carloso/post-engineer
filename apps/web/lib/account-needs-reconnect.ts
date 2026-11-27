@@ -3,8 +3,7 @@ import 'server-only';
 import { logger } from '@/lib/logger';
 import type { SocialProvider } from '@/lib/providers/registry';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
-
-export const ACCOUNT_NEEDS_RECONNECT_WARNING_CODE = 'account_needs_reconnect' as const;
+import { ACCOUNT_NEEDS_RECONNECT_WARNING_CODE } from '@/lib/contracts/schedule-warnings';
 
 export interface ReconnectAccountRef {
   provider: string;

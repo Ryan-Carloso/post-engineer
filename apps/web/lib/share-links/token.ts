@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 
 export const SHARE_TOKEN_BYTES = 32;
-export const SHARE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+const SHARE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
 export function generateShareToken(): string {
   return randomBytes(SHARE_TOKEN_BYTES).toString('base64url');

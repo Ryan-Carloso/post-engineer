@@ -18,11 +18,11 @@ import {
 } from './tools-prompt-library.js';
 import { RecipeSession, isRecipeSlug, recipeRunText, type McpTransportKind } from './recipe-session.js';
 
-export { withRecipeNudge, type McpTransportKind } from './recipe-session.js';
+export { type McpTransportKind } from './recipe-session.js';
 
 export { SERVER_INSTRUCTIONS } from './server-instructions.js';
 
-export const ListPromptsDescription =
+const ListPromptsDescription =
   'List the available prompts (slug, title, description, source): your own and other users\' public ones. Call this BEFORE writing copy when the user\'s request describes a topic rather than ready text. Then call prompts (action: get) with the matching slug to load the full workflow for that prompt.';
 
 export const ListPromptsShape = {
@@ -60,7 +60,7 @@ export async function handleListPrompts(client: PostEngineerClient, args: unknow
   return (await fetchPromptList(client, args)).response;
 }
 
-export const GetPromptDescription =
+const GetPromptDescription =
   'Return the full prompt for one slug from prompts (action: list): one of yours or a public community prompt. Load only the prompt the agent will follow, and pass its versionId as promptVersionId on publish_video (action: publish_existing, mode scheduled). Unknown slugs fail with the list of valid slugs — call prompts (action: list) first when unsure.';
 
 export const GetPromptShape = {

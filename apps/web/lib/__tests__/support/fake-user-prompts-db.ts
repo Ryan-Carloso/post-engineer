@@ -15,7 +15,7 @@ interface Outcome {
 
 type Operation = 'select' | 'insert' | 'update' | 'delete';
 
-export interface FakePromptVersion {
+interface FakePromptVersion {
   id: string;
   prompt_id: string | null;
   owner_id: string;

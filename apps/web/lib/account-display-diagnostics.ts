@@ -36,7 +36,7 @@ export type AccountProvider = SocialProvider;
 
 export type AccountLabelOrigin = 'stored' | 'provider_id';
 
-export interface ElementBox {
+interface ElementBox {
   clientWidth: number;
   scrollWidth: number;
 }
@@ -93,7 +93,7 @@ function cap(value: string): string {
   return value.slice(0, LABEL_CAP);
 }
 
-export function thumbnailHost(url: string): string | null {
+function thumbnailHost(url: string): string | null {
   try {
     return new URL(url).hostname;
   } catch {

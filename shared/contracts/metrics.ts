@@ -9,7 +9,6 @@ export const METRICS_NONE = '^@none';
 
 export const METRICS_FILTER_MAX_LENGTH = 200;
 
-
 export const YOUTUBE_VIDEO_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 export const ANALYTICS_STATUSES = ['ok', 'scope_missing', 'not_owned', 'no_data'] as const;
@@ -19,7 +18,7 @@ export function isAnalyticsStatus(value: unknown): value is AnalyticsStatus {
   return typeof value === 'string' && (ANALYTICS_STATUSES as readonly string[]).includes(value);
 }
 
-export const COVERAGE_REASONS = ['pending', 'retrying', 'missed', 'no-target', 'publish-failed'] as const;
+const COVERAGE_REASONS = ['pending', 'retrying', 'missed', 'no-target', 'publish-failed'] as const;
 export type CoverageReason = (typeof COVERAGE_REASONS)[number];
 
 export function isCoverageReason(value: unknown): value is CoverageReason {
@@ -133,25 +132,25 @@ export function parseRetentionCurveQuery(
   return { account: account[0], video: video[0] };
 }
 
-export const MetricsQueryParamsSchema = z.strictObject({
+const MetricsQueryParamsSchema = z.strictObject({
   window: z.string().optional(),
   persona: z.string().optional(),
   account: z.string().optional(),
   provider: z.string().optional(),
 });
 
-export const Last24hQueryParamsSchema = z.strictObject({
+const Last24hQueryParamsSchema = z.strictObject({
   persona: z.string().optional(),
   account: z.string().optional(),
   provider: z.string().optional(),
 });
 
-export const RetentionCurveQuerySchema = z.strictObject({
+const RetentionCurveQuerySchema = z.strictObject({
   account: z.string(),
   video: z.string(),
 });
 
-export const MetricsRowSchema = z.object({
+const MetricsRowSchema = z.object({
   postId: z.string(),
   personaId: z.string().nullable(),
   provider: z.enum(SOCIAL_PROVIDERS),
@@ -174,7 +173,7 @@ export const MetricsRowSchema = z.object({
 });
 export type MetricsRowView = z.infer<typeof MetricsRowSchema>;
 
-export const CoverageItemSchema = z.object({
+const CoverageItemSchema = z.object({
   postId: z.string(),
   personaId: z.string().nullable(),
   provider: z.enum(SOCIAL_PROVIDERS),
@@ -197,9 +196,9 @@ export const MetricsResponseSchema = z.object({
 });
 export type MetricsResponse = z.infer<typeof MetricsResponseSchema>;
 
-export const LAST_24H_BASELINES = ['reading', 'lifetime'] as const;
+const LAST_24H_BASELINES = ['reading', 'lifetime'] as const;
 
-export const Last24hRowSchema = z.object({
+const Last24hRowSchema = z.object({
   postId: z.string(),
   personaId: z.string().nullable(),
   provider: z.enum(SOCIAL_PROVIDERS),
@@ -235,7 +234,7 @@ export const Last24hResponseSchema = z.object({
 });
 export type Last24hResponse = z.infer<typeof Last24hResponseSchema>;
 
-export const RetentionPointSchema = z.object({
+const RetentionPointSchema = z.object({
   ratio: z.number(),
   audienceWatchRatio: z.number(),
   relativeRetentionPerformance: z.number().nullable(),

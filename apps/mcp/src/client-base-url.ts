@@ -1,4 +1,4 @@
-export const PRODUCTION_API_URL = 'https://post-engineer.com';
+const PRODUCTION_API_URL = 'https://post-engineer.com';
 
 export function resolveBaseUrl(override: string | undefined): string {
   const raw = override ?? PRODUCTION_API_URL;

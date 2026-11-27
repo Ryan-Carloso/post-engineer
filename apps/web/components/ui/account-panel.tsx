@@ -64,7 +64,7 @@ function AvatarCircle({
   );
 }
 
-export function LocaleSwitcher() {
+function LocaleSwitcher() {
   const { locale, setLocale } = useI18n();
   return (
     <div className="flex items-center justify-center gap-1 rounded-xl border border-hairline bg-surface p-1 md:justify-start">
@@ -90,7 +90,7 @@ export function LocaleSwitcher() {
   );
 }
 
-export function SignOutButton({ compact = false }: { compact?: boolean }) {
+function SignOutButton({ compact = false }: { compact?: boolean }) {
   const router = useRouter();
   const { t } = useI18n();
 
@@ -118,7 +118,7 @@ export function SignOutButton({ compact = false }: { compact?: boolean }) {
   );
 }
 
-export function SignOutAllButton() {
+function SignOutAllButton() {
   const router = useRouter();
   const { t } = useI18n();
   const [confirming, setConfirming] = useState(false);
@@ -338,7 +338,7 @@ export function AccountPanel({
   );
 }
 
-export function ApiKeysRow({ compact = false }: { compact?: boolean }) {
+function ApiKeysRow({ compact = false }: { compact?: boolean }) {
   const { t } = useI18n();
   return (
     <Link

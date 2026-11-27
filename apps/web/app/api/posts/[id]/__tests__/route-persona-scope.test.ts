@@ -2,7 +2,6 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 vi.mock('@/lib/request-auth', () => ({
   requireSupabaseSession: vi.fn(),
-  engineAuthHeaders: (userId: string) => ({ 'x-user-id': userId }),
 }));
 vi.mock('@/lib/logger', () => ({
   logger: { error: vi.fn(() => 'log-id'), warn: vi.fn(() => 'log-id'), info: vi.fn(() => 'log-id') },

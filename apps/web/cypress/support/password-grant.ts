@@ -1,5 +1,5 @@
 export const PASSWORD_GRANT_MAX_ATTEMPTS = 3;
-export const PASSWORD_GRANT_BACKOFF_BASE_MS = 1000;
+const PASSWORD_GRANT_BACKOFF_BASE_MS = 1000;
 export const PASSWORD_GRANT_BACKOFF_CAP_MS = 8000;
 export const PASSWORD_GRANT_RETRY_AFTER_CAP_MS = 30_000;
 export const SESSION_EXPIRY_SKEW_MS = 30_000;
@@ -12,7 +12,7 @@ export type PasswordGrantStep =
   | { action: 'retry'; delayMs: number }
   | { action: 'fail'; message: string };
 
-export function passwordGrantFailureMessage(
+function passwordGrantFailureMessage(
   status: number,
   attempts: number,
   errorCode: string | null,

@@ -1,4 +1,4 @@
-export const ESLINT_CORRECTNESS_RULES = [
+const ESLINT_CORRECTNESS_RULES = [
   'react-hooks/rules-of-hooks',
   'react-hooks/exhaustive-deps',
   '@typescript-eslint/no-explicit-any',
@@ -12,7 +12,7 @@ export const ESLINT_CORRECTNESS_RULES = [
   'no-implied-eval',
 ];
 
-export const PY_CORRECTNESS_CODES = ['F821', 'F811', 'F823', 'F632', 'E711', 'E712', 'E721', 'B006', 'S*'];
+const PY_CORRECTNESS_CODES = ['F821', 'F811', 'F823', 'F632', 'E711', 'E712', 'E721', 'B006', 'S*'];
 
 function matchesRuleList(rule, list) {
   return list.some((entry) => (entry.endsWith('*') ? rule.startsWith(entry.slice(0, -1)) : rule === entry));

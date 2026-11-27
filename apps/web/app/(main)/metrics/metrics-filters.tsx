@@ -37,7 +37,7 @@ import { isSocialProvider } from '@/lib/providers/registry';
 
 export const FILTER_ALL = 'all';
 
-export interface FilterOption {
+interface FilterOption {
   value: string;
   label: string;
 }
@@ -216,7 +216,7 @@ function FilterSelectField({ label, value, onChange, children }: FilterSelectFie
   );
 }
 
-export interface ActiveFilter {
+interface ActiveFilter {
   key: keyof MetricsFilterPatch;
   label: string;
 }

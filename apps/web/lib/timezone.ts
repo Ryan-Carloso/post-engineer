@@ -138,15 +138,3 @@ export function utcToZonedInputValue(iso: string, timeZone: string): string | nu
   );
   return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
 }
-
-const TIME_RE = /^(\d{1,2}):(\d{2})$/;
-
-export function zonedTimeOnDate(date: Date, time: string, timeZone: string): Date | null {
-  const match = TIME_RE.exec(time.trim());
-  if (!match) return null;
-  const hour = Number.parseInt(match[1], 10);
-  const minute = Number.parseInt(match[2], 10);
-  if (hour > 23 || minute > 59) return null;
-  const { year, month, day } = datePartsInTimezone(date, timeZone);
-  return zonedTimeToUtc(year, month, day, hour, minute, timeZone);
-}

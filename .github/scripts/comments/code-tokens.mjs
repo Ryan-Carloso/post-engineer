@@ -1,6 +1,6 @@
 import { loadTypeScript, scriptKind } from './scan.mjs';
 
-export function jsxTextValue(raw) {
+function jsxTextValue(raw) {
   const lines = raw.split(/\r\n|\n|\r/);
   let lastNonEmpty = 0;
   lines.forEach((line, i) => {
@@ -19,7 +19,7 @@ export function jsxTextValue(raw) {
   return value;
 }
 
-export function codeTokens(text, file) {
+function codeTokens(text, file) {
   const ts = loadTypeScript();
   const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, scriptKind(ts, file));
   const tokens = [];

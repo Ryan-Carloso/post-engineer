@@ -69,9 +69,6 @@ class MissingAudit:
             and self.missing_config == other.missing_config
         )
 
-    def missing_names(self) -> list[str]:
-        return _sorted_unique(self.missing_env + self.missing_config)
-
 
 def audit_paths(
     env_example: Path,

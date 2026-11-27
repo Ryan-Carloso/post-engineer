@@ -6,7 +6,7 @@ import { computeAccessStatus, TRIAL_DAYS, type AccessStatus } from '@/lib/access
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-export const ACCESS_QUERY_KEY = ['access-status'] as const;
+const ACCESS_QUERY_KEY = ['access-status'] as const;
 
 export async function fetchAccessStatus(now: () => Date = () => new Date()): Promise<AccessStatus | null> {
   const supabase = createSupabaseClient();

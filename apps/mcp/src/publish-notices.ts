@@ -1,7 +1,3 @@
-export function readNoticeList(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
-}
-
 export function noticeSummary(userNotices: unknown[]): string {
   const lines: string[] = [];
   for (const item of userNotices) {

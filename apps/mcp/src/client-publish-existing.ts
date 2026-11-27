@@ -6,32 +6,16 @@ import type {
   PublishExistingResult,
 } from './client-types.js';
 import { isRecord, narrowDirectPublishAccountResult } from './direct-publish-narrowing.js';
-import { isSocialProvider } from './contracts/providers.js';
+import { AccountNeedsReconnectWarningSchema } from './contracts/schedule-warnings.js';
 
 const PUBLISH_EXISTING_TIMEOUT_MS = 120_000;
 
 function narrowReconnectWarnings(value: unknown): PublishExistingReconnectWarning[] | undefined {
   if (!Array.isArray(value)) return undefined;
-  const warnings: PublishExistingReconnectWarning[] = [];
-  for (const item of value) {
-    if (!isRecord(item) || item.code !== 'account_needs_reconnect' || !Array.isArray(item.accounts)) continue;
-    const accounts: PublishExistingReconnectWarning['accounts'] = [];
-    let valid = true;
-    for (const account of item.accounts) {
-      if (
-        !isRecord(account) ||
-        typeof account.provider !== 'string' ||
-        !isSocialProvider(account.provider) ||
-        typeof account.accountId !== 'string' ||
-        account.accountId.length === 0
-      ) {
-        valid = false;
-        break;
-      }
-      accounts.push({ provider: account.provider, accountId: account.accountId });
-    }
-    if (valid && accounts.length > 0) warnings.push({ code: 'account_needs_reconnect', accounts });
-  }
+  const warnings = value.flatMap((item) => {
+    const parsed = AccountNeedsReconnectWarningSchema.safeParse(item);
+    return parsed.success ? [parsed.data] : [];
+  });
   return warnings.length > 0 ? warnings : undefined;
 }
 

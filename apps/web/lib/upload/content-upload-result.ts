@@ -15,14 +15,14 @@ export interface ContentUploadAccountResult {
   warnings?: FirstCommentWarningCode[];
 }
 
-export interface ContentUploadSuccess {
+interface ContentUploadSuccess {
   success: true;
   provider: SocialProvider;
   results: ContentUploadAccountResult[];
   logId: string;
 }
 
-export interface ContentUploadFailure {
+interface ContentUploadFailure {
   success: false;
   error: string;
   errorType: string;

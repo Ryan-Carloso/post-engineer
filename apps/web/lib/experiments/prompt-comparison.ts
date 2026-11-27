@@ -6,8 +6,7 @@ export const CLEAR_P_VALUE = 0.05;
 export const INDICATIVE_P_VALUE = 0.2;
 
 export type ComparisonLabel = 'insufficient' | 'no_signal' | 'indicative' | 'clear';
-export type ComparisonDirection = 'above' | 'below';
-export type { PromptVersionSource };
+type ComparisonDirection = 'above' | 'below';
 
 export interface ComparedVideo {
   provider: string;
@@ -24,7 +23,7 @@ export interface PromptVersionFacts {
   source: PromptVersionSource;
 }
 
-export interface PromptResult {
+interface PromptResult {
   versionId: string | null;
   slug: string | null;
   title: string | null;

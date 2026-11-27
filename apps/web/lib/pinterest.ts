@@ -16,8 +16,8 @@ const PINTEREST_API = 'https://api.pinterest.com/v5';
 const PINTEREST_OAUTH_URL = 'https://www.pinterest.com/oauth/';
 const REQUEST_TIMEOUT_MS = 15_000;
 export const PINTEREST_UPLOAD_TIMEOUT_MS = 10 * 60_000;
-export const PINTEREST_MEDIA_MAX_POLLS = 24;
-export const PINTEREST_MEDIA_POLL_INTERVAL_MS = 5_000;
+const PINTEREST_MEDIA_MAX_POLLS = 24;
+const PINTEREST_MEDIA_POLL_INTERVAL_MS = 5_000;
 
 function requireEnv(name: string): string {
   const value = process.env[name];

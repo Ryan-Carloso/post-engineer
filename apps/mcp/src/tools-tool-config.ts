@@ -5,8 +5,6 @@ import { handleLibraryCall, type McpToolResponse } from './tools.js';
 
 export const GetToolConfigShape = {};
 
-export const GetToolConfigSchema = z.object(GetToolConfigShape);
-
 const ToolConfigKeysShape = {
   tavily: z
     .string()

@@ -21,8 +21,8 @@ export const FANVUE_SCOPES = [
   'offline_access',
 ] as const;
 
-export const FANVUE_AUTHORIZE_URL = 'https://auth.fanvue.com/oauth2/auth';
-export const FANVUE_TOKEN_URL = 'https://auth.fanvue.com/oauth2/token';
+const FANVUE_AUTHORIZE_URL = 'https://auth.fanvue.com/oauth2/auth';
+const FANVUE_TOKEN_URL = 'https://auth.fanvue.com/oauth2/token';
 const REQUEST_TIMEOUT_MS = 15_000;
 
 function basicAuthHeader(): string {

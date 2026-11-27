@@ -22,7 +22,7 @@ import {
 
 export type MetricsView = 'chart' | 'list';
 
-export const METRICS_VIEW_STORAGE_KEY = 'metrics-view-mode';
+const METRICS_VIEW_STORAGE_KEY = 'metrics-view-mode';
 
 export function readMetricsView(): MetricsView {
   try {

@@ -21,7 +21,7 @@ const NAV_ARROW_CLASS =
 
 const DRAG_THRESHOLD_PX = 4;
 
-export type PostsCalendarView = 'month' | 'week';
+type PostsCalendarView = 'month' | 'week';
 
 export function formatWeekRange(start: Date, end: Date, locale: Locale): string {
   const dateFnsLocale = locale === 'pt' ? ptBR : enUS;

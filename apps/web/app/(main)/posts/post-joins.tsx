@@ -20,7 +20,7 @@ import { resolveSlotAccounts } from './post-card';
 import { PostRow } from './post-row';
 import type { PersonaPhoto } from './calendar-days';
 
-export type ProviderFilter = 'all' | SocialProvider;
+type ProviderFilter = 'all' | SocialProvider;
 
 export const POSTS_NO_PERSONA = '^@none';
 

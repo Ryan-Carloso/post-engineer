@@ -10,7 +10,7 @@ import {
 } from '@/lib/videos/signed-upload';
 
 export const SCHEDULED_IMAGE_BUCKET = 'uploads';
-export const SCHEDULED_IMAGE_PREFIX = 'scheduled-media';
+const SCHEDULED_IMAGE_PREFIX = 'scheduled-media';
 
 export class ExistingMediaError extends Error {
   readonly status: number;

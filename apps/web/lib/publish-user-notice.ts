@@ -1,7 +1,7 @@
 import { PROVIDER_LABELS } from '@/lib/account-options';
 import { isUserAccountErrorCode, type UserAccountErrorCode } from '@/lib/upload/account-error-codes';
 
-export type PublishUserNoticeCode = UserAccountErrorCode | TerminalUserActionCode;
+type PublishUserNoticeCode = UserAccountErrorCode | TerminalUserActionCode;
 
 export interface PublishUserNotice {
   provider: string;

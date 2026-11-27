@@ -13,7 +13,7 @@ import { isPublicIp } from '@/lib/ssrf/public-ip';
 import { resolvePublicHost } from '@/lib/ssrf/resolve-public-host';
 import { redirectUriAllowed } from './redirect-uri';
 
-export interface ValidDcrMetadata {
+interface ValidDcrMetadata {
   ok: true;
   redirectUris: string[];
   clientName: string;

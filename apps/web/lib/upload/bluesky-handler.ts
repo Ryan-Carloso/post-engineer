@@ -20,7 +20,7 @@ const VIDEO_SERVICE = 'https://video.bsky.app';
 const BSKY_SERVICE = 'https://bsky.social';
 const POLL_INTERVAL_MS = 1_000;
 const POLL_MAX_MS = 60_000;
-export const BLUESKY_IMAGE_MAX_BYTES = 1_000_000;
+const BLUESKY_IMAGE_MAX_BYTES = 1_000_000;
 
 interface BlueskyAccountResult {
   accountId: string;

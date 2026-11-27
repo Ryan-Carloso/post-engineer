@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-export class SearchError extends Error {}
+class SearchError extends Error {}
 
 const SEARCH_TIMEOUT_MS = 30000;
 const MAX_RESULTS = 5;

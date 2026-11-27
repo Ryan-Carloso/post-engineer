@@ -1,7 +1,7 @@
 import { GITHUB_URL, LANDING_DESCRIPTION, OG_IMAGE_PATH, SITE_URL } from '@/lib/seo';
 
-export const ORGANIZATION_ID = `${SITE_URL}/#organization`;
-export const WEBSITE_ID = `${SITE_URL}/#website`;
+const ORGANIZATION_ID = `${SITE_URL}/#organization`;
+const WEBSITE_ID = `${SITE_URL}/#website`;
 
 export interface OrganizationJsonLd {
   '@context': 'https://schema.org';

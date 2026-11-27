@@ -56,9 +56,7 @@ class ScheduleStore:
         if not key:
             raise RuntimeError("SUPABASE_SERVICE_ROLE_KEY is required for publisher")
         self._requests = requests_module if requests_module is not None else build_retrying_session()
-        self.connect_retries = CONNECT_RETRIES
         self._base_url = base_url.rstrip("/")
-        self._key = key
         self._headers = {
             "apikey": key,
             "Authorization": f"Bearer {key}",
@@ -77,7 +75,6 @@ class ScheduleStore:
         Mutates the mounted adapter in place (set_retry_budget), so the
         session, its auth headers and its pooled connections all survive.
         """
-        self.connect_retries = count
         if isinstance(self._requests, requests.Session):
             set_retry_budget(self._requests, count)
 

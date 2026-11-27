@@ -4,7 +4,7 @@ import { AwsClient } from 'aws4fetch';
 import { logger } from '@/lib/logger';
 
 export const PUBLISH_MEDIA_BUCKET = 'videos';
-export const PUBLISH_MEDIA_PREFIX = 'publish-media';
+const PUBLISH_MEDIA_PREFIX = 'publish-media';
 export const PUBLISH_MEDIA_URL_TTL_SECONDS = 3600;
 export const PUBLISH_MEDIA_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 

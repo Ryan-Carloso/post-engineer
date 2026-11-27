@@ -81,9 +81,9 @@ test('python: offsets stay aligned after non-BMP characters', () => {
 });
 
 test('exempts generated, vendored and code-owned files', () => {
-  assert.equal(isExempt('apps/web/lib/engine/schema.gen.ts'), true);
+  assert.equal(isExempt('apps/web/lib/supabase/database.gen.ts'), true);
   assert.equal(isExempt('apps/mcp/src/__tests__/parity/verify.ts'), true);
-  assert.equal(isExempt('apps/web/components/calendar.tsx'), true);
+  assert.equal(isExempt('apps/web/components/calendar-provider.tsx'), true);
   assert.equal(isExempt('apps/web/lib/api.ts'), false);
 });
 

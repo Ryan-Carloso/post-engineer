@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { KeyIcon } from '@/lib/ui';
 
-export const SIGN_IN_HREF = '/login?next=/recipes';
+const SIGN_IN_HREF = '/login?next=/recipes';
 
 export default function SignInCta({
   label,
