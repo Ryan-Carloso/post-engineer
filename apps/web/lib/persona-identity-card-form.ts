@@ -2,120 +2,102 @@ import {
   CARD_STYLES,
   IDENTITY_CARD_MAX_BYTES,
   IDENTITY_CARD_WRITE_VERSION,
-  OUTFIT_SLOTS,
+  parseIdentityCardJson,
   parseIdentityCardValue,
+  type CardStyle,
   type IdentityCard,
+  type ParsedCardInput,
 } from './contracts/persona-identity-card';
 
-const FACE_LEAVES = [
-  'shape', 'eyes', 'eye_color', 'eyebrows', 'nose', 'lips', 'teeth', 'smile', 'skin', 'jawline', 'cheekbones', 'chin',
-  'forehead', 'ears',
-] as const;
-const HAIR_LEAVES = ['color', 'style', 'length', 'texture', 'parting'] as const;
-const BODY_LEAVES = ['build', 'height', 'shoulders', 'arms', 'hands', 'waist', 'hips', 'legs', 'posture', 'proportions'] as const;
-
-const FACE_FIELDS = [
-  ...FACE_LEAVES.map((leaf) => `face.${leaf}` as const),
-  'face.facial_hair',
-  'face.marks',
-  'face.tattoos',
-] as const;
-const HAIR_FIELDS = HAIR_LEAVES.map((leaf) => `face.hair.${leaf}` as const);
-const BODY_FIELDS = BODY_LEAVES.map((leaf) => `body.${leaf}` as const);
-const OUTFIT_FIELDS = OUTFIT_SLOTS.map((slot) => `outfit.${slot}` as const);
-
-export const IDENTITY_CARD_TEXT_FIELDS = [...FACE_FIELDS, ...HAIR_FIELDS, ...BODY_FIELDS, ...OUTFIT_FIELDS] as const;
-export const IDENTITY_CARD_FIELDS = [...IDENTITY_CARD_TEXT_FIELDS, 'style'] as const;
+export const IDENTITY_CARD_FIELDS = ['text', 'style'] as const;
 
 export type IdentityCardFieldKey = (typeof IDENTITY_CARD_FIELDS)[number];
-export type IdentityCardTextFieldKey = (typeof IDENTITY_CARD_TEXT_FIELDS)[number];
-export type IdentityCardDraft = Record<IdentityCardFieldKey, string>;
 
-export const IDENTITY_CARD_GROUPS: ReadonlyArray<{
-  id: 'face' | 'hair' | 'body' | 'style' | 'outfit';
-  fields: readonly IdentityCardFieldKey[];
-}> = [
-  { id: 'face', fields: FACE_FIELDS },
-  { id: 'hair', fields: HAIR_FIELDS },
-  { id: 'body', fields: BODY_FIELDS },
-  { id: 'style', fields: ['style'] },
-  { id: 'outfit', fields: OUTFIT_FIELDS },
-];
-
-export function emptyIdentityCardDraft(): IdentityCardDraft {
-  return Object.fromEntries(IDENTITY_CARD_FIELDS.map((key) => [key, ''])) as IdentityCardDraft;
+export interface IdentityCardDraft {
+  text: string;
+  style: string;
 }
 
-function leafOf(source: unknown, path: readonly string[]): string {
-  let cursor: unknown = source;
-  for (const segment of path) {
-    if (typeof cursor !== 'object' || cursor === null) return '';
-    cursor = (cursor as Record<string, unknown>)[segment];
-  }
-  return typeof cursor === 'string' ? cursor : '';
+export function emptyIdentityCardDraft(): IdentityCardDraft {
+  return { text: '', style: '' };
+}
+
+function knownStyle(value: string | undefined): CardStyle | '' {
+  return CARD_STYLES.find((style) => style === value) ?? '';
+}
+
+function cardStyle(card: IdentityCard): CardStyle | '' {
+  return card.version === 1 ? '' : knownStyle(card.defaults?.style);
 }
 
 export function cardToDraft(card: IdentityCard | null): IdentityCardDraft {
-  const draft = emptyIdentityCardDraft();
-  if (card === null) return draft;
-  for (const key of IDENTITY_CARD_FIELDS) {
-    const [head, ...rest] = key.split('.');
-    if (key === 'style') {
-      const style = leafOf(card.defaults, ['style']);
-      draft.style = CARD_STYLES.some((known) => known === style) ? style : '';
-    } else draft[key] = head === 'outfit'
-      ? leafOf(card.defaults?.outfit, rest)
-      : leafOf(card.identity, [head, ...rest]);
-  }
-  return draft;
+  if (card === null) return emptyIdentityCardDraft();
+  const style = cardStyle(card);
+  if (card.version === 3) return { text: card.identity.description, style };
+  return { text: JSON.stringify(card, null, 2), style };
 }
 
-function setLeaf(target: Record<string, unknown>, path: readonly string[], value: string): void {
-  let cursor = target;
-  for (const segment of path.slice(0, -1)) {
-    const next = cursor[segment];
-    if (typeof next === 'object' && next !== null) {
-      cursor = next as Record<string, unknown>;
-    } else {
-      const created: Record<string, unknown> = {};
-      cursor[segment] = created;
-      cursor = created;
+function normalizeDescription(text: string): string {
+  return text.replace(/\r\n?/g, '\n').trim();
+}
+
+function applyStyle(card: IdentityCard, style: CardStyle | ''): IdentityCard {
+  if (card.version === 1) {
+    if (style === '') return card;
+    const outfit = card.defaults?.outfit;
+    return outfit === undefined
+      ? { version: 2, identity: card.identity, defaults: { style } }
+      : { version: 2, identity: card.identity, defaults: { style, outfit } };
+  }
+  if (card.version === 2) {
+    const outfit = card.defaults?.outfit;
+    if (outfit !== undefined) {
+      return style === ''
+        ? { version: 2, identity: card.identity, defaults: { outfit } }
+        : { version: 2, identity: card.identity, defaults: { style, outfit } };
     }
+    return style === ''
+      ? { version: 2, identity: card.identity }
+      : { version: 2, identity: card.identity, defaults: { style } };
   }
-  cursor[path[path.length - 1]] = value;
+  return style === ''
+    ? { version: 3, identity: card.identity }
+    : { version: 3, identity: card.identity, defaults: { style } };
 }
 
-export function draftToCard(draft: IdentityCardDraft): IdentityCard | null {
-  const identity: Record<string, unknown> = {};
-  const outfit: Record<string, unknown> = {};
-  let filled = 0;
-  for (const key of IDENTITY_CARD_TEXT_FIELDS) {
-    const value = draft[key].trim();
-    if (value === '') continue;
-    filled += 1;
-    const [head, ...rest] = key.split('.');
-    if (head === 'outfit') setLeaf(outfit, rest, value);
-    else setLeaf(identity, [head, ...rest], value);
-  }
-  const style = draft.style.trim();
-  if (style !== '') filled += 1;
-  if (filled === 0) return null;
-  const defaults: Record<string, unknown> = {};
-  if (style !== '') defaults.style = style;
-  if (Object.keys(outfit).length > 0) defaults.outfit = outfit;
-  const card: Record<string, unknown> = { version: IDENTITY_CARD_WRITE_VERSION, identity };
-  if (Object.keys(defaults).length > 0) card.defaults = defaults;
-  return card as IdentityCard;
+function descriptionCard(text: string, style: CardStyle | ''): IdentityCard {
+  const identity = { description: normalizeDescription(text) };
+  return style === ''
+    ? { version: IDENTITY_CARD_WRITE_VERSION, identity }
+    : { version: IDENTITY_CARD_WRITE_VERSION, identity, defaults: { style } };
+}
+
+export function styleOfCardText(text: string): string | null {
+  const trimmed = normalizeDescription(text);
+  if (!trimmed.startsWith('{')) return null;
+  const parsed = parseIdentityCardJson(trimmed);
+  return parsed.ok ? cardStyle(parsed.value) : null;
+}
+
+export function draftToCard(draft: IdentityCardDraft): ParsedCardInput<IdentityCard | null> {
+  const text = normalizeDescription(draft.text);
+  const style = knownStyle(draft.style);
+  if (text === '') return { ok: true, value: null };
+  if (!text.startsWith('{')) return { ok: true, value: descriptionCard(text, style) };
+  const parsed = parseIdentityCardJson(text);
+  if (!parsed.ok) return parsed;
+  return { ok: true, value: applyStyle(parsed.value, style) };
 }
 
 export function sameIdentityCardDraft(a: IdentityCardDraft, b: IdentityCardDraft): boolean {
-  return IDENTITY_CARD_FIELDS.every((key) => a[key].trim() === b[key].trim());
+  return normalizeDescription(a.text) === normalizeDescription(b.text) && knownStyle(a.style) === knownStyle(b.style);
 }
 
 export function identityCardFormValue(draft: IdentityCardDraft, loaded: IdentityCardDraft): string | null {
   if (sameIdentityCardDraft(draft, loaded)) return null;
-  const card = draftToCard(draft);
-  return card === null ? 'null' : JSON.stringify(card);
+  const built = draftToCard(draft);
+  if (!built.ok) return null;
+  return built.value === null ? 'null' : JSON.stringify(built.value);
 }
 
 export type IdentityCardErrorKey =
@@ -126,18 +108,20 @@ export type IdentityCardErrorKey =
   | 'identityCard.errField'
   | 'identityCard.errTooLarge'
   | 'identityCard.errStyleOrOutfit'
+  | 'identityCard.errDescriptionMissing'
   | 'identityCard.errGeneric';
 
 export function identityCardErrorKey(message: string): IdentityCardErrorKey {
   if (message.includes('cannot be combined with top or bottom')) return 'identityCard.errOnePiece';
   if (message.includes('at least one trait')) return 'identityCard.errNoTrait';
-  if (message.includes('style or an outfit')) return 'identityCard.errStyleOrOutfit';
+  if (message.includes('style or an outfit') || message.includes('must name a style')) return 'identityCard.errStyleOrOutfit';
   if (message.includes('too large to store') || message.includes(`at most ${IDENTITY_CARD_MAX_BYTES} bytes`)) {
     return 'identityCard.errTooLarge';
   }
   if (message.includes('sexualised')) return 'identityCard.errContent';
   if (message.includes('clothing only')) return 'identityCard.errOutfitIdentity';
-  if (message.includes('at most 80 characters') || message.includes('must not be empty') || message.includes('single line')) {
+  if (message.includes('must not be empty')) return 'identityCard.errDescriptionMissing';
+  if (message.includes('control characters') || (message.includes('at most ') && message.includes(' characters'))) {
     return 'identityCard.errField';
   }
   return 'identityCard.errGeneric';
@@ -146,9 +130,13 @@ export function identityCardErrorKey(message: string): IdentityCardErrorKey {
 export type IdentityCardDraftValidation = { ok: true } | { ok: false; errorKey: IdentityCardErrorKey };
 
 export function validateIdentityCardDraft(draft: IdentityCardDraft): IdentityCardDraftValidation {
-  const card = draftToCard(draft);
-  if (card === null) return { ok: true };
-  const parsed = parseIdentityCardValue(card);
+  if (normalizeDescription(draft.text) === '' && knownStyle(draft.style) !== '') {
+    return { ok: false, errorKey: 'identityCard.errNoTrait' };
+  }
+  const built = draftToCard(draft);
+  if (!built.ok) return { ok: false, errorKey: identityCardErrorKey(built.error) };
+  if (built.value === null) return { ok: true };
+  const parsed = parseIdentityCardValue(built.value);
   return parsed.ok ? { ok: true } : { ok: false, errorKey: identityCardErrorKey(parsed.error) };
 }
 

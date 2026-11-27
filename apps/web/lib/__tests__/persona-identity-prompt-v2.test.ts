@@ -4,6 +4,7 @@ import {
   STYLE_PROMPT,
   parseSceneValue,
   type IdentityCard,
+  type Outfit,
   type Scene,
 } from '@/lib/contracts/persona-identity-card';
 import { buildIdentityPrompt } from '../persona-identity-prompt';
@@ -191,7 +192,7 @@ describe('buildIdentityPrompt for a v2 card', () => {
   });
 
   it('never merges to an outfit that mixes a one-piece with a top or bottom', () => {
-    const defaults: Array<NonNullable<IdentityCard['defaults']>['outfit']> = [
+    const defaults: Outfit[] = [
       { one_piece: 'dress' },
       { top: 'shirt' },
       { bottom: 'jeans' },

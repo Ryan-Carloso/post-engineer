@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { usePersonaStore } from '../store';
 import { cardToDraft, emptyIdentityCardDraft } from '../persona-identity-card-form';
-import { FIXTURE_CARD } from '@/test/identity-card-fixtures';
+import { FIXTURE_CARD, FIXTURE_CARD_V2 } from '@/test/identity-card-fixtures';
 
 function baseState(): void {
   usePersonaStore.getState().resetForm();
@@ -18,11 +18,11 @@ describe('persona store identity card', () => {
     expect(state.isSubmitting).toBe(false);
   });
 
-  it('edits one field without touching the loaded copy', () => {
-    usePersonaStore.getState().setIdentityCardField('face.eyes', 'green');
+  it('edits the description without touching the loaded copy', () => {
+    usePersonaStore.getState().setIdentityCardField('text', 'green eyes');
     const state = usePersonaStore.getState();
-    expect(state.identityCardDraft['face.eyes']).toBe('green');
-    expect(state.identityCardLoaded['face.eyes']).toBe('');
+    expect(state.identityCardDraft.text).toBe('green eyes');
+    expect(state.identityCardLoaded.text).toBe('');
   });
 
   it('adopts the stored card as both the draft and the loaded copy when untouched', () => {
@@ -32,11 +32,18 @@ describe('persona store identity card', () => {
     expect(state.identityCardLoaded).toEqual(cardToDraft(FIXTURE_CARD));
   });
 
+  it('adopts the style of a pasted card so the style choice and the text agree', () => {
+    usePersonaStore.getState().setIdentityCardField('text', JSON.stringify(FIXTURE_CARD_V2));
+    expect(usePersonaStore.getState().identityCardDraft.style).toBe('business');
+    usePersonaStore.getState().setIdentityCardField('text', 'free text keeps the chosen style');
+    expect(usePersonaStore.getState().identityCardDraft.style).toBe('business');
+  });
+
   it('keeps what the user typed when a refetch lands, but still records the server copy', () => {
-    usePersonaStore.getState().setIdentityCardField('face.eyes', 'green');
+    usePersonaStore.getState().setIdentityCardField('text', 'green eyes');
     usePersonaStore.getState().applyServerIdentityCard(cardToDraft(FIXTURE_CARD));
     const state = usePersonaStore.getState();
-    expect(state.identityCardDraft['face.eyes']).toBe('green');
+    expect(state.identityCardDraft.text).toBe('green eyes');
     expect(state.identityCardLoaded).toEqual(cardToDraft(FIXTURE_CARD));
   });
 
@@ -65,9 +72,9 @@ describe('persona store form data with an identity card', () => {
   });
 
   it('puts the card JSON in the create form when the user filled it', () => {
-    usePersonaStore.getState().setIdentityCardField('face.eyes', ' green ');
+    usePersonaStore.getState().setIdentityCardField('text', ' green eyes ');
     const raw = usePersonaStore.getState().buildPersonaFormData().get('identityCard');
-    expect(JSON.parse(String(raw))).toEqual({ version: 2, identity: { face: { eyes: 'green' } } });
+    expect(JSON.parse(String(raw))).toEqual({ version: 3, identity: { description: 'green eyes' } });
   });
 
   it('omits identityCard from the edit form when nothing changed', () => {
@@ -77,7 +84,7 @@ describe('persona store form data with an identity card', () => {
 
   it('sends the changed card on edit and null when a stored card was emptied', () => {
     usePersonaStore.getState().applyServerIdentityCard(cardToDraft(FIXTURE_CARD));
-    usePersonaStore.getState().setIdentityCardField('body.height', 'short');
+    usePersonaStore.getState().setIdentityCardField('text', '{"version":1,"identity":{"body":{"height":"short"}}}');
     const changed = usePersonaStore.getState().buildPersonaEditFormData().get('identityCard');
     expect(JSON.parse(String(changed)).identity.body.height).toBe('short');
 

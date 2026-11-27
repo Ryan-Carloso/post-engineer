@@ -1,4 +1,3 @@
-
 const PERSONA_ID = '11111111-1111-4111-8111-111111111111';
 const PATH = `/persona?edit=${PERSONA_ID}`;
 const EMPTY_ACCOUNTS = {
@@ -8,8 +7,8 @@ const EMPTY_ACCOUNTS = {
 
 interface StoredCard {
   version: number;
-  identity: { face?: { eyes?: string; hair?: { color?: string } }; body?: { height?: string } };
-  defaults?: { outfit?: { top?: string } };
+  identity: { description?: string };
+  defaults?: { style?: string };
 }
 
 function mockEditPage(state: { stored: StoredCard | null; patches: number }): void {
@@ -61,54 +60,68 @@ function visitEdit(): void {
   cy.get('#persona-name', { timeout: 15_000 }).should('have.value', 'Maya Card');
 }
 
+function description(): Cypress.Chainable<JQuery<HTMLTextAreaElement>> {
+  return cy.get('[data-testid="identity-card-text"]');
+}
+
 describe('Persona — identity card', () => {
   beforeEach(() => {
     cy.loginE2EUser();
   });
 
-  it('saves a card and shows it again after a reload', () => {
+  it('saves a free-text description and shows it again after a reload', () => {
     const state: { stored: StoredCard | null; patches: number } = { stored: null, patches: 0 };
     mockEditPage(state);
 
     visitEdit();
     cy.wait('@getCard');
     cy.get('[data-testid="persona-identity-card"]').scrollIntoView();
-    cy.get('[data-testid="identity-card-face.eyes"]').should('be.enabled').and('have.value', '');
+    description().should('be.enabled').and('have.value', '');
     cy.get('[data-testid="identity-card-consent"]').should('be.visible');
 
-    cy.get('[data-testid="identity-card-face.eyes"]').type('blue-grey');
-    cy.get('[data-testid="identity-card-face.hair.color"]').type('blonde');
-    cy.get('[data-testid="identity-card-body.height"]').type('tall');
-    cy.get('[data-testid="identity-card-outfit.top"]').type('sage-green t-shirt');
-
+    description().type('Blue-grey wide-set eyes, blonde long wavy hair, tall athletic build.');
     cy.contains('button', 'Salvar alterações').click();
     cy.wait('@patchPersona').then(() => {
       expect(state.patches).to.equal(1);
       expect(state.stored).to.deep.equal({
-        version: 2,
-        identity: { face: { eyes: 'blue-grey', hair: { color: 'blonde' } }, body: { height: 'tall' } },
-        defaults: { outfit: { top: 'sage-green t-shirt' } },
+        version: 3,
+        identity: { description: 'Blue-grey wide-set eyes, blonde long wavy hair, tall athletic build.' },
       });
     });
 
     visitEdit();
     cy.wait('@getCard');
-    cy.get('[data-testid="identity-card-face.eyes"]').should('have.value', 'blue-grey');
-    cy.get('[data-testid="identity-card-face.hair.color"]').should('have.value', 'blonde');
-    cy.get('[data-testid="identity-card-body.height"]').should('have.value', 'tall');
-    cy.get('[data-testid="identity-card-outfit.top"]').should('have.value', 'sage-green t-shirt');
+    description().should('have.value', 'Blue-grey wide-set eyes, blonde long wavy hair, tall athletic build.');
   });
 
-  it('blocks an outfit without any face or body trait and sends nothing', () => {
+  it('accepts a pasted JSON card and keeps it editable after a reload', () => {
     const state: { stored: StoredCard | null; patches: number } = { stored: null, patches: 0 };
     mockEditPage(state);
 
     visitEdit();
     cy.wait('@getCard');
-    cy.get('[data-testid="identity-card-outfit.top"]').type('sage-green t-shirt');
+    const card = { version: 3, identity: { description: 'Green eyes, square jaw, short black hair.' }, defaults: { style: 'casual' } };
+    description().type(JSON.stringify(card), { parseSpecialCharSequences: false });
+    cy.contains('button', 'Salvar alterações').click();
+    cy.wait('@patchPersona').then(() => {
+      expect(state.stored).to.deep.equal(card);
+    });
+
+    visitEdit();
+    cy.wait('@getCard');
+    description().should('have.value', card.identity.description);
+  });
+
+  it('blocks an empty description in a pasted card and sends nothing', () => {
+    const state: { stored: StoredCard | null; patches: number } = { stored: null, patches: 0 };
+    mockEditPage(state);
+
+    visitEdit();
+    cy.wait('@getCard');
+    description().type('{"version":3,"identity":{"description":""}}', { parseSpecialCharSequences: false });
     cy.contains('button', 'Salvar alterações').click();
 
-    cy.contains('Preencha ao menos um traço de rosto ou corpo antes de definir um estilo ou uma roupa.').should('be.visible');
+    cy.contains('Descreva a pessoa ou cole um cartão de identidade em JSON.').should('be.visible');
     cy.then(() => expect(state.patches).to.equal(0));
   });
 });

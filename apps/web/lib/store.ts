@@ -16,6 +16,7 @@ import {
   emptyIdentityCardDraft,
   identityCardFormValue,
   sameIdentityCardDraft,
+  styleOfCardText,
   type IdentityCardDraft,
   type IdentityCardFieldKey,
 } from '@/lib/persona-identity-card-form';
@@ -206,7 +207,13 @@ export const usePersonaStore = create<PersonaFormState>()(
     setPublishingAccounts: (publishingAccounts) => set({ publishingAccounts }),
     setPublishingAccountsLoaded: (publishingAccountsLoaded) => set({ publishingAccountsLoaded }),
     setLoadedPublishingAccounts: (loadedPublishingAccounts) => set({ loadedPublishingAccounts }),
-    setIdentityCardField: (key, value) => set((s) => ({ identityCardDraft: { ...s.identityCardDraft, [key]: value } })),
+    setIdentityCardField: (key, value) =>
+      set((s) => {
+        const draft = { ...s.identityCardDraft, [key]: value };
+        if (key !== 'text') return { identityCardDraft: draft };
+        const pastedStyle = styleOfCardText(value);
+        return { identityCardDraft: pastedStyle === null ? draft : { ...draft, style: pastedStyle } };
+      }),
     applyServerIdentityCard: (draft) =>
       set((s) => ({
         identityCardLoaded: draft,

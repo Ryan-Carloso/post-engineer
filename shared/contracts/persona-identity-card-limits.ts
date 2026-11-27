@@ -1,8 +1,9 @@
-export const IDENTITY_CARD_ACCEPTED_VERSIONS = [1, 2] as const;
-export const IDENTITY_CARD_WRITE_VERSION = 2;
+export const IDENTITY_CARD_ACCEPTED_VERSIONS = [1, 2, 3] as const;
+export const IDENTITY_CARD_WRITE_VERSION = 3;
 export const IDENTITY_CARD_MAX_BYTES = 4096;
 export const SCENE_MAX_BYTES = 2048;
 export const IDENTITY_TEXT_MAX_LENGTH = 80;
+export const IDENTITY_DESCRIPTION_MAX_LENGTH = 800;
 export const IDENTITY_CARD_MISSING_CODE = 'IDENTITY_CARD_MISSING';
 
 export const OUTFIT_SLOTS = ['top', 'bottom', 'one_piece', 'outerwear', 'footwear', 'accessories'] as const;

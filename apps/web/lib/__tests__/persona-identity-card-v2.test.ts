@@ -9,7 +9,7 @@ import {
   parseIdentityCardValue,
 } from '@/lib/contracts/persona-identity-card';
 import { identityCardErrorKey } from '@/lib/persona-identity-card-form';
-import { FIXTURE_CARD, FIXTURE_CARD_V2 } from '@/test/identity-card-fixtures';
+import { FIXTURE_CARD, FIXTURE_CARD_V2, FIXTURE_CARD_V3 } from '@/test/identity-card-fixtures';
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -46,11 +46,11 @@ describe('identity card v2', () => {
     expect(IdentityCardSchema.safeParse(FIXTURE_CARD_V2).success).toBe(true);
   });
 
-  it('writes version 2 and accepts versions 1 and 2', () => {
-    expect(IDENTITY_CARD_WRITE_VERSION).toBe(2);
+  it('accepts versions 1 and 2 while new cards are written as a later version', () => {
+    expect(IDENTITY_CARD_WRITE_VERSION).toBeGreaterThan(2);
     expect(IDENTITY_CARD_ACCEPTED_VERSIONS).toContain(IDENTITY_CARD_WRITE_VERSION);
     for (const version of IDENTITY_CARD_ACCEPTED_VERSIONS) {
-      const card = version === 1 ? FIXTURE_CARD : FIXTURE_CARD_V2;
+      const card = version === 1 ? FIXTURE_CARD : version === 2 ? FIXTURE_CARD_V2 : FIXTURE_CARD_V3;
       expect(IdentityCardSchema.safeParse(card).success).toBe(true);
     }
   });
