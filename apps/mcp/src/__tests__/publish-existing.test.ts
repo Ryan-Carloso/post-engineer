@@ -226,6 +226,38 @@ describe('publish_existing client call', () => {
     });
   });
 
+  it('narrows a replayed asap hold whose slot already left awaiting_approval', async () => {
+    const { client } = fakeClient(async () => ({
+      success: true,
+      mode: 'asap',
+      approvalRequired: false,
+      replayed: true,
+      slot: { id: 'slot-9', slotAt: '2026-12-01T20:00:00.000Z', status: 'published' },
+    }));
+    const result = await publishExisting(client, { ...BASE, mode: 'asap', publishAt: undefined });
+    expect(result).toEqual({
+      mode: 'asap',
+      success: true,
+      replayed: true,
+      held: false,
+      approvalRequired: false,
+      slot: { id: 'slot-9', slotAt: '2026-12-01T20:00:00.000Z', status: 'published' },
+    });
+  });
+
+  it('rejects a replayed asap hold without a well-formed slot', async () => {
+    const { client } = fakeClient(async () => ({
+      success: true,
+      mode: 'asap',
+      approvalRequired: false,
+      replayed: true,
+      slot: { id: 'slot-9' },
+    }));
+    await expect(publishExisting(client, { ...BASE, mode: 'asap', publishAt: undefined })).rejects.toThrow(
+      /Malformed publish-existing/,
+    );
+  });
+
   it('rejects an asap hold without a well-formed slot', async () => {
     const { client } = fakeClient(async () => ({
       success: true,
@@ -334,6 +366,32 @@ describe('publish_existing tool handler', () => {
     );
     expect(text).toContain('"held":true');
     expect(text).not.toContain('Published existing');
+  });
+
+  it('summarizes a replayed asap hold that was already published or rejected instead of erroring', async () => {
+    const published = fakeClient(async () => ({
+      success: true,
+      mode: 'asap',
+      approvalRequired: false,
+      replayed: true,
+      slot: { id: 'slot-9', slotAt: '2026-12-01T20:00:00.000Z', status: 'published' },
+    }));
+    const publishedResponse = await handlePublishExisting(published.client, args({ mode: 'asap', publishAt: undefined }));
+    expect(publishedResponse.isError).toBeUndefined();
+    const publishedText = textOf(publishedResponse);
+    expect(publishedText).toContain('This hold was already published; nothing new was posted.');
+    expect(publishedText).toContain('"approvalRequired":false');
+    expect(publishedText).not.toContain('Published existing');
+    const rejected = fakeClient(async () => ({
+      success: true,
+      mode: 'asap',
+      approvalRequired: false,
+      replayed: true,
+      slot: { id: 'slot-9', slotAt: '2026-12-01T20:00:00.000Z', status: 'rejected' },
+    }));
+    const rejectedResponse = await handlePublishExisting(rejected.client, args({ mode: 'asap', publishAt: undefined }));
+    expect(rejectedResponse.isError).toBeUndefined();
+    expect(textOf(rejectedResponse)).toContain('This hold was already rejected; nothing new was posted.');
   });
 
   it('summarizes an asap replay and mixed per-account outcomes', async () => {

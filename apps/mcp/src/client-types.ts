@@ -120,6 +120,14 @@ export type PublishExistingResult =
       held: true;
       approvalRequired: true;
       slot: { id: string; slotAt: string; status: string };
+    }
+  | {
+      mode: 'asap';
+      success: true;
+      replayed: boolean;
+      held: false;
+      approvalRequired: false;
+      slot: { id: string; slotAt: string; status: string };
     };
 
 export interface DirectPublishAccountResult {

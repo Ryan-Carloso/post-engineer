@@ -83,6 +83,41 @@ function narrowPublishExistingResult(value: unknown): PublishExistingResult {
       slot: { id: value.slot.id, slotAt: value.slot.slotAt, status: value.slot.status },
     };
   }
+  if (value.mode === 'asap' && value.approvalRequired === false) {
+    if (
+      !isRecord(value.slot) ||
+      typeof value.slot.id !== 'string' ||
+      typeof value.slot.slotAt !== 'string' ||
+      typeof value.slot.status !== 'string'
+    ) {
+      throw new Error('Malformed publish-existing response from the API.');
+    }
+    return {
+      mode: 'asap',
+      success: true,
+      replayed: value.replayed === true,
+      held: false,
+      approvalRequired: false,
+      slot: { id: value.slot.id, slotAt: value.slot.slotAt, status: value.slot.status },
+    };
+  }
+  if (value.mode === 'asap' && value.approvalRequired === false && isRecord(value.slot)) {
+    if (
+      typeof value.slot.id !== 'string' ||
+      typeof value.slot.slotAt !== 'string' ||
+      typeof value.slot.status !== 'string'
+    ) {
+      throw new Error('Malformed publish-existing response from the API.');
+    }
+    return {
+      mode: 'asap',
+      success: true,
+      replayed: value.replayed === true,
+      held: false,
+      approvalRequired: false,
+      slot: { id: value.slot.id, slotAt: value.slot.slotAt, status: value.slot.status },
+    };
+  }
   if (
     typeof value.mediaKind !== 'string' ||
     !['upload', 'image'].includes(value.mediaKind) ||
