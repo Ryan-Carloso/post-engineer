@@ -8,9 +8,6 @@ import { MAX_IMAGE_UPLOAD_BYTES, MAX_VIDEO_UPLOAD_BYTES, UPLOAD_CONTENT_TYPES, U
 
 export const MAX_REPORTED_ISSUES = 20;
 
-export const PUBLISH_NETWORKS = SOCIAL_PROVIDERS;
-export type PublishNetwork = (typeof PUBLISH_NETWORKS)[number];
-
 export * from './upload-types.js';
 
 export const MintVideoUploadBodySchema = z.object({
@@ -39,7 +36,7 @@ function optionalContractString(field: string) {
   return z.string({ error: () => `${field} must be a string.` }).optional();
 }
 
-export const PublishByIdBodySchema = z.object({
+const PublishByIdBodySchema = z.object({
   uploadId: z
     .string({
       error: () => 'uploadId must be the id returned by the signed-upload mint step.',

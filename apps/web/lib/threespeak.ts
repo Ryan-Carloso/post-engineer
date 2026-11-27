@@ -1,11 +1,11 @@
 import { Memo, PrivateKey } from '@hiveio/dhive';
 
-export const THREESPEAK_STUDIO_ENDPOINT = 'https://studio.3speak.tv';
+const THREESPEAK_STUDIO_ENDPOINT = 'https://studio.3speak.tv';
 export const THREESPEAK_TUS_ENDPOINT = 'https://uploads.3speak.tv/files/';
-export const THREESPEAK_WATCH_ORIGIN = 'https://3speak.tv';
-export const THREESPEAK_COMMUNITY_ID = 'hive-181335';
+const THREESPEAK_WATCH_ORIGIN = 'https://3speak.tv';
+const THREESPEAK_COMMUNITY_ID = 'hive-181335';
 
-export const THREESPEAK_TITLE_MAX_CHARS = 200;
+const THREESPEAK_TITLE_MAX_CHARS = 200;
 
 export const THREESPEAK_VIDEO_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 
@@ -34,7 +34,7 @@ function errorMessage(error: unknown): string {
 
 const HIVE_USERNAME_PATTERN = /^[a-z]([a-z0-9]|[-.][a-z0-9]){2,15}$/;
 
-export function normalizeHiveUsername(username: string): string {
+function normalizeHiveUsername(username: string): string {
   const normalized = username.trim().toLowerCase();
   if (!HIVE_USERNAME_PATTERN.test(normalized)) {
     throw new ThreespeakError('invalid_credentials', 'Invalid Hive username.');

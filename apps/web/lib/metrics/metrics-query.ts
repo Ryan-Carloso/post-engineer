@@ -1,13 +1,11 @@
 export {
   ANALYTICS_STATUSES,
-  COVERAGE_REASONS,
   METRICS_FILTER_MAX_LENGTH,
   METRICS_NONE,
   UUID,
   isAnalyticsStatus,
   isCoverageReason,
   isMetricsWindow,
-  last24hSearchParams,
   metricsSearchParams,
   parseLast24hQuery,
   parseMetricsQuery,
@@ -23,10 +21,7 @@ export type {
   MetricsQuery,
   MetricsResponse,
   MetricsRowView,
-  RetentionCurveResponse,
-  RetentionPoint,
 } from '@/lib/contracts/metrics';
-export type { SocialProvider } from '@/lib/contracts/providers';
 
 export const METRICS_ROW_LIMIT = 500;
 

@@ -11,22 +11,10 @@ import {
 } from '@/lib/telegram';
 import { TelegramError } from '@/lib/errors';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
-import { apiErrorResponse } from '@/lib/api-error';
+import { routeErrorResponse } from '@/lib/api-error';
 import { ERROR_CODES, errorMessage, formatErrorMessage, type ErrorCode } from '@/lib/error-codes';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
-
-function errorResponse(
-  status: number,
-  error: string,
-  route: string,
-  options?: { cause?: unknown; code?: string; logMessage?: string; metadata?: Record<string, unknown> },
-): NextResponse {
-  return apiErrorResponse(status, error, { route, ...options });
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
+import { isFilled, readConnectFields } from '@/lib/connect-fields';
 
 type ExpectedKind = 'channel' | 'group';
 
@@ -34,39 +22,11 @@ async function readCredentials(request: Request): Promise<
   | { ok: true; botToken: string; chatId: string; expected: ExpectedKind }
   | { ok: false; error: string }
 > {
-  let fields: Record<string, unknown>;
-  const contentType = request.headers.get('content-type') ?? '';
-  if (contentType.includes('application/json')) {
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
-      return { ok: false, error: 'Invalid JSON payload.' };
-    }
-    if (!isRecord(body)) return { ok: false, error: 'Invalid JSON payload.' };
-    fields = body;
-  } else {
-    let formData: FormData;
-    try {
-      formData = await request.formData();
-    } catch {
-      return { ok: false, error: 'Invalid multipart payload.' };
-    }
-    fields = {
-      botToken: formData.get('botToken'),
-      chatId: formData.get('chatId'),
-      chatType: formData.get('chatType'),
-    };
-  }
-  const botToken = fields.botToken;
-  const chatId = fields.chatId;
-  const chatType = fields.chatType;
-  if (typeof botToken !== 'string' || !botToken.trim()) {
-    return { ok: false, error: 'Telegram bot token is required.' };
-  }
-  if (typeof chatId !== 'string' || !chatId.trim()) {
-    return { ok: false, error: 'Telegram chat ID or @username is required.' };
-  }
+  const read = await readConnectFields(request, ['botToken', 'chatId', 'chatType']);
+  if (!read.ok) return read;
+  const { botToken, chatId, chatType } = read.fields;
+  if (!isFilled(botToken)) return { ok: false, error: 'Telegram bot token is required.' };
+  if (!isFilled(chatId)) return { ok: false, error: 'Telegram chat ID or @username is required.' };
   if (chatType !== 'channel' && chatType !== 'group') {
     return { ok: false, error: 'chatType must be channel or group.' };
   }
@@ -83,17 +43,17 @@ async function postHandler(request: Request): Promise<NextResponse> {
 
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) {
-    return errorResponse(401, 'Authentication required.', 'POST /api/telegram-connect');
+    return routeErrorResponse(401, 'Authentication required.', 'POST /api/telegram-connect');
   }
 
   const credentials = await readCredentials(request);
   if (!credentials.ok) {
-    return errorResponse(400, credentials.error, 'POST /api/telegram-connect');
+    return routeErrorResponse(400, credentials.error, 'POST /api/telegram-connect');
   }
   const { botToken, chatId, expected } = credentials;
 
   if (!isValidTelegramBotToken(botToken)) {
-    return errorResponse(
+    return routeErrorResponse(
       400,
       'Telegram bot token must be the token @BotFather issued (for example 123456789:AA...).',
       'POST /api/telegram-connect',
@@ -107,7 +67,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     const chat = await getTelegramChat(botToken, chatId);
     if (!kindMatches(expected, chat.chatType)) {
       const actual = expected === 'channel' ? 'group' : 'channel';
-      return errorResponse(
+      return routeErrorResponse(
         400,
         formatErrorMessage(ERROR_CODES.TELEGRAM_CHAT_KIND_MISMATCH, { actual, expected }),
         'POST /api/telegram-connect',
@@ -145,7 +105,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
       .single();
 
     if (upsertError || !upserted) {
-      return errorResponse(500, 'Could not save the Telegram account.', 'POST /api/telegram-connect', {
+      return routeErrorResponse(500, 'Could not save the Telegram account.', 'POST /api/telegram-connect', {
         cause: upsertError,
         metadata: { userId: auth.userId },
       });
@@ -163,14 +123,14 @@ async function postHandler(request: Request): Promise<NextResponse> {
       const code = telegramConnectErrorCode(error.code);
       if (code !== null) {
         const status = code === ERROR_CODES.TELEGRAM_TOKEN_REJECTED ? 422 : code === ERROR_CODES.TELEGRAM_CHAT_NOT_FOUND ? 404 : 403;
-        return errorResponse(status, errorMessage(code), 'POST /api/telegram-connect', {
+        return routeErrorResponse(status, errorMessage(code), 'POST /api/telegram-connect', {
           cause: error,
           code,
           metadata: { userId: auth.userId },
         });
       }
     }
-    return errorResponse(500, 'Could not connect the Telegram account.', 'POST /api/telegram-connect', {
+    return routeErrorResponse(500, 'Could not connect the Telegram account.', 'POST /api/telegram-connect', {
       cause: error,
       metadata: { userId: auth.userId },
       logMessage: 'Telegram connection failed.',

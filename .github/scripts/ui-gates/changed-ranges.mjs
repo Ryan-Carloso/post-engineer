@@ -23,7 +23,7 @@ export function isTestishPath(repoPath) {
   );
 }
 
-export function unquoteGitPath(text) {
+function unquoteGitPath(text) {
   if (text.length > 1 && text.startsWith('"') && text.endsWith('"')) {
     return text.slice(1, -1);
   }
@@ -171,7 +171,7 @@ export function changedMutateArgument(baseRef, headRef, runGit = defaultRunGit, 
   return mutateArgument(entries, { stripPrefix: options.stripPrefix ?? null });
 }
 
-export function runGitFromRepoRoot(args) {
+function runGitFromRepoRoot(args) {
   const root = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim();
   return execFileSync('git', args, { encoding: 'utf8', cwd: root, maxBuffer: 64 * 1024 * 1024 });
 }

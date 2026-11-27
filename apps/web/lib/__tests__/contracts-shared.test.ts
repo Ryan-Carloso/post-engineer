@@ -47,7 +47,7 @@ describe('contracts shared source', () => {
   it('pins the shared YOUTUBE_VIDEO_ID to youtube-analytics.ts', () => {
     const root = findRepoRoot(import.meta.url);
     const youtubeAnalytics = readFileSync(join(root, 'apps', 'web', 'lib', 'youtube-analytics.ts'), 'utf8');
-    expect(youtubeAnalytics).toContain(`export const VIDEO_ID = /${YOUTUBE_VIDEO_ID.source}/;`);
+    expect(youtubeAnalytics).toContain(`const VIDEO_ID = /${YOUTUBE_VIDEO_ID.source}/;`);
   });
 
   it('pins metrics-query.ts to re-export the contract parsers', () => {
@@ -103,8 +103,6 @@ describe('contracts shared source', () => {
     expect(range).toContain("from '@/lib/contracts/schedule'");
     expect(range).toContain('parseStatusRange as parseRange,');
     expect(range).toContain('RANGE_MAX_SPAN_DAYS,');
-    expect(range).toContain('RANGE_MAX_SLOTS,');
-    expect(range).toContain('RANGE_STATUSES,');
   });
 
   it('pins the persona routes to the contract query parsers', () => {
@@ -112,9 +110,12 @@ describe('contracts shared source', () => {
     const route = readFileSync(join(root, 'apps', 'web', 'app', 'api', 'persona', 'route.ts'), 'utf8');
     expect(route).toContain("from '@/lib/contracts/personas'");
     expect(route).toContain('parsePersonaIdQuery');
+    const scoped = readFileSync(join(root, 'apps', 'web', 'app', 'api', 'persona', 'persona-id-query.ts'), 'utf8');
+    expect(scoped).toContain("from '@/lib/contracts/personas'");
+    expect(scoped).toContain('parsePersonaIdQuery(request.url)');
     const preview = readFileSync(join(root, 'apps', 'web', 'app', 'api', 'persona', 'delete-preview', 'route.ts'), 'utf8');
-    expect(preview).toContain("from '@/lib/contracts/personas'");
-    expect(preview).toContain('parsePersonaIdQuery');
+    expect(preview).toContain("from '../persona-id-query'");
+    expect(preview).toContain('scopedPersonaIdQuery(request');
   });
 
   it('pins the videos constants to the contract re-exports', () => {
@@ -122,7 +123,6 @@ describe('contracts shared source', () => {
     const upload = readFileSync(join(root, 'apps', 'web', 'lib', 'videos', 'signed-upload.ts'), 'utf8');
     expect(upload).toContain("from '@/lib/contracts/videos'");
     expect(upload).toContain('MAX_VIDEO_UPLOAD_BYTES,');
-    expect(upload).toContain('VIDEO_UPLOAD_CONTENT_TYPES,');
     expect(MAX_VIDEO_UPLOAD_BYTES).toBe(2 * 1024 * 1024 * 1024);
     expect(VIDEO_UPLOAD_CONTENT_TYPES).toEqual(['video/mp4', 'video/quicktime']);
     const issues = readFileSync(join(root, 'apps', 'web', 'app', 'api', 'media', 'publish-existing', 'validation-issues.ts'), 'utf8');

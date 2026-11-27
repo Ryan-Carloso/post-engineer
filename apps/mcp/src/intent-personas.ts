@@ -32,7 +32,7 @@ function personasOptions(remote: boolean): ActionOptions<typeof PERSONAS_SPECS> 
   return remote ? { variants: { create: CreatePersonaRemoteShape, update: personaRefShape(UpdatePersonaRemoteShape) } } : {};
 }
 
-export function personasDescription(remote: boolean): string {
+function personasDescription(remote: boolean): string {
   const photo = remote ? 'no photo (the web app sets it)' : 'an optional avatarPath (a local photo shown on the persona card, uploaded directly)';
   return actionDescription(
     `Manage your personas (a named group of publishing accounts with an optional photo and identity card). list: names and ids. get: one persona with its bound publishing accounts. create: at least one publishing account (accounts) is REQUIRED; ${photo}. update: only the given fields change (identityCard sets or, with null, removes the identity card; see persona_media get_card and render_prompt). delete: preview first, then confirm with the token. ${POINTER_PERSONA_ACCOUNTS}`,

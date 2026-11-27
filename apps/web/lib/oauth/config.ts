@@ -1,7 +1,6 @@
 import 'server-only';
 
-export const OAUTH_SCOPES = ['mcp:tools', 'offline_access'] as const;
-export type OAuthScope = (typeof OAUTH_SCOPES)[number];
+const OAUTH_SCOPES = ['mcp:tools', 'offline_access'] as const;
 
 export function getMcpResource(): string {
   const resource = process.env.MCP_RESOURCE?.trim();

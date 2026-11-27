@@ -1,4 +1,4 @@
-export const PROMPT_VERSION_ID = '44444444-4444-4444-8444-444444444444';
+const PROMPT_VERSION_ID = '44444444-4444-4444-8444-444444444444';
 
 export interface PromptSummaryMock {
   slug: string;

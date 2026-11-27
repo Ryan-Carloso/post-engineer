@@ -22,7 +22,7 @@ export const CARD_STYLES = [
 
 export type CardStyle = (typeof CARD_STYLES)[number];
 
-export interface StylePrompt {
+interface StylePrompt {
   label: string;
   description: string;
 }

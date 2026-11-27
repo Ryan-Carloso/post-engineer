@@ -139,14 +139,6 @@ def clean_location_token(raw: str) -> str:
     return _normalize_rel(value)
 
 
-def clean_cited_path(raw: str) -> str:
-    """``clean_location_token`` plus the ``:line`` / ``#L`` suffix removed."""
-    value = clean_location_token(raw)
-    value = _LINE_SUFFIX_RE.sub("", value)
-    value = _TRAILING_PUNCT_RE.sub("", value)
-    return _normalize_rel(value)
-
-
 def _contained_file(root: Path, rel: str) -> Path | None:
     """The file at ``rel`` when it stays inside ``root``. Never follows ``..``."""
     if not rel or _is_escape(rel):

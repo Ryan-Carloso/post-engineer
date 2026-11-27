@@ -310,18 +310,6 @@ def test_partial_drop_stays_green_and_lists_the_drop(
     )
 
 
-def test_clean_cited_path_strips_wrapping_and_line_suffixes(verifier):
-    clean = verifier.clean_cited_path
-    assert clean("`./apps/web/lib/thing.ts:12-34`,") == "apps/web/lib/thing.ts"
-    assert clean("'./apps/web/lib/thing.ts:12'.") == "apps/web/lib/thing.ts"
-    assert clean('"././apps/web/lib/thing.ts:2"') == "apps/web/lib/thing.ts"
-    assert clean("apps/web/lib/thing.ts#L12-L34") == "apps/web/lib/thing.ts"
-    assert clean("`apps/engine/app/services/task_publish.py:61-66`") == (
-        "apps/engine/app/services/task_publish.py"
-    )
-    assert clean("apps/web/lib/thing.ts:12 – 34") == "apps/web/lib/thing.ts"
-
-
 def test_fuzzy_wrapped_path_with_matching_quote_stays_in_the_main_list(
     verifier, repo, tmp_path, monkeypatch, capsys
 ):

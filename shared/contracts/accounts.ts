@@ -2,12 +2,12 @@ import { z } from 'zod';
 import { defineEndpoint } from './endpoint.js';
 import { OAUTH_CONNECT_PROVIDERS, SOCIAL_PROVIDERS } from './providers.js';
 
-export const ACCOUNT_SYNC_STATUSES = ['ok', 'error'] as const;
+const ACCOUNT_SYNC_STATUSES = ['ok', 'error'] as const;
 
 const accountStatus = z.enum(ACCOUNT_SYNC_STATUSES).optional();
 const accountTimestamps = { connectedAt: z.number(), lastUsed: z.number(), status: accountStatus };
 
-export const YoutubeAccountSchema = z.object({
+const YoutubeAccountSchema = z.object({
   provider: z.literal('youtube'),
   recordId: z.string(),
   channelId: z.string(),
@@ -26,7 +26,7 @@ export const YoutubeAccountSchema = z.object({
     .optional(),
 });
 
-export const InstagramAccountSchema = z.object({
+const InstagramAccountSchema = z.object({
   provider: z.literal('instagram'),
   recordId: z.string(),
   igUserId: z.string(),
@@ -38,7 +38,7 @@ export const InstagramAccountSchema = z.object({
   ...accountTimestamps,
 });
 
-export const BlueskyAccountSchema = z.object({
+const BlueskyAccountSchema = z.object({
   provider: z.literal('bluesky'),
   recordId: z.string(),
   did: z.string(),
@@ -48,7 +48,7 @@ export const BlueskyAccountSchema = z.object({
   ...accountTimestamps,
 });
 
-export const LinkedinAccountSchema = z.object({
+const LinkedinAccountSchema = z.object({
   provider: z.literal('linkedin'),
   recordId: z.string(),
   providerAccountId: z.string(),
@@ -60,7 +60,7 @@ export const LinkedinAccountSchema = z.object({
   ...accountTimestamps,
 });
 
-export const ThreadsAccountSchema = z.object({
+const ThreadsAccountSchema = z.object({
   provider: z.literal('threads'),
   recordId: z.string(),
   providerAccountId: z.string(),
@@ -69,7 +69,7 @@ export const ThreadsAccountSchema = z.object({
   ...accountTimestamps,
 });
 
-export const FacebookAccountSchema = z.object({
+const FacebookAccountSchema = z.object({
   provider: z.literal('facebook'),
   recordId: z.string(),
   providerAccountId: z.string(),
@@ -80,7 +80,7 @@ export const FacebookAccountSchema = z.object({
   ...accountTimestamps,
 });
 
-export const PinterestAccountSchema = z.object({
+const PinterestAccountSchema = z.object({
   provider: z.literal('pinterest'),
   recordId: z.string(),
   providerAccountId: z.string(),
@@ -89,7 +89,7 @@ export const PinterestAccountSchema = z.object({
   ...accountTimestamps,
 });
 
-export const ThreespeakAccountSchema = z.object({
+const ThreespeakAccountSchema = z.object({
   provider: z.literal('3speak'),
   recordId: z.string(),
   providerAccountId: z.string(),
@@ -97,7 +97,7 @@ export const ThreespeakAccountSchema = z.object({
   ...accountTimestamps,
 });
 
-export const RumbleAccountSchema = z.object({
+const RumbleAccountSchema = z.object({
   provider: z.literal('rumble'),
   recordId: z.string(),
   providerAccountId: z.string(),
@@ -105,7 +105,7 @@ export const RumbleAccountSchema = z.object({
   ...accountTimestamps,
 });
 
-export const FanvueAccountSchema = z.object({
+const FanvueAccountSchema = z.object({
   provider: z.literal('fanvue'),
   recordId: z.string(),
   providerAccountId: z.string(),
@@ -114,7 +114,7 @@ export const FanvueAccountSchema = z.object({
   ...accountTimestamps,
 });
 
-export const TelegramAccountSchema = z.object({
+const TelegramAccountSchema = z.object({
   provider: z.literal('telegram'),
   recordId: z.string(),
   providerAccountId: z.string(),
@@ -147,7 +147,7 @@ function nonBlank(message: string) {
     .refine((value) => value.trim().length > 0, { message });
 }
 
-export const ConnectUrlBodySchema = z.object({
+const ConnectUrlBodySchema = z.object({
   provider: z.enum(OAUTH_CONNECT_PROVIDERS),
 });
 
@@ -174,16 +174,16 @@ export const TelegramConnectBodySchema = z.object({
   }),
 });
 
-export const DisconnectAccountQuerySchema = z.strictObject({
+const DisconnectAccountQuerySchema = z.strictObject({
   provider: z.string(),
   providerAccountId: z.string(),
 });
 
-export const ListPinterestBoardsQuerySchema = z.strictObject({
+const ListPinterestBoardsQuerySchema = z.strictObject({
   accountId: z.string(),
 });
 
-export const GetPersonaPublishingAccountsQuerySchema = z.strictObject({
+const GetPersonaPublishingAccountsQuerySchema = z.strictObject({
   personaId: z.string(),
 });
 
@@ -240,7 +240,6 @@ export const ListSocialAccountsResponseSchema = z.object({
   accounts: z.array(PublicAccountItemSchema),
   message: z.string(),
 });
-export type ListSocialAccountsResponse = z.infer<typeof ListSocialAccountsResponseSchema>;
 
 export const DisconnectAccountResponseSchema = z.object({
   success: z.literal(true),
@@ -278,7 +277,7 @@ export const TelegramConnectResponseSchema = z.object({
   title: z.string(),
 });
 
-export const PinterestBoardSchema = z.object({
+const PinterestBoardSchema = z.object({
   id: z.string(),
   name: z.string(),
 });
@@ -302,13 +301,11 @@ export const PersonaPublishingAccountsSchema = z.object({
   fanvue: z.array(z.string()),
   telegram: z.array(z.string()),
 });
-export type PersonaPublishingAccounts = z.infer<typeof PersonaPublishingAccountsSchema>;
 
 export const PersonaPublishingAccountsResponseSchema = z.object({
   success: z.literal(true),
   defaults: PersonaPublishingAccountsSchema,
 });
-export type PersonaPublishingAccountsResponse = z.infer<typeof PersonaPublishingAccountsResponseSchema>;
 
 export const listSocialAccounts = defineEndpoint({
   method: 'GET',

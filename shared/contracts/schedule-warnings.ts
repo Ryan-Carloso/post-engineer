@@ -12,4 +12,3 @@ export const AccountNeedsReconnectWarningSchema = z.object({
   })).min(1),
 });
 
-export const ScheduleWarningSchema = AccountNeedsReconnectWarningSchema;

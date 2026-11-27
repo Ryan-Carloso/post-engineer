@@ -13,8 +13,8 @@ function mcpHeaderNames(): string[] {
 }
 
 function mcpNudgeSurfaces(): string[] {
-  const start = mcpSource.indexOf('export const RECIPE_NUDGE_SURFACES = [');
-  const end = mcpSource.indexOf('] as const;', start);
+  const start = mcpSource.indexOf('export type RecipeNudgeSurface = ');
+  const end = mcpSource.indexOf(';', start);
   expect(start).toBeGreaterThan(-1);
   expect(end).toBeGreaterThan(start);
   return [...mcpSource.slice(start, end).matchAll(/'([a-z_]+)'/g)].map((match) => match[1] ?? '');

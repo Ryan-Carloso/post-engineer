@@ -1,5 +1,5 @@
-export const BLUESKY_PUBLIC_APPVIEW = 'https://public.api.bsky.app';
-export const BLUESKY_PROFILE_TIMEOUT_MS = 8000;
+const BLUESKY_PUBLIC_APPVIEW = 'https://public.api.bsky.app';
+const BLUESKY_PROFILE_TIMEOUT_MS = 8000;
 
 export interface BlueskyPublicProfile {
   did: string;

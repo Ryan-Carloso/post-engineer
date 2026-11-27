@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { defineEndpoint } from './endpoint.js';
 import { PersonaPublishingAccountsSchema } from './accounts.js';
 
-export const PersonaListItemSchema = z.object({
+const PersonaListItemSchema = z.object({
   id: z.string(),
   name: z.string(),
   createdAt: z.string(),
@@ -12,20 +12,18 @@ export const PersonaListItemSchema = z.object({
   aiLabel: z.boolean(),
   boundAccounts: PersonaPublishingAccountsSchema,
 });
-export type PersonaListItem = z.infer<typeof PersonaListItemSchema>;
 
 export const ListPersonasResponseSchema = z.object({
   authenticated: z.literal(true),
   personas: z.array(PersonaListItemSchema),
 });
 
-export const DeletePreviewCountsSchema = z.object({
+const DeletePreviewCountsSchema = z.object({
   schedules: z.number(),
   upcomingSlots: z.number(),
   publishedSlots: z.number(),
   failedSlots: z.number(),
 });
-export type DeletePreviewCounts = z.infer<typeof DeletePreviewCountsSchema>;
 
 export const GetPersonaDeletePreviewResponseSchema = z.object({
   success: z.literal(true),
@@ -45,7 +43,7 @@ export const UpdatePersonaResponseSchema = z.object({
   success: z.literal(true),
 });
 
-export const DeletePersonaResponseSchema = z.object({
+const DeletePersonaResponseSchema = z.object({
   success: z.literal(true),
 });
 

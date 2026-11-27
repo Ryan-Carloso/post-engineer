@@ -9,7 +9,6 @@ import { appendFirstComment, narrowFirstCommentWarnings } from '@/lib/first-comm
 import { PUBLISH_HANDLERS } from '@/lib/upload/publish-handlers';
 import type { ContentUploadAccountResult } from '@/lib/upload/content-upload-result';
 import {
-  VideoUploadError,
   claimUploadForPublish,
   type VideoUploadStorage,
   type VideoUploadStore,
@@ -85,7 +84,7 @@ export function parsePublishBody(body: unknown): PublishUploadedInput {
   return input;
 }
 
-export function validatePublishFields(input: PublishUploadedInput): void {
+function validatePublishFields(input: PublishUploadedInput): void {
   if (isTitleProvider(input.provider)) {
     if (input.title === undefined || input.title.trim() === '') {
       throw new ValidationError('Video title is required', 'title');
@@ -235,5 +234,3 @@ export async function publishUploadedVideo(
     });
   }
 }
-
-export { VideoUploadError };

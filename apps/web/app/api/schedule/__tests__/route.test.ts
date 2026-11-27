@@ -13,7 +13,6 @@ vi.mock('@/lib/supabase/service', () => ({
 }));
 vi.mock('@/lib/request-auth', () => ({
   requireSupabaseSession: vi.fn(),
-  engineAuthHeaders: vi.fn(() => ({ authorization: 'Bearer test-engine-secret', 'x-user-id': 'test-user' })),
 }));
 vi.mock('@/lib/logger', () => ({
   logger: {

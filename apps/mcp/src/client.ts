@@ -1,8 +1,5 @@
 import { apiErrorFromResponse } from './errors.js';
 import { redactSecretFromError } from './secret-redaction.js';
-import { MAX_UPLOAD_VIDEO_BYTES, MAX_UPLOAD_VIDEO_GB } from './limits.js';
-
-export { MAX_UPLOAD_VIDEO_BYTES, MAX_UPLOAD_VIDEO_GB };
 
 import type {
   CreatePersonaInput,
@@ -44,7 +41,6 @@ import {
 
 export type {
   CreatePersonaInput,
-  DirectPublishAccountResult,
   DirectPublishResult,
   PostEngineerClientOptions,
   PublishVideoDirectInput,
@@ -61,12 +57,10 @@ import { appendPersonaAvatar } from './persona-avatar.js';
 export class PostEngineerClient {
   readonly baseUrl: string;
   private readonly apiKey?: string;
-  private readonly now: () => Date;
   private readonly suppressVersionHeader: boolean;
   constructor(options: PostEngineerClientOptions = {}) {
     this.baseUrl = resolveBaseUrl(options.baseUrl ?? process.env.POST_ENGINEER_API_URL);
     this.apiKey = options.apiKey; this.suppressVersionHeader = options.suppressVersionHeader ?? false;
-    this.now = options.now ?? (() => new Date());
   }
 
   getHeaders(includeContentType = true): Record<string, string> {

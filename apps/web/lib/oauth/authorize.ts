@@ -5,7 +5,7 @@ import { getMcpResource, normalizeScope } from './config';
 import { resolveClient, type ResolvedOAuthClient } from './resolve-client';
 import { clientRedirectUrl, redirectUriAllowed, REDIRECT_URI_NOT_ALLOWED } from './redirect-uri';
 
-export interface AuthorizeParams {
+interface AuthorizeParams {
   clientId: string;
   redirectUri: string;
   scope: string[];

@@ -18,7 +18,7 @@ export type VideoStatsResult =
   | { kind: 'no_data' }
   | { kind: 'scope_missing' };
 
-export interface RetentionPoint {
+interface RetentionPoint {
   ratio: number;
   audienceWatchRatio: number;
   relativeRetentionPerformance: number | null;
@@ -43,7 +43,7 @@ export function analyticsDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
-export const VIDEO_ID = /^[A-Za-z0-9_-]{1,64}$/;
+const VIDEO_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 export function videoSnippet(videoInfo: unknown): Record<string, unknown> {
   const snippet = readRecord(videoInfo, 'snippet');

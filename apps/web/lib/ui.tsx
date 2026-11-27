@@ -303,13 +303,6 @@ export const BoltIcon = () => (
   </svg>
 );
 
-export const BugIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="size-5" aria-hidden="true">
-    <path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5h6M12 4.5v2.25m-5.25 3h10.5M6.75 13.5h10.5M8.25 18h7.5M5.25 8.25l-1.5-1.5m14.999 1.5 1.5-1.5M5.25 13.5H3m18 0h-2.25M7.5 18l-1.5 1.5m10.5-1.5 1.5 1.5" />
-    <rect x="7.5" y="6.75" width="9" height="12.75" rx="4.5" />
-  </svg>
-);
-
 export const KeyIcon = () => (
   <svg
     viewBox="0 0 24 24"

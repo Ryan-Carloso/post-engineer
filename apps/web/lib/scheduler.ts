@@ -7,7 +7,7 @@ export interface SchedulerJob {
   run: () => Promise<unknown>;
 }
 
-export interface SchedulerLogger {
+interface SchedulerLogger {
   info(message: string, context?: Record<string, unknown>): void;
   error(message: string, error: unknown, context?: Record<string, unknown>): void;
 }

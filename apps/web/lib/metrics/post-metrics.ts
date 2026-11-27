@@ -45,7 +45,7 @@ export interface DuePost {
   collectedKeys: Set<string>;
 }
 
-export interface MetricsRow extends MetricsCounters {
+interface MetricsRow extends MetricsCounters {
   postId: string;
   userId: string;
   provider: MeasuredProvider;
@@ -60,7 +60,7 @@ export interface MetricsTarget {
   externalId: string;
 }
 
-export interface PromptTag {
+interface PromptTag {
   promptVersionId: string | null;
 }
 
@@ -94,7 +94,7 @@ function retentionColumns(retention: RetentionSnapshot | undefined): Record<stri
   };
 }
 
-export function targetKey(target: Pick<MetricsTarget, 'provider' | 'externalId'>): string {
+function targetKey(target: Pick<MetricsTarget, 'provider' | 'externalId'>): string {
   return `${target.provider}:${target.externalId}`;
 }
 

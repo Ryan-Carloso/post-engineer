@@ -23,8 +23,6 @@ export const STATUS_KEY: Record<string, TranslationKey> = {
   cancelled: 'posts.statusCancelled',
 };
 
-export type DisplayStatus = 'ready' | 'awaiting_approval' | 'publishing' | 'published' | 'failed' | 'expired' | 'cancelled' | 'paused';
-
 export function slotDisplayStatus(status: string, hasAccess: boolean): string {
   if (!hasAccess && (status === 'ready' || status === 'publishing')) return 'paused';
   return status;
@@ -52,15 +50,6 @@ export const CALENDAR_GROUP_PILL: Record<CalendarGroup, string> = {
   scheduled: 'bg-line text-ink-soft',
   expired: 'bg-line text-muted-foreground',
   paused: 'bg-sunken text-ink-soft',
-};
-
-export const CALENDAR_GROUP_DOT: Record<CalendarGroup, string> = {
-  failed: 'bg-destructive',
-  published: 'bg-success',
-  inProgress: 'bg-info',
-  scheduled: 'bg-muted-text',
-  expired: 'bg-muted-foreground',
-  paused: 'bg-ink-soft',
 };
 
 export const CALENDAR_GROUP_KEY: Record<CalendarGroup, TranslationKey> = {

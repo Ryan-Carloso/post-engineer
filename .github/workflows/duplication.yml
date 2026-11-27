@@ -1,23 +1,9 @@
 name: duplication
 
-# Report-only copy-paste detection with jscpd (no server, no token).
-#
-# What it does: scans production code only (TypeScript, TSX, JavaScript,
-# Python under apps/web, apps/mcp, apps/engine) for duplicated blocks of at
-# least 50 lines / 100 tokens, and prints the result in the job log.
-#
-# What it does NOT do: this job is intentionally NOT a required status
-# check and must NOT block merge. jscpd exits non-zero when it finds any
-# clone (threshold 0 in .jscpd.json), so the run step neutralizes the exit
-# code with `|| true` and always succeeds — the report is the output.
-# A failing threshold is a follow-up decision, once a baseline is known.
-#
-# Excluded by design: test files, docs, generated files, lockfiles and
-# snapshots — only production code counts.
-
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+  workflow_dispatch:
 
 jobs:
   duplication:
@@ -27,25 +13,22 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10.22.0
+
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 pinned 2026-09-25
         with:
           node-version: '22'
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
-      - name: Run jscpd (report-only, never fails the job)
-        run: |
-          set -uo pipefail
-          echo "jscpd config: .jscpd.json (min 50 lines / 100 tokens, production code only)"
-          echo "REPORT-ONLY: this job never blocks merge, even when clones are found."
-          npx --yes jscpd@5.4.2 --config .jscpd.json || true
-          echo "Duplication report finished (see the jscpd table above)."
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
-      - name: Summarize
-        run: |
-          {
-            echo "## Duplication report (report-only, not blocking)"
-            echo ""
-            echo "Tool: jscpd 5.4.2, config \`.jscpd.json\`, min 50 lines / 100 tokens."
-            echo "Scope: production TypeScript / TSX / JavaScript / Python under apps/web, apps/mcp, apps/engine."
-            echo "Excluded: tests, docs, generated files, lockfiles, snapshots."
-            echo "A failing threshold is a follow-up decision once this baseline is confirmed in CI."
-          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Unit tests (duplication and shared CLI scripts)
+        run: node --test .github/scripts/duplication/*.test.mjs .github/scripts/cli/*.test.mjs
+
+      - name: No copy-pasted blocks (jscpd, limits in .jscpd.json)
+        run: node .github/scripts/duplication/check.mjs

@@ -3,7 +3,7 @@ import { RumbleError } from '@/lib/errors';
 export const RUMBLE_TITLE_MAX_LENGTH = 100;
 export const RUMBLE_SIMPLE_UPLOAD_URL = 'https://rumble.com/api/simple-upload.php';
 export const RUMBLE_LICENSE_TYPE_PERSONAL_USE = 0;
-export const RUMBLE_ACCESS_TOKEN_PATTERN = /^[0-9a-f]{40}$/i;
+const RUMBLE_ACCESS_TOKEN_PATTERN = /^[0-9a-f]{40}$/i;
 const RUMBLE_UPLOAD_TIMEOUT_MS = 600_000;
 export const RUMBLE_VIDEO_MAX_BYTES = 4 * 1024 * 1024 * 1024;
 

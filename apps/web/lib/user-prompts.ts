@@ -9,7 +9,7 @@ type Db = SupabaseClient<Database>;
 
 export type UserPromptRow = Database['public']['Tables']['user_prompts']['Row'];
 
-export const USER_PROMPT_LIST_LIMIT = 200;
+const USER_PROMPT_LIST_LIMIT = 200;
 
 const COLUMNS = 'id, owner_id, slug, title, description, body, visibility, verified, created_at, updated_at';
 

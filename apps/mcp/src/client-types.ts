@@ -5,7 +5,6 @@ import type { IdentityCard } from './contracts/persona-identity-card.js';
 export interface PostEngineerClientOptions {
   apiKey?: string;
   baseUrl?: string;
-  now?: () => Date;
   suppressVersionHeader?: boolean;
 }
 
@@ -87,7 +86,7 @@ export interface PublishExistingInput {
   idempotencyKey: string;
 }
 
-export interface PublishExistingSlot {
+interface PublishExistingSlot {
   id: string;
   slot_at: string;
   title: string;

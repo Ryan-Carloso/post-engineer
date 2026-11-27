@@ -1,4 +1,4 @@
-export const COMMENT_MARKER = '<!-- api-naming-lint -->';
+const COMMENT_MARKER = '<!-- api-naming-lint -->';
 
 function escapeAnnotation(text) {
   return String(text).replace(/%/g, '%25').replace(/\n/g, '%0A').replace(/\r/g, '%0D');

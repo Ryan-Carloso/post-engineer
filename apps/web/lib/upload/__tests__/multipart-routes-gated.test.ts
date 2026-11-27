@@ -12,14 +12,12 @@ const GATED_ROUTES = [
 ];
 
 const UNGATED_FORM_DATA_READERS = [
-  'app/api/bluesky-connect/route.ts',
   'app/api/persona/patch-body.ts',
   'app/api/persona/route.ts',
-  'app/api/rumble-connect/route.ts',
-  'app/api/telegram-connect/route.ts',
-  'app/api/threespeak-connect/route.ts',
   'app/oauth/approve/route.ts',
   'app/oauth/token/route.ts',
+  'lib/connect-fields.ts',
+  'lib/upload/bounded-form-data.ts',
 ];
 
 const DIRECT_FORM_DATA = '.formData()';
@@ -45,7 +43,7 @@ describe('multipart upload routes', () => {
   });
 
   it('keeps every other direct formData() read in the known list', () => {
-    const readers = [...sourceFiles(join(WEB_ROOT, 'app/api')), ...sourceFiles(join(WEB_ROOT, 'app/oauth'))]
+    const readers = [...sourceFiles(join(WEB_ROOT, 'app/api')), ...sourceFiles(join(WEB_ROOT, 'app/oauth')), ...sourceFiles(join(WEB_ROOT, 'lib'))]
       .filter((file) => readFileSync(file, 'utf8').includes(DIRECT_FORM_DATA))
       .map((file) => relative(WEB_ROOT, file))
       .sort();

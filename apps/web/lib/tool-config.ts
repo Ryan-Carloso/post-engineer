@@ -5,15 +5,15 @@ import type { Database } from '@/lib/supabase/database.gen';
 import { encryptJson, decryptJson, TokenDecryptError } from '@/lib/token-crypto';
 
 export const TOOL_CONFIG_SEARCH_TOOLS = ['tavily', 'exa', 'own'] as const;
-export type ToolConfigSearchTool = (typeof TOOL_CONFIG_SEARCH_TOOLS)[number];
+type ToolConfigSearchTool = (typeof TOOL_CONFIG_SEARCH_TOOLS)[number];
 
 export const TOOL_CONFIG_STOCK_SOURCES = ['pexels', 'pixabay', 'coverr'] as const;
-export type ToolConfigStockSource = (typeof TOOL_CONFIG_STOCK_SOURCES)[number];
+type ToolConfigStockSource = (typeof TOOL_CONFIG_STOCK_SOURCES)[number];
 
-export const TOOL_CONFIG_KEY_NAMES = ['tavily', 'exa', 'pexels', 'pixabay', 'coverr'] as const;
-export type ToolConfigKeyName = (typeof TOOL_CONFIG_KEY_NAMES)[number];
+const TOOL_CONFIG_KEY_NAMES = ['tavily', 'exa', 'pexels', 'pixabay', 'coverr'] as const;
+type ToolConfigKeyName = (typeof TOOL_CONFIG_KEY_NAMES)[number];
 
-export type ToolConfigKeys = Partial<Record<ToolConfigKeyName, string>>;
+type ToolConfigKeys = Partial<Record<ToolConfigKeyName, string>>;
 
 export interface ToolConfigInput {
   searchTool: ToolConfigSearchTool | null;

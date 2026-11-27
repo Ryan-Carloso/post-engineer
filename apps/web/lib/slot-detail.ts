@@ -2,7 +2,7 @@ import { isFirstCommentWarningCode } from '@/lib/contracts/first-comment';
 import type { FirstCommentOutcomeWarning } from '@/lib/first-comment/outcome-warnings';
 import { isPublishProvider, type PublishLink } from '@/lib/publish-links';
 
-export function narrowPublishLinks(value: unknown): PublishLink[] {
+function narrowPublishLinks(value: unknown): PublishLink[] {
   if (!Array.isArray(value)) return [];
   const links: PublishLink[] = [];
   for (const entry of value) {

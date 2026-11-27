@@ -7,13 +7,6 @@ export const READ_ONLY: ToolAnnotations = {
   openWorldHint: true,
 };
 
-export const MUTATING: ToolAnnotations = {
-  readOnlyHint: false,
-  destructiveHint: false,
-  idempotentHint: false,
-  openWorldHint: true,
-};
-
 export const DESTRUCTIVE: ToolAnnotations = {
   readOnlyHint: false,
   destructiveHint: true,

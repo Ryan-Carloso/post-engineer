@@ -28,7 +28,7 @@ export function scriptKind(ts, file) {
   return ts.ScriptKind.TS;
 }
 
-export function tsComments(text, file) {
+function tsComments(text, file) {
   const ts = loadTypeScript();
   const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, scriptKind(ts, file));
   const jsxTextSpans = [];
@@ -66,7 +66,7 @@ export function tsComments(text, file) {
     });
 }
 
-export function pyComments(text) {
+function pyComments(text) {
   const out = execFileSync('python3', ['-I', path.join(HERE, 'py_comments.py')], {
     input: text,
     encoding: 'utf8',

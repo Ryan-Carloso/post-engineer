@@ -10,7 +10,7 @@ export const PromptVisibilitySchema = z.enum(PROMPT_VISIBILITIES);
 
 export const PROMPT_SOURCES = ['own', 'community'] as const;
 
-export const PromptSourceSchema = z.enum(PROMPT_SOURCES);
+const PromptSourceSchema = z.enum(PROMPT_SOURCES);
 
 export type PromptSource = (typeof PROMPT_SOURCES)[number];
 
@@ -23,7 +23,7 @@ export const USER_PROMPT_LIMITS = {
   prompt: 20000,
 } as const;
 
-export const PromptSlugSchema = z
+const PromptSlugSchema = z
   .string()
   .max(USER_PROMPT_LIMITS.slug)
   .regex(USER_PROMPT_SLUG_PATTERN, 'Use lowercase letters, digits and hyphens, starting with a letter or digit.');
@@ -37,7 +37,7 @@ export const PromptSummarySchema = z.object({
   verified: z.boolean(),
 });
 
-export const PromptDetailSchema = PromptSummarySchema.extend({
+const PromptDetailSchema = PromptSummarySchema.extend({
   prompt: z.string(),
   body: z.string(),
   versionId: z.string().uuid(),
@@ -120,7 +120,7 @@ export const ListPromptVersionsResponseSchema = z.object({
   nextCursor: z.number().int().min(1).nullable(),
 });
 
-export const PromptVersionDetailSchema = z.object({
+const PromptVersionDetailSchema = z.object({
   versionId: z.string().uuid(),
   version: z.number().int().min(1),
   title: z.string(),

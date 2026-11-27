@@ -15,7 +15,7 @@ import { postInPersonaScope } from './post-scope';
 
 const HOUR_MS = 60 * 60 * 1000;
 
-export const LAST_24H_WINDOW_MS = 24 * HOUR_MS;
+const LAST_24H_WINDOW_MS = 24 * HOUR_MS;
 export const LAST_24H_BASELINE_MIN_AGE_MS = 20 * HOUR_MS;
 export const LAST_24H_BASELINE_MAX_AGE_MS = 28 * HOUR_MS;
 export const LAST_24H_LATEST_MAX_AGE_MS = 36 * HOUR_MS;

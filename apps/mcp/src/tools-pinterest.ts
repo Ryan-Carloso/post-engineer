@@ -6,7 +6,7 @@ import type { McpToolResponse } from './tools-call.js';
 import { parseContractResponse } from './contract-response.js';
 import { listPinterestBoards as listPinterestBoardsContract } from './contracts/accounts.js';
 
-export const ListPinterestBoardsShape = {
+const ListPinterestBoardsShape = {
   accountId: z
     .string()
     .min(1, 'accountId is required')

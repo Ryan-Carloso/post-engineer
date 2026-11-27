@@ -3,14 +3,14 @@ import { z } from 'zod';
 import { defineEndpoint } from './endpoint.js';
 import { METRICS_WINDOWS, type MetricsWindow } from './metrics.js';
 
-export const DEFAULT_COMPARISON_WINDOW: MetricsWindow = '7d';
+const DEFAULT_COMPARISON_WINDOW: MetricsWindow = '7d';
 
 export const COMPARISON_LABELS = ['insufficient', 'no_signal', 'indicative', 'clear'] as const;
 
 export const PROMPT_VERSION_SOURCES = ['official', 'user'] as const;
 export type PromptVersionSource = (typeof PROMPT_VERSION_SOURCES)[number];
 
-export const PromptComparisonQuerySchema = z.strictObject({
+const PromptComparisonQuerySchema = z.strictObject({
   window: z.enum(METRICS_WINDOWS).optional(),
 });
 
@@ -24,7 +24,7 @@ export function parseComparisonWindow(params: URLSearchParams): MetricsWindow | 
   return parsed.data.window ?? DEFAULT_COMPARISON_WINDOW;
 }
 
-export const PromptResultSchema = z.object({
+const PromptResultSchema = z.object({
   versionId: z.string().nullable(),
   slug: z.string().nullable(),
   title: z.string().nullable(),
@@ -38,7 +38,7 @@ export const PromptResultSchema = z.object({
   direction: z.enum(['above', 'below']).nullable(),
 });
 
-export const AccountResultSchema = z.object({
+const AccountResultSchema = z.object({
   provider: z.string(),
   accountId: z.string(),
   videos: z.number(),

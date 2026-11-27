@@ -5,9 +5,7 @@ import type { McpToolResponse } from './tools-call.js';
 
 export type McpTransportKind = 'stdio' | 'http';
 
-export const RECIPE_NUDGE_SURFACES = ['personas_create', 'personas_list', 'accounts_list'] as const;
-
-export type RecipeNudgeSurface = (typeof RECIPE_NUDGE_SURFACES)[number];
+export type RecipeNudgeSurface = 'personas_create' | 'personas_list' | 'accounts_list';
 
 export const MCP_SESSION_ID_HEADER = 'X-MCP-Session-Id';
 export const MCP_TRANSPORT_HEADER = 'X-MCP-Transport';
@@ -16,7 +14,7 @@ export const MCP_RECIPES_KNOWN_HEADER = 'X-MCP-Recipes-Known';
 export const MCP_RECIPE_FETCHED_HEADER = 'X-MCP-Recipe-Fetched';
 export const MCP_RECIPE_HEADER = 'X-MCP-Recipe';
 
-export const RECIPE_SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const RECIPE_SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
 export const RECIPE_NUDGE_TEXT =
   'Next step for copy about a topic (news, a place, a product, GitHub PRs): call prompts (action: list) and follow the matching prompt with prompts (action: get) instead of improvising the copy.';

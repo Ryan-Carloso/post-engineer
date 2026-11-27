@@ -4,7 +4,7 @@ import { defineEndpoint } from './endpoint.js';
 import { FirstCommentWarningSchema } from './first-comment.js';
 import { SOCIAL_PROVIDERS } from './providers.js';
 
-export const PublishLinkSchema = z.object({
+const PublishLinkSchema = z.object({
   provider: z.enum(SOCIAL_PROVIDERS),
   url: z.string(),
 });
@@ -31,7 +31,7 @@ export const SlotMediaSchema = z.object({
   contentType: z.string().nullable(),
 });
 
-export const SlotPostSchema = z.object({
+const SlotPostSchema = z.object({
   id: z.string(),
   scheduleId: z.string(),
   slotAt: z.string(),
@@ -48,7 +48,7 @@ export const SlotPostSchema = z.object({
   media: SlotMediaSchema.nullable().optional(),
 });
 
-export const SlotScheduleSchema = z.object({
+const SlotScheduleSchema = z.object({
   id: z.string(),
   personaId: z.string().nullable(),
   providers: z.array(z.string()),

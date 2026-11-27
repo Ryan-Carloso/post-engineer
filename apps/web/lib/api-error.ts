@@ -75,3 +75,12 @@ export function apiErrorResponse(
   } else if (status >= 400 && status !== 401 && status !== 403) markApiErrorReported(response);
   return response;
 }
+
+export function routeErrorResponse(
+  status: number,
+  error: string,
+  route: string,
+  options?: Omit<ApiErrorOptions, 'route'>,
+): NextResponse {
+  return apiErrorResponse(status, error, { route, ...options });
+}

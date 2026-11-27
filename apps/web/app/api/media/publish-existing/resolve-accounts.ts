@@ -7,7 +7,7 @@ import type { Provider } from './providers-validation';
 import { validateAccounts } from './validate-accounts';
 import { loadPublishBinding } from './bound-accounts';
 
-export async function resolvePublishingAccounts(
+async function resolvePublishingAccounts(
   supabase: SupabaseClient,
   personaId: string | null,
   explicitAccounts: Record<string, string[] | undefined> | undefined,

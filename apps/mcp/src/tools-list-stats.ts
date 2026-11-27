@@ -5,9 +5,9 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 
 export const ESTIMATED_BYTES_PER_TOKEN = 4;
 
-export const DEFAULT_TOP_TOOLS = 10;
+const DEFAULT_TOP_TOOLS = 10;
 
-export interface ToolSize {
+interface ToolSize {
   name: string;
   bytes: number;
 }

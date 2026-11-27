@@ -6,23 +6,13 @@ import {
 import { oauthPopupResponse } from '@/lib/oauth-utils';
 import { resolveOAuthCallbackAuth } from '@/lib/oauth-connect';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { sessionUserId } from '@/lib/oauth/session-user';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting } from '@/lib/api-error-reporting';
 import { reportProfileFetched, reportProfileFetchFailed } from '@/lib/account-profile-telemetry';
 import { YOUTUBE_CHANNEL_NAME_FALLBACK } from '@/lib/providers/registry';
 import { resetYouTubeRetentionWindows } from '@/lib/metrics/reset-retention';
-
-async function getSessionUserId(): Promise<string | null> {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-
-  if (error || !user) return null;
-  return user.id;
-}
 
 async function getHandler(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -41,7 +31,7 @@ async function getHandler(request: NextRequest) {
   const callbackAuth = await resolveOAuthCallbackAuth(
     request,
     state,
-    await getSessionUserId(),
+    await sessionUserId(),
     () => createSupabaseServiceClient(),
     'youtube'
   );

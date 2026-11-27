@@ -24,7 +24,7 @@ const WARNING_KEYS: Record<
   FIRST_COMMENT_TOO_LONG: 'posts.commentWarningTooLong',
 };
 
-export const FirstCommentWarnings = ({ warnings }: { warnings: readonly FirstCommentOutcomeWarning[] }) => {
+const FirstCommentWarnings = ({ warnings }: { warnings: readonly FirstCommentOutcomeWarning[] }) => {
   const { t } = useI18n();
   return (
     <>

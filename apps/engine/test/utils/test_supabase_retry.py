@@ -42,37 +42,6 @@ class RetryShapeTests(unittest.TestCase):
         self.assertEqual(retry.connect, 0)
 
 
-class WorstCaseTests(unittest.TestCase):
-    """The bound that keeps state.py's update_task lock bounded.
-
-    These assert the function's own output (never a formula re-derived here),
-    so fixing the function cannot leave a stale copy of the wrong arithmetic
-    here claiming to be correct.
-    """
-
-    def test_sleep_schedule_matches_urllib3(self):
-        self.assertEqual(supabase_retry.retry_sleep_seconds(1), 0.0)
-        self.assertEqual(supabase_retry.retry_sleep_seconds(2), 1.0)
-        self.assertEqual(supabase_retry.retry_sleep_seconds(3), 3.0)
-
-    def test_counts_every_attempt(self):
-        connect, read = 3, 10
-        self.assertEqual(
-            supabase_retry.worst_case_seconds(connect, read),
-            max((supabase_retry.CONNECT_RETRIES + 1) * connect + 1.0, read),
-        )
-
-    def test_store_timeout_uses_the_read_bound(self):
-        self.assertEqual(supabase_retry.worst_case_seconds(10, 30), 31.0)
-
-    def test_state_call_stays_at_the_pre_retry_ceiling(self):
-        self.assertLessEqual(supabase_retry.worst_case_seconds(3, 10), 10)
-        self.assertEqual(supabase_retry.worst_case_seconds(3, 10), 10.0)
-
-    def test_connect_five_would_break_the_state_ceiling(self):
-        self.assertGreater(supabase_retry.worst_case_seconds(5, 10), 10)
-
-
 class RetryBudgetSwapTests(unittest.TestCase):
     """set_retry_budget must not cost a pooled connection.
 

@@ -11,12 +11,6 @@ Safety rules:
 - Never log PII, credentials, or raw request bodies in properties.
 - Configuration comes from environment variables only — never hardcode.
 
-Deliberate exception (user-requested, 2026-10-01): the ai_request event
-carries response_preview, up to 500 chars of truncated model output, so
-LLM responses stay debuggable in PostHog. It is scrubbed of
-credential-shaped fragments (scrub_secret_values) before capture and is
-not a raw request body — prompts are never sent.
-
 Deliberate exception (user-requested, PR #228): the publish_provider_failed
 event carries response_body, up to 500 chars of the upstream provider's
 error response, so publish failures are diagnosable in PostHog from the
@@ -24,27 +18,12 @@ publisher publish path. It is scrubbed with
 scrub_error_text (secrets + machine-local paths) before capture and never
 reaches Discord or the task error string.
 
-Deliberate exception (PR #306): the ai_request event for a failed LongCat call
-carries response_body, up to 500 chars of LongCat's upstream HTTP error
-response, so a failed submit is diagnosable in PostHog from the actual
-reason instead of only its status code. It is scrubbed with
-scrub_error_text (secrets + machine-local paths) at the call site before
-capture and never reaches the exception message, Discord, or the task
-error string.
-
 Historical exception (PR #250, removed in Phase 5 PR 1): the
 script_angle_generated event carried angle, LLM output derived from the
 user's own topic and already persisted as product data on the task
 record. The script angle was removed with LLM script generation, so no
 new event carries model output; the scrubber itself stays in use
 elsewhere.
-
-AI observability (PR parity with the PostHog wizard's ai-observability
-program): track_ai_request also emits the standard PostHog `$ai_generation`
-event for every LLM call, so AI traces, errors and costs show up in the
-PostHog AI product (Traces/Generations). Same safety rules apply — see
-track_ai_generation for the two deliberate deviations from the default
-event shape ($ai_input never sent, $ai_session_id explicitly null).
 """
 
 from __future__ import annotations
@@ -53,7 +32,6 @@ import logging
 import os
 import re
 import tempfile
-import uuid
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -267,31 +245,6 @@ def track_event(
         logger.warning("PostHog capture failed for %s: %s", event_name, type(exc).__name__)
 
 
-def subtitle_event_props(source: object) -> dict[str, object]:
-    """Caption placement for a generation event, from engine params or a task row.
-
-    Only a real placement travels; the custom height only travels with a
-    custom placement, so the event never carries a meaningless number.
-    Params objects carry custom_position; task rows carry the emitted
-    subtitle_custom_position key, falling back to the raw custom_position
-    key when a row was built from raw params.
-    """
-    if isinstance(source, dict):
-        position = source.get("subtitle_position")
-        custom = source.get("subtitle_custom_position")
-        if custom is None:
-            custom = source.get("custom_position")
-    else:
-        position = getattr(source, "subtitle_position", None)
-        custom = getattr(source, "custom_position", None)
-    if not isinstance(position, str) or not position:
-        return {}
-    props: dict[str, object] = {"subtitle_position": position}
-    if position == "custom" and isinstance(custom, (int, float)):
-        props["subtitle_custom_position"] = custom
-    return props
-
-
 def nonempty_error_reason(text: str, fallback: str, max_chars: int = 200) -> str:
     """Scrubbed failure why, never empty: empty text falls back to type name."""
     cleaned = scrub_error_text(text, max_chars=max_chars).strip()
@@ -299,99 +252,6 @@ def nonempty_error_reason(text: str, fallback: str, max_chars: int = 200) -> str
         return cleaned
     fallback_clean = scrub_error_text(fallback, max_chars=max_chars).strip()
     return fallback_clean or "Error"
-
-
-def track_ai_request(properties: dict[str, Any]) -> None:
-    """Track one AI backend call (LLM or Modal).
-
-    Event name: ai_request. The caller builds the properties dict with a
-    uniform schema: backend ("llm" | "modal"), duration_ms, success, plus
-    backend-specific context (provider/model/primary_provider/fallback_used
-    for llm; operation/job_id for modal) and, on failure, a pre-sanitized
-    error. track_event redacts whole properties whose KEY names a secret
-    as a backstop and never raises — free-text fields (error,
-    response_preview, response_body) must be scrubbed by the caller first,
-    which the llm/modal paths do via scrub_error_text.
-
-    LLM calls additionally emit the standard PostHog AI-observability
-    `$ai_generation` event (see track_ai_generation): one trace per call
-    with model/provider/latency/tokens/cost and the same already-scrubbed
-    error and response_preview, so failures and regressions are readable
-    in the AI product without sending prompts.
-    """
-    if properties.get("success") is False:
-        err = properties.get("error")
-        if not isinstance(err, str) or not err.strip():
-            properties["error"] = "Error"
-    track_event("ai_request", properties)
-    if properties.get("backend") == "llm":
-        track_ai_generation(properties)
-
-
-def track_ai_generation(props: dict[str, Any]) -> None:
-    """Emit the AI Observability `$ai_generation` event for one LLM call.
-
-    Fed from the ai_request properties, whose free-text fields (error,
-    response_preview) the llm/modal call site already scrubbed — they pass
-    through verbatim, never re-scrubbed and never rebuilt from raw output.
-
-    Two deliberate deviations from PostHog's default `$ai_generation` shape
-    (both mirroring the module-level safety rules):
-    - `$ai_input` is never sent: prompts never leave the machine
-      (deliberate exception, 2026-10-01).
-    - `$ai_session_id` is explicitly null: script generation is a one-shot
-      workload, not a conversation. PostHog reads null as "complete", not
-      "missing a session id".
-
-    Token counters and cost are omitted entirely when the provider did not
-    report them — a 0 or fake value would lie in the dashboards, like the
-    engine's other nullable metrics. OpenRouter reports real spend, so when
-    cost_usd is present it passes through with $ai_cost_passthrough=True
-    (PostHog then keeps the reported total instead of estimating).
-    Telemetry never raises: the same never-break contract as track_event.
-    """
-    try:
-        client = _get_client()
-        if client is None:
-            return
-        success = bool(props.get("success"))
-        generation: dict[str, Any] = {
-            "$ai_trace_id": str(uuid.uuid4()),
-            "$ai_session_id": None,
-            "$ai_provider": props.get("provider"),
-            "$ai_latency": (props.get("duration_ms") or 0) / 1000,
-            "primary_provider": props.get("primary_provider"),
-            "fallback_used": bool(props.get("fallback_used")),
-            "response_chars": props.get("response_chars"),
-            "source": "engine",
-            "environment": _get_environment(),
-        }
-        model = props.get("model")
-        if model:
-            generation["$ai_model"] = model
-        if success:
-            if props.get("response_preview"):
-                generation["response_preview"] = props["response_preview"]
-        else:
-            generation["$ai_is_error"] = True
-            generation["$ai_error"] = props.get("error", "")
-        input_tokens = props.get("prompt_tokens") or 0
-        output_tokens = props.get("completion_tokens") or 0
-        if input_tokens:
-            generation["$ai_input_tokens"] = input_tokens
-        if output_tokens:
-            generation["$ai_output_tokens"] = output_tokens
-        cost_usd = props.get("cost_usd")
-        if cost_usd is not None:
-            generation["$ai_total_cost_usd"] = cost_usd
-            generation["$ai_cost_passthrough"] = True
-        client.capture(
-            distinct_id=_resolve_distinct_id(props),
-            event="$ai_generation",
-            properties=generation,
-        )
-    except Exception as exc:
-        logger.warning("PostHog $ai_generation capture failed: %s", type(exc).__name__)
 
 
 def reset_for_testing() -> None:

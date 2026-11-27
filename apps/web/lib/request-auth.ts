@@ -140,14 +140,3 @@ function unauthorized(): SupabaseSessionAuthResult {
     ),
   };
 }
-
-export function engineAuthHeaders(userId: string): Record<string, string> {
-  const secret = process.env.MONEYPRINT_API_SECRET;
-  if (!secret) {
-    throw new Error('MONEYPRINT_API_SECRET is not defined');
-  }
-  return {
-    Authorization: `Bearer ${secret}`,
-    'x-user-id': userId,
-  };
-}

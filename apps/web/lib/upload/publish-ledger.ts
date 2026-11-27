@@ -16,7 +16,7 @@ export const PUBLISH_UNKNOWN_CODE = 'publish_unknown';
 
 export const PUBLISH_LEDGER_STATUSES = ['in_progress', 'published', 'failed', 'unknown'] as const;
 
-export type PublishLedgerOutcome = 'claimed' | 'published' | 'in_progress' | 'unknown';
+type PublishLedgerOutcome = 'claimed' | 'published' | 'in_progress' | 'unknown';
 
 export interface PublishLedgerClaim {
   outcome: PublishLedgerOutcome;

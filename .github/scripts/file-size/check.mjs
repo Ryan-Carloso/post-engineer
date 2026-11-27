@@ -6,22 +6,11 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { isVendoredCalendarCN } from './vendored-calendarcn.mjs';
 import { isVendoredUiDiff } from './vendored-uidiff.mjs';
+import { parseArgs } from '../cli/args.mjs';
 
 export const LINE_CAP = 500;
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-
-function parseArgs(argv) {
-  const args = {};
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    if (a.startsWith('--')) {
-      const key = a.slice(2).replace(/-([a-z])/g, (_, c) => c.toUpperCase());
-      args[key] = argv[i + 1] && !argv[i + 1].startsWith('--') ? argv[++i] : 'true';
-    }
-  }
-  return args;
-}
 
 export function isSourceFile(p) {
   return /\.(py|tsx?)$/.test(p);

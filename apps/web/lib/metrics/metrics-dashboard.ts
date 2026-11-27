@@ -120,7 +120,7 @@ export function sortByViews(rows: MetricsRowView[]): MetricsRowView[] {
   });
 }
 
-export interface RetentionCurvePoint {
+interface RetentionCurvePoint {
   ratio: number;
   audienceWatchRatio: number;
   relativeRetentionPerformance: number | null;
@@ -128,7 +128,7 @@ export interface RetentionCurvePoint {
 
 export type RetentionCurveSuccess = { success: true; points: RetentionCurvePoint[]; provisional: boolean };
 
-export type RetentionCurveFetchResult =
+type RetentionCurveFetchResult =
   | RetentionCurveSuccess
   | { success: false; reconnect: boolean; error: string };
 
@@ -142,7 +142,7 @@ function isCurvePoint(value: unknown): value is RetentionCurvePoint {
     && (point.relativeRetentionPerformance === null || typeof point.relativeRetentionPerformance === 'number');
 }
 
-export async function fetchRetentionCurve(accountId: string, videoId: string): Promise<RetentionCurveFetchResult> {
+async function fetchRetentionCurve(accountId: string, videoId: string): Promise<RetentionCurveFetchResult> {
   try {
     const params = new URLSearchParams({ account: accountId, video: videoId });
     const response = await fetch(`/api/metrics/retention-curve?${params.toString()}`);

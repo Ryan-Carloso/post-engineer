@@ -10,7 +10,6 @@ import {
   GetSlotShape,
   ListPostsSchema,
   ListPostsShape,
-  ListSchedulesSchema,
   ListSchedulesShape,
   UpdateSlotTitleSchema,
   UpdateSlotTitleShape,
@@ -28,7 +27,6 @@ export {
   GetSlotShape,
   ListPostsSchema,
   ListPostsShape,
-  ListSchedulesSchema,
   ListSchedulesShape,
   PublishVideoDirectSchema,
   PublishVideoDirectShape,
@@ -44,9 +42,8 @@ export { CreatePersonaShape, CreatePersonaSchema } from './persona-create.js';
 
 export type { McpToolResponse } from './tools-call.js';
 
-export { UpdatePersonaShape, UpdatePersonaSchema, handleUpdatePersona } from './persona-update.js';
-export { ConnectAccountShape, ConnectAccountSchema, handleConnectAccount } from './connect-account.js';
-
+export { UpdatePersonaSchema, handleUpdatePersona } from './persona-update.js';
+export { ConnectAccountSchema, handleConnectAccount } from './connect-account.js';
 
 export async function handleCreatePersona(
   client: PostEngineerClient,
@@ -70,7 +67,6 @@ export async function handleListSocialAccounts(
 ): Promise<McpToolResponse> {
   return handleLibraryCall(() => client.listSocialAccounts(), 'listing social accounts');
 }
-
 
 export async function handleListSchedules(
   client: PostEngineerClient

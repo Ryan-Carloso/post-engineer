@@ -11,7 +11,7 @@ import {
 
 export const FANVUE_UPLOAD_TIMEOUT_MS = 10 * 60_000;
 export const FANVUE_MAX_FILE_BYTES = 1_610_612_736;
-export const FANVUE_MEDIA_POLL_INTERVAL_MS = 1_500;
+const FANVUE_MEDIA_POLL_INTERVAL_MS = 1_500;
 export const FANVUE_MEDIA_READY_TIMEOUT_MS = 2 * 60_000;
 
 const MEDIA_STATUSES = ['created', 'processing', 'ready', 'error'] as const;

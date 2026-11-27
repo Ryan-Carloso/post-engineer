@@ -8,7 +8,7 @@ import { logger } from '@/lib/logger';
 
 export const ACCOUNT_PROFILE_REFRESH_URL = `/api/account?${ACCOUNT_PROFILE_REFRESH_PARAM}=1`;
 
-export interface RefreshedAccountsPayload {
+interface RefreshedAccountsPayload {
   authenticated: boolean;
   accounts: PublicAccountItem[];
   message?: string;

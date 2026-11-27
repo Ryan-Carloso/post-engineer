@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { createSupabaseRequestClient } from '@/lib/supabase/request-client'
 import { authErrorLogFields, isTransientAuthError } from '@/lib/auth-error'
 import { isProtectedPath } from '@/lib/protected-routes'
 
@@ -13,20 +13,6 @@ const PUBLIC_SITEMAP_PATH = '/sitemap.xml';
 const PUBLIC_OPENAPI_SPEC_PATH = '/openapi.json';
 const PUBLIC_MCP_PATH = '/mcp';
 
-function getSupabaseEnv() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-  if (!url) {
-    throw new Error('NEXT_PUBLIC_SUPABASE_URL is not defined')
-  }
-  if (!key) {
-    throw new Error('NEXT_PUBLIC_SUPABASE_ANON_KEY is not defined')
-  }
-
-  return { url, key }
-}
-
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   if (pathname === PUBLIC_SITEMAP_PATH || PUBLIC_STATIC_ASSET_PATH.test(pathname) || pathname === PUBLIC_OPENAPI_SPEC_PATH || pathname === PUBLIC_MCP_PATH) {
@@ -37,45 +23,13 @@ export async function middleware(request: NextRequest) {
     });
   }
 
-  const { url, key } = getSupabaseEnv()
-
   const response = NextResponse.next({
     request: {
       headers: request.headers,
     },
   })
 
-  const supabase = createServerClient(url, key, {
-    cookies: {
-      get(name: string) {
-        return request.cookies.get(name)?.value
-      },
-      set(name: string, value: string, options: CookieOptions) {
-        request.cookies.set({
-          name,
-          value,
-          ...options,
-        })
-        response.cookies.set({
-          name,
-          value,
-          ...options,
-        })
-      },
-      remove(name: string, options: CookieOptions) {
-        request.cookies.set({
-          name,
-          value: '',
-          ...options,
-        })
-        response.cookies.set({
-          name,
-          value: '',
-          ...options,
-        })
-      },
-    },
-  })
+  const supabase = createSupabaseRequestClient(request, response)
 
   const { data, error } = await supabase.auth.getClaims()
   const signedIn = hasSubjectClaim(data?.claims)

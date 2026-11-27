@@ -5,7 +5,7 @@ import { logger } from '../logger';
 import { notifyAccountBreak } from '../owner-alert-mail';
 import type { SocialProvider } from '../providers/registry';
 
-export { classifyAccountBreak, httpStatusOf, isMetaInvalidToken, isUnauthorizedError } from '../account-break';
+export { httpStatusOf, isMetaInvalidToken, isUnauthorizedError } from '../account-break';
 
 export const PUBLISH_ACCOUNT_UNAUTHORIZED_EVENT = 'publish_account_unauthorized';
 

@@ -28,7 +28,7 @@ export function dayKeyToDate(day: string): Date {
   return new Date(year ?? 1970, (month ?? 1) - 1, date ?? 1, 12);
 }
 
-export interface OverTimePoint {
+interface OverTimePoint {
   day: string;
   value: number;
 }
@@ -89,7 +89,7 @@ export function shouldUseDonut(groupCount: number): boolean {
   return groupCount <= 5;
 }
 
-export const TOP_VIDEOS_LIMIT = 10;
+const TOP_VIDEOS_LIMIT = 10;
 
 export function topVideosByViews(
   rows: MetricsRowView[],

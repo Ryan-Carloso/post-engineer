@@ -59,8 +59,8 @@ export class VideoTooLargeError extends Error {
 
 const MAX_ERROR_BODY_CHARS = 200;
 
-export const TRIAL_EXPIRED_CODE = 'TRIAL_EXPIRED';
-export const SUBSCRIPTION_INACTIVE_CODE = 'SUBSCRIPTION_INACTIVE';
+const TRIAL_EXPIRED_CODE = 'TRIAL_EXPIRED';
+const SUBSCRIPTION_INACTIVE_CODE = 'SUBSCRIPTION_INACTIVE';
 
 const ACCESS_BLOCKED_MESSAGES: Record<string, string> = {
   TRIAL_EXPIRED: 'The 7-day free trial has ended: scheduling and publishing are blocked, reading your data still works.',

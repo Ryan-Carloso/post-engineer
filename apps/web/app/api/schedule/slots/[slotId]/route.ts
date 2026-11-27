@@ -3,9 +3,8 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { apiErrorResponse } from '@/lib/api-error';
-import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
+import { applyRateLimit, RATE_LIMITS, type RateLimitProfile } from '@/lib/rate-limit';
 import { getSlotPost, personaScopeOf } from '@/lib/post-detail';
-import { isPersonaAllowed } from '@/lib/api-keys';
 import { resolveSlotUuid } from '@/lib/schedule-slot-id';
 import { validateScheduleWindow } from '@/lib/schedule-window';
 import { hasExplicitOffset } from '@/lib/timezone';
@@ -13,100 +12,50 @@ import { checkFirstComment } from '@/lib/contracts/first-comment';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 import { assertAccessActive } from '@/lib/access';
+import { loadOwnedSlot, type SlotRouteContext } from './owned-slot';
 
-interface SlotRow {
-  id: string;
-  schedule_id: string;
-  status: string;
-  title: string | null;
-  description: string | null;
-  slot_at: string;
-  media_ref: string | null;
-  media_kind: string | null;
-  media_content_type: string | null;
-  first_comment: string | null;
-}
+type SlotSession = {
+  auth: NonNullable<Awaited<ReturnType<typeof requireSupabaseSession>>['auth']>;
+  supabase: ReturnType<typeof createSupabaseServiceClient> | Awaited<ReturnType<typeof createSupabaseServerClient>>;
+  slotId: string;
+};
 
-interface ScheduleRow {
-  id: string;
-  user_id: string;
-  persona_id: string | null;
-  publish_mode: string | null;
-}
-
-export async function loadOwnedSlot(
-  supabase: ReturnType<typeof createSupabaseServiceClient>,
-  slotId: string,
-  userId: string,
-  personaScope: readonly string[] | null,
-): Promise<{ slot: SlotRow; publishMode: 'scheduled' | 'asap' } | { error: NextResponse }> {
-  const { data: slot, error } = await supabase
-    .from('scheduled_posts')
-    .select('id, schedule_id, status, title, description, slot_at, media_ref, media_kind, media_content_type, first_comment')
-    .eq('id', slotId)
-    .eq('user_id', userId)
-    .single();
-  if (error) {
-    if ((error as { code?: string }).code === 'PGRST116') {
-      return { error: apiErrorResponse(404, 'Slot not found.', { route: 'SLOT_OPS /api/schedule/slots' }) };
-    }
-    logger.error('[api/schedule/slots] slot lookup failed', error);
-    return {
-      error: apiErrorResponse(500, 'Failed to load post.', {
-        route: 'SLOT_OPS /api/schedule/slots',
-        cause: error,
-      }),
-    };
-  }
-  if (!slot) {
-    return { error: apiErrorResponse(404, 'Slot not found.', { route: 'SLOT_OPS /api/schedule/slots' }) };
-  }
-  const row = slot as SlotRow;
-  const { data: schedule, error: scheduleError } = await supabase
-    .from('schedules')
-    .select('id, user_id, persona_id, publish_mode')
-    .eq('id', row.schedule_id)
-    .maybeSingle();
-  if (scheduleError) {
-    logger.error('[api/schedule/slots] schedule lookup failed', scheduleError);
-    return {
-      error: apiErrorResponse(500, 'Failed to load post.', {
-        route: 'SLOT_OPS /api/schedule/slots',
-        cause: scheduleError,
-      }),
-    };
-  }
-  const scheduleRow = schedule as ScheduleRow | null;
-  if (
-    !scheduleRow ||
-    scheduleRow.user_id !== userId ||
-    (personaScope !== null && scheduleRow.persona_id !== null && scheduleRow.persona_id !== undefined && !isPersonaAllowed(personaScope, scheduleRow.persona_id))
-  ) {
-    return { error: apiErrorResponse(404, 'Slot not found.', { route: 'SLOT_OPS /api/schedule/slots' }) };
-  }
-  const publishMode = scheduleRow.publish_mode === 'asap' ? 'asap' : 'scheduled';
-  return { slot: row, publishMode };
-}
-
-async function getHandler(
+async function openSlotRequest(
   request: Request,
-  context: { params: Promise<{ slotId: string }> },
-): Promise<NextResponse> {
+  context: SlotRouteContext,
+  profile: RateLimitProfile,
+  route: string,
+): Promise<SlotSession | { error: NextResponse }> {
   const { auth, error: authError } = await requireSupabaseSession(request);
-  if (authError || !auth) return authError;
-  const limited = await applyRateLimit(request, RATE_LIMITS.deletePreview, auth.userId);
-  if (limited) return limited;
+  if (authError || !auth) return { error: authError };
+  const limited = await applyRateLimit(request, profile, auth.userId);
+  if (limited) return { error: limited };
   const supabase =
     auth.isApiKey === true || auth.isOAuth === true
       ? createSupabaseServiceClient()
       : await createSupabaseServerClient();
-
-  const { slotId } = await context.params;
-
-  const resolvedSlotId = resolveSlotUuid(slotId);
-  if (resolvedSlotId === null) {
-    return apiErrorResponse(404, 'Slot not found.', { route: 'GET /api/schedule/slots' });
+  const slotId = resolveSlotUuid((await context.params).slotId);
+  if (slotId === null) {
+    return { error: apiErrorResponse(404, 'Slot not found.', { route }) };
   }
+  return { auth, supabase, slotId };
+}
+
+function notDeletable(status: string): NextResponse {
+  return apiErrorResponse(
+    409,
+    status === 'published' ? 'A published post cannot be deleted.' : `A slot with status "${status}" cannot be deleted.`,
+    { route: 'DELETE /api/schedule/slots', metadata: { status } },
+  );
+}
+
+async function getHandler(
+  request: Request,
+  context: SlotRouteContext,
+): Promise<NextResponse> {
+  const opened = await openSlotRequest(request, context, RATE_LIMITS.deletePreview, 'GET /api/schedule/slots');
+  if ('error' in opened) return opened.error;
+  const { auth, supabase, slotId: resolvedSlotId } = opened;
 
   let detail;
   try {
@@ -126,23 +75,11 @@ async function getHandler(
 
 async function deleteHandler(
   request: Request,
-  context: { params: Promise<{ slotId: string }> },
+  context: SlotRouteContext,
 ): Promise<NextResponse> {
-  const { auth, error: authError } = await requireSupabaseSession(request);
-  if (authError || !auth) return authError;
-  const limited = await applyRateLimit(request, RATE_LIMITS.slotWrite, auth.userId);
-  if (limited) return limited;
-  const supabase =
-    auth.isApiKey === true || auth.isOAuth === true
-      ? createSupabaseServiceClient()
-      : await createSupabaseServerClient();
-
-  const { slotId } = await context.params;
-
-  const resolvedSlotId = resolveSlotUuid(slotId);
-  if (resolvedSlotId === null) {
-    return apiErrorResponse(404, 'Slot not found.', { route: 'DELETE /api/schedule/slots' });
-  }
+  const opened = await openSlotRequest(request, context, RATE_LIMITS.slotWrite, 'DELETE /api/schedule/slots');
+  if ('error' in opened) return opened.error;
+  const { auth, supabase, slotId: resolvedSlotId } = opened;
 
   const owned = await loadOwnedSlot(supabase, resolvedSlotId, auth.userId, personaScopeOf(auth));
   if ('error' in owned) return owned.error;
@@ -150,13 +87,7 @@ async function deleteHandler(
 
   const DELETABLE_STATUSES = new Set(['ready', 'failed', 'expired', 'awaiting_approval']);
   if (!DELETABLE_STATUSES.has(slot.status)) {
-    return apiErrorResponse(
-      409,
-      slot.status === 'published'
-        ? 'A published post cannot be deleted.'
-        : `A slot with status "${slot.status}" cannot be deleted.`,
-      { route: 'DELETE /api/schedule/slots', metadata: { status: slot.status } },
-    );
+    return notDeletable(slot.status);
   }
 
   const { data: deleteResult, error: rpcError } = await createSupabaseServiceClient().rpc('delete_slot_if_not_last', {
@@ -178,36 +109,18 @@ async function deleteHandler(
     return apiErrorResponse(404, 'Slot not found.', { route: 'DELETE /api/schedule/slots' });
   }
   if (deleteResult !== 'deleted') {
-    return apiErrorResponse(
-      409,
-      slot.status === 'published'
-        ? 'A published post cannot be deleted.'
-        : `A slot with status "${slot.status}" cannot be deleted.`,
-      { route: 'DELETE /api/schedule/slots', metadata: { status: slot.status } },
-    );
+    return notDeletable(slot.status);
   }
   return NextResponse.json({ success: true });
 }
 
 async function patchHandler(
   request: Request,
-  context: { params: Promise<{ slotId: string }> },
+  context: SlotRouteContext,
 ): Promise<NextResponse> {
-  const { auth, error: authError } = await requireSupabaseSession(request);
-  if (authError || !auth) return authError;
-  const limited = await applyRateLimit(request, RATE_LIMITS.slotWrite, auth.userId);
-  if (limited) return limited;
-  const supabase =
-    auth.isApiKey === true || auth.isOAuth === true
-      ? createSupabaseServiceClient()
-      : await createSupabaseServerClient();
-
-  const { slotId } = await context.params;
-
-  const resolvedSlotId = resolveSlotUuid(slotId);
-  if (resolvedSlotId === null) {
-    return apiErrorResponse(404, 'Slot not found.', { route: 'PATCH /api/schedule/slots' });
-  }
+  const opened = await openSlotRequest(request, context, RATE_LIMITS.slotWrite, 'PATCH /api/schedule/slots');
+  if ('error' in opened) return opened.error;
+  const { auth, supabase, slotId: resolvedSlotId } = opened;
 
   const owned = await loadOwnedSlot(supabase, resolvedSlotId, auth.userId, personaScopeOf(auth));
   if ('error' in owned) return owned.error;

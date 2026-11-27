@@ -21,7 +21,7 @@ export interface ShareProviderTotals {
   engagement: number;
 }
 
-export interface ShareSummary {
+interface ShareSummary {
   measurements: number;
   views: number;
   engagement: number;

@@ -1,31 +1,26 @@
 {
-    "format": [
-        "typescript",
-        "javascript",
-        "python"
-    ],
-    "ignore": [
-        "**/node_modules/**",
-        "**/dist/**",
-        "**/__tests__/**",
-        "**/test/**",
-        "**/*.test.*",
-        "**/*.spec.*",
-        "**/*.md",
-        "docs/**",
-        "**/*.lock",
-        "**/*.snap",
-        "**/*.snap.*"
-    ],
-    "minLines": 50,
-    "minTokens": 100,
-    "path": [
-        "apps/web",
-        "apps/mcp",
-        "apps/engine"
-    ],
-    "reporters": [
-        "consoleFull"
-    ],
-    "threshold": 0
+  "format": ["typescript", "tsx", "javascript", "python"],
+  "path": ["apps/web", "apps/mcp", "apps/engine", "shared", "scripts", ".github/scripts"],
+  "ignore": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/.next/**",
+    "**/.venv/**",
+    "**/coverage*/**",
+    "**/.stryker-tmp/**",
+    "**/mutants/**",
+    "**/__tests__/**",
+    "**/test/**",
+    "**/tests/**",
+    "**/*.test.*",
+    "**/*.spec.*",
+    "**/cypress/**",
+    "**/*.gen.ts",
+    "**/lib/contracts/**",
+    "**/src/contracts/**"
+  ],
+  "gitignore": true,
+  "minLines": 10,
+  "minTokens": 100,
+  "absolute": true
 }

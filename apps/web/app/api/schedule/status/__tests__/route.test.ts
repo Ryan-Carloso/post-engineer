@@ -7,7 +7,6 @@ vi.mock('@/lib/rate-limit', async (importOriginal) => ({
 }));
 vi.mock('@/lib/request-auth', () => ({
   requireSupabaseSession: vi.fn(),
-  engineAuthHeaders: (userId: string) => ({ 'x-user-id': userId }),
 }));
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: vi.fn(),

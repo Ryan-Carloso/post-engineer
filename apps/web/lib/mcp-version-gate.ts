@@ -8,7 +8,7 @@ export const MCP_VERSION_HEADER = 'x-mcp-version';
 
 const ROUTE = 'mcp-version-gate';
 export const MISMATCH_WARNING_WINDOW_MS = 60 * 60 * 1000;
-export const MISMATCH_WARNING_MAX_PAIRS = 100;
+const MISMATCH_WARNING_MAX_PAIRS = 100;
 const VERSION_SHAPE = /^(\d{1,4})\.(\d{1,4})\.(\d{1,6})$/;
 
 type VersionParts = [number, number, number];

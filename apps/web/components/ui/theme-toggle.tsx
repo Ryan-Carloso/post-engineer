@@ -2,7 +2,7 @@ import { cn } from '@/lib/utils';
 
 export type ThemeChoice = 'light' | 'dark' | 'system';
 
-export interface ThemeToggleLabels {
+interface ThemeToggleLabels {
   group: string;
   light: string;
   dark: string;

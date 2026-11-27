@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { defineEndpoint } from './endpoint.js';
 import { FIRST_COMMENT_WARNING_CODES } from './first-comment.js';
 
-export const DirectPublishAccountResultSchema = z.object({
+const DirectPublishAccountResultSchema = z.object({
   accountId: z.string(),
   success: z.boolean(),
   videoId: z.string().optional(),

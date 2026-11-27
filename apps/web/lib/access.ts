@@ -16,7 +16,7 @@ export interface AccessGateOptions {
   now?: () => Date;
 }
 
-export interface AccessWindow {
+interface AccessWindow {
   accessUntil: string;
   subscriptionStatus: string | null;
 }

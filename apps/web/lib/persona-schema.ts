@@ -7,7 +7,7 @@ import { AI_LABEL_FORM_VALUES, invalidAiLabelMessage } from './ai-label-form';
 import type { IdentityCard } from './contracts/persona-identity-card';
 import { parseIdentityCardField } from '@/app/api/persona/identity-card-field';
 
-export const PHOTO_EXTENSIONS: Record<string, string> = {
+const PHOTO_EXTENSIONS: Record<string, string> = {
   'image/png': 'png',
   'image/jpeg': 'jpg',
   'image/webp': 'webp',
@@ -35,8 +35,6 @@ function fieldErrorMessage(error: z.ZodError, entries: Record<string, unknown>):
 }
 
 export type PersonaFormMode = 'create' | 'debug';
-
-export type PersonaFormValues = z.infer<typeof personaFormSchema>;
 
 export type ParsedPersonaForm = {
   values: {

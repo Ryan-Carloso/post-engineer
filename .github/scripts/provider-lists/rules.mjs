@@ -1,4 +1,4 @@
-export const MIN_PROVIDERS = 3;
+const MIN_PROVIDERS = 3;
 
 /**
  * @param {{ file: string, line: number, kind: 'list'|'chain'|'map'|'text', providers: string[] }} group

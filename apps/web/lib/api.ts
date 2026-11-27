@@ -27,7 +27,7 @@ export {
   useThreespeakAccountsQuery,
   useYouTubeAccountsQuery,
 } from './social-accounts-queries';
-export type { BlueskyAccountResponse, ProviderAccountsResponse } from './social-accounts-queries';
+export type { ProviderAccountsResponse } from './social-accounts-queries';
 
 async function createPersona(formData: FormData): Promise<CreatePersonaResult> {
   const response = await fetch('/api/persona', { method: 'POST', body: formData });
@@ -249,14 +249,11 @@ export function useSchedulesQuery() {
 }
 
 export {
-  createApiKey,
   fetchApiKeys,
-  revokeApiKey,
   useApiKeysQuery,
   useCreateApiKeyMutation,
   useRevokeApiKeyMutation,
 } from './api-keys-client';
-export type { ApiKeyItem, CreateApiKeyInput } from './api-keys-client';
 
 export { fetchScheduleStatus, mapSlot } from './schedule-status';
 export type { ScheduledSlot, SlotRow } from './schedule-status';
@@ -382,7 +379,6 @@ export function usePostDetailQuery(id: string) {
     refetchInterval: 60_000,
   });
 }
-
 
 export { fetchSession, createPersona, fetchPersonaList };
 export { fetchYouTubeAccounts, fetchInstagramAccounts } from './social-accounts-queries';

@@ -1,8 +1,8 @@
 import { streamLlmJson } from './llm-stream.mjs';
 
-export class TopicError extends Error {}
+class TopicError extends Error {}
 
-export const HISTORY_WINDOW_DAYS = 30;
+const HISTORY_WINDOW_DAYS = 30;
 export const DUPLICATE_JACCARD_THRESHOLD = 0.7;
 const HISTORY_TIMEOUT_MS = 30000;
 const DEFAULT_API_BASE_URL = 'https://post-engineer.com';
@@ -46,7 +46,7 @@ export function normalizeTopic(text) {
     .trim();
 }
 
-export function topicTokens(text) {
+function topicTokens(text) {
   const words = normalizeTopic(text).split(' ').filter(Boolean);
   const tokens = new Set(words.filter((word) => !STOPWORDS.has(word)));
   for (const phrase of ['old town', 'day trip']) {

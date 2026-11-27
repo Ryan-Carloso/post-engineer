@@ -2,13 +2,7 @@ import { NextResponse } from 'next/server';
 
 export const MULTIPART_OVERHEAD_BYTES = 1024 * 1024;
 
-export const BOUNDED_FORM_DATA_ERROR_CODES = [
-  'LENGTH_REQUIRED',
-  'PAYLOAD_TOO_LARGE',
-  'INVALID_MULTIPART',
-] as const;
-
-export type BoundedFormDataErrorCode = (typeof BOUNDED_FORM_DATA_ERROR_CODES)[number];
+type BoundedFormDataErrorCode = 'LENGTH_REQUIRED' | 'PAYLOAD_TOO_LARGE' | 'INVALID_MULTIPART';
 
 export interface BoundedFormDataFailure {
   ok: false;

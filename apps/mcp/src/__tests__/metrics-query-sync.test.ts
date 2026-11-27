@@ -33,7 +33,7 @@ describe('get_post_metrics contract sync with GET /api/metrics', () => {
   });
 
   it('validates retention-curve video ids with the same pattern', () => {
-    expect(youtubeAnalytics).toContain(`export const VIDEO_ID = /${YOUTUBE_VIDEO_ID.source}/;`);
+    expect(youtubeAnalytics).toContain(`const VIDEO_ID = /${YOUTUBE_VIDEO_ID.source}/;`);
   });
 
   it('accepts the same providers: both read the one shared list', () => {

@@ -20,7 +20,7 @@ def _no_real_posthog_client(monkeypatch: pytest.MonkeyPatch):
 
     Telemetry must never escape the test suite: even with POSTHOG_API_KEY
     set (common on dev machines), every test sees a mock PostHog class, so
-    track_event/track_ai_request capture into a MagicMock instead of the
+    track_event captures into a MagicMock instead of the
     network. Patching posthog.Posthog — rather than track_event itself —
     keeps the analytics unit tests meaningful: they still exercise
     scrubbing, distinct_id selection and the never-raise contract against
