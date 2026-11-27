@@ -28,7 +28,7 @@ const config: KnipConfig = {
     'apps/web': {
       entry: ['scripts/*.{mjs,js}', 'cypress/e2e/**/*.cy.ts'],
       project: ['**/*.{ts,tsx,mjs,js,cjs,css}'],
-      ignoreDependencies: ['eslint-config-next'],
+      ignoreDependencies: ['eslint-config-next', 'babel-plugin-istanbul'],
     },
     'apps/mcp': {
       entry: ['scripts/*.mjs'],
