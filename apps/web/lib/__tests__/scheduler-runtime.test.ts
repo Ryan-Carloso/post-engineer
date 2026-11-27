@@ -37,7 +37,6 @@ vi.mock('../metrics/post-metrics-daily', () => ({
 }));
 vi.mock('../metrics/provider-counters', () => ({ fetchProviderCounters: vi.fn() }));
 vi.mock('../metrics/youtube-account-resolution', () => ({ resolveYouTubeMetricsTarget: vi.fn() }));
-vi.mock('../engine-tasks', () => ({ fetchEnginePostMetricsSource: vi.fn() }));
 vi.mock('../analytics', () => ({ trackApiEvent: vi.fn() }));
 vi.mock('../posthog-server', () => ({ flushPostHog: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../logger', () => ({
