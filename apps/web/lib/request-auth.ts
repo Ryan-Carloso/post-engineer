@@ -3,7 +3,7 @@ import 'server-only';
 import { NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
-import { resolveApiKey, validateApiKeyFormat } from '@/lib/api-keys';
+import { resolveApiKey, validateApiKeyFormat, type ApprovalMode } from '@/lib/api-keys';
 import { getOAuthKeys } from '@/lib/oauth/keys';
 import { verifyAccessToken } from '@/lib/oauth/tokens';
 import { getMcpResource } from '@/lib/oauth/config';
@@ -17,6 +17,7 @@ interface SupabaseSessionAuth {
   isOAuth?: boolean;
   keyId?: string;
   personaIds?: string[] | null;
+  approvalMode?: ApprovalMode;
   displayName?: string;
 }
 
@@ -73,6 +74,7 @@ export async function requireSupabaseSession(request?: Request): Promise<Supabas
           isApiKey: true,
           keyId: resolved.keyId,
           personaIds: resolved.personaIds,
+          approvalMode: resolved.approvalMode,
         },
         error: null,
       };

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { assertTrialActive } from '@/lib/trial';
+import type { ApprovalMode } from '@/lib/api-keys';
 import { logger } from '@/lib/logger';
 import { ValidationError } from '@/lib/errors';
 import { requireSupabaseSession } from '@/lib/request-auth';
@@ -22,13 +23,19 @@ import { UPLOAD_CONTENT_MAX_BODY_BYTES } from '@/lib/upload/upload-content-limit
 import { startLedgerHeartbeat } from '@/lib/upload/publish-ledger-heartbeat';
 
 type UploadAuth =
-  | { kind: 'session'; userId: string }
+  | { kind: 'session'; userId: string; isApiKey?: boolean; approvalMode?: ApprovalMode }
   | { kind: 'service' }
   | { kind: 'denied'; error: NextResponse };
 
 async function authenticateUpload(request: NextRequest): Promise<UploadAuth> {
   const session = await requireSupabaseSession(request);
-  if (session.auth) return { kind: 'session', userId: session.auth.userId };
+  if (session.auth)
+    return {
+      kind: 'session',
+      userId: session.auth.userId,
+      isApiKey: session.auth.isApiKey,
+      approvalMode: session.auth.approvalMode,
+    };
 
   const apiSecret = process.env.MONEYPRINT_API_SECRET;
   const authorization = request.headers.get('authorization');
@@ -52,6 +59,12 @@ async function postHandler(request: NextRequest) {
   try {
     const upload = await authenticateUpload(request);
     if (upload.kind === 'denied') return upload.error;
+    if (upload.kind === 'session' && upload.isApiKey === true && upload.approvalMode === 'approval') {
+      return NextResponse.json(
+        { success: false, error: 'Approval-mode API keys cannot publish directly.' },
+        { status: 403 },
+      );
+    }
 
     const bounded = await readBoundedFormData(request, UPLOAD_CONTENT_MAX_BODY_BYTES);
     if (!bounded.ok) return boundedFormDataFailureResponse(bounded);

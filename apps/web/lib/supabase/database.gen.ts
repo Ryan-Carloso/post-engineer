@@ -722,6 +722,7 @@ export interface Database {
         last_used_at: string | null;
         revoked_at: string | null;
         persona_ids: string[] | null;
+        approval_mode: 'yolo' | 'approval';
         };
         Insert: {
         id?: string;
@@ -733,6 +734,7 @@ export interface Database {
         last_used_at?: string | null;
         revoked_at?: string | null;
         persona_ids?: string[] | null;
+        approval_mode?: 'yolo' | 'approval';
         };
         Update: {
         id?: string;
@@ -744,6 +746,7 @@ export interface Database {
         last_used_at?: string | null;
         revoked_at?: string | null;
         persona_ids?: string[] | null;
+        approval_mode?: 'yolo' | 'approval';
         };
         Relationships: [];
       };

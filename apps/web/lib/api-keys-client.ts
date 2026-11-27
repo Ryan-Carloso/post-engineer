@@ -1,12 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { HttpStatusError } from './errors';
+import type { ApprovalMode } from './api-keys';
 
 export interface ApiKeyItem {
   id: string;
   name: string;
   keyPrefix: string;
   personaIds: string[] | null;
+  approvalMode: ApprovalMode;
   createdAt: string;
   lastUsedAt: string | null;
   revokedAt: string | null;
@@ -22,6 +24,7 @@ export async function fetchApiKeys(): Promise<ApiKeyItem[]> {
 export interface CreateApiKeyInput {
   name: string;
   personaIds?: string[] | null;
+  approvalMode?: ApprovalMode;
 }
 
 export async function createApiKey(input: CreateApiKeyInput): Promise<{
@@ -30,12 +33,13 @@ export async function createApiKey(input: CreateApiKeyInput): Promise<{
   key: string;
   keyPrefix: string;
   personaIds: string[] | null;
+  approvalMode: ApprovalMode;
   createdAt: string;
 }> {
   const response = await fetch('/api/api-keys', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: input.name, personaIds: input.personaIds ?? null }),
+    body: JSON.stringify({ name: input.name, personaIds: input.personaIds ?? null, approvalMode: input.approvalMode ?? 'approval' }),
   });
   if (!response.ok) throw new HttpStatusError('Failed to create API key', response.status);
   return response.json();

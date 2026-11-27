@@ -28,6 +28,7 @@ export interface SlotPostDetail {
     slotAt: string;
     status: string;
     title: string | null;
+    description: string | null;
     error: string | null;
     publishedAt: string | null;
     publishLinks: PublishLink[];
@@ -55,7 +56,7 @@ export async function getSlotPost(
 ): Promise<SlotPostDetail | null> {
   const { data: slot, error: slotError } = await supabase
     .from('scheduled_posts')
-    .select('id, schedule_id, slot_at, status, title, error, published_at, publish_outcomes, prompt_version_id, media_kind, media_ref, media_content_type, first_comment')
+    .select('id, schedule_id, slot_at, status, title, description, error, published_at, publish_outcomes, prompt_version_id, media_kind, media_ref, media_content_type, first_comment')
     .eq('id', slotId)
     .eq('user_id', userId)
     .single();
@@ -69,6 +70,7 @@ export async function getSlotPost(
     slot_at: string;
     status: string;
     title: string | null;
+    description: string | null;
     error: string | null;
     published_at: string | null;
     publish_outcomes: unknown;
@@ -123,6 +125,7 @@ export async function getSlotPost(
       slotAt: row.slot_at,
       status: row.status,
       title: row.title,
+      description: row.description,
       error: row.error,
       publishedAt: row.published_at,
       postUrl: postUrlFor(row.id),

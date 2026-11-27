@@ -256,6 +256,18 @@ describe('sweepExpiredVideoUploads with scheduled uploads', () => {
     expect(store.rows.get('late')?.expires_at).toBe(new Date(NOW.getTime() + 24 * HOUR).toISOString());
   });
 
+  it('keeps an approval hold past its expiry so a late approval still finds its media', async () => {
+    const store = makeStore(
+      [row({ id: 'held', status: 'ready', storage_path: 'u/held.mp4', expires_at: new Date(NOW.getTime() - 1_000).toISOString() })],
+      new Map([['held', new Date(NOW.getTime() - 25 * HOUR).toISOString()]]),
+    );
+    const storage = makeStorage();
+    expect(await sweepExpiredVideoUploads(store, storage, NOW)).toBe(0);
+    expect(storage.removed).toEqual([]);
+    expect(store.rows.has('held')).toBe(true);
+    expect(store.rows.get('held')?.expires_at).toBe(new Date(NOW.getTime() + 24 * HOUR).toISOString());
+  });
+
   it('removes nothing when the scheduled-slot lookup fails', async () => {
     const store = makeStore([
       row({ id: 'maybe', status: 'ready', storage_path: 'u/maybe.mp4', expires_at: new Date(NOW.getTime() - 1_000).toISOString() }),

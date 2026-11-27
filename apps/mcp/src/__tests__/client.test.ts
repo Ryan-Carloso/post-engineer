@@ -246,6 +246,7 @@ describe('PostEngineerClient', () => {
         },
       ],
       hasAnyPost: true,
+      awaitingCount: 0,
     };
 
     global.fetch = vi.fn().mockResolvedValue({
@@ -271,7 +272,7 @@ describe('PostEngineerClient', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      text: async () => JSON.stringify(({ success: true, upcoming: [], recent: [], hasAnyPost: false })),
+      text: async () => JSON.stringify(({ success: true, upcoming: [], recent: [], hasAnyPost: false, awaitingCount: 0 })),
     });
 
     await client.listPosts(50);

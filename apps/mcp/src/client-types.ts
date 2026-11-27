@@ -112,9 +112,26 @@ export type PublishExistingResult =
       mode: 'asap';
       success: boolean;
       replayed: boolean;
+      held: false;
       mediaKind: 'upload' | 'image';
       publishes: Array<{ provider: string; success: boolean; results: DirectPublishAccountResult[] }>;
       logId: string;
+    }
+  | {
+      mode: 'asap';
+      success: true;
+      replayed: boolean;
+      held: true;
+      approvalRequired: true;
+      slot: { id: string; slotAt: string; status: string };
+    }
+  | {
+      mode: 'asap';
+      success: true;
+      replayed: boolean;
+      held: false;
+      approvalRequired: false;
+      slot: { id: string; slotAt: string; status: string };
     };
 
 export interface DirectPublishAccountResult {

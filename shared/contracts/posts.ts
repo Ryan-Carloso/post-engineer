@@ -25,6 +25,12 @@ export const PublishProviderFailureSchema = z.object({
   notice: z.string(),
 });
 
+export const SlotMediaSchema = z.object({
+  kind: z.enum(['upload', 'image']),
+  url: z.string().nullable(),
+  contentType: z.string().nullable(),
+});
+
 export const SlotPostSchema = z.object({
   id: z.string(),
   scheduleId: z.string(),
@@ -39,14 +45,7 @@ export const SlotPostSchema = z.object({
   firstComment: z.string().nullable(),
   commentWarnings: z.array(FirstCommentWarningSchema),
   postUrl: z.string().nullable(),
-  media: z
-    .object({
-      kind: z.enum(['upload', 'image']),
-      url: z.string().nullable(),
-      contentType: z.string().nullable(),
-    })
-    .nullable()
-    .optional(),
+  media: SlotMediaSchema.nullable().optional(),
 });
 
 export const SlotScheduleSchema = z.object({

@@ -1,12 +1,15 @@
 import { HttpStatusError } from '@/lib/errors';
 import type { PublishProviderFailure, PublishUserNotice } from '@/lib/publish-user-notice';
+import { narrowSlotMedia, type SlotMedia } from '@/lib/slot-detail';
 
 export interface ScheduledSlot {
   id: string;
   scheduleId: string;
   slotAt: string;
-  status: 'ready' | 'publishing' | 'published' | 'failed';
+  status: 'ready' | 'awaiting_approval' | 'publishing' | 'published' | 'failed' | 'cancelled';
   title: string | null;
+  description?: string | null;
+  media?: SlotMedia | null;
   error?: string | null;
   publishedAt?: string | null;
   userNotices?: PublishUserNotice[];
@@ -19,6 +22,8 @@ export interface SlotRow {
   slot_at: string;
   status: ScheduledSlot['status'];
   title: string | null;
+  description?: string | null;
+  media?: SlotMedia | null;
   error?: string | null;
   published_at?: string | null;
   userNotices?: PublishUserNotice[];
@@ -30,6 +35,7 @@ interface ScheduleStatusPayload {
   upcoming?: SlotRow[];
   recent?: SlotRow[];
   hasAnyPost?: boolean;
+  awaitingCount?: number;
 }
 
 export function mapSlot(row: SlotRow): ScheduledSlot {
@@ -39,6 +45,8 @@ export function mapSlot(row: SlotRow): ScheduledSlot {
     slotAt: row.slot_at,
     status: row.status,
     title: row.title,
+    description: row.description ?? null,
+    media: narrowSlotMedia(row.media),
     error: row.error,
     publishedAt: row.published_at,
     userNotices: row.userNotices,
@@ -50,6 +58,7 @@ export async function fetchScheduleStatus(limit?: number): Promise<{
   upcoming: ScheduledSlot[];
   recent: ScheduledSlot[];
   hasAnyPost: boolean;
+  awaitingCount?: number;
 }> {
   const url = typeof limit === 'number' ? `/api/schedule/status?limit=${limit}` : '/api/schedule/status';
   const response = await fetch(url);
@@ -61,5 +70,6 @@ export async function fetchScheduleStatus(limit?: number): Promise<{
     upcoming,
     recent,
     hasAnyPost: data.hasAnyPost ?? (upcoming.length > 0 || recent.length > 0),
+    awaitingCount: data.awaitingCount,
   };
 }

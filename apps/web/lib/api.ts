@@ -262,7 +262,7 @@ export { fetchScheduleStatus, mapSlot } from './schedule-status';
 export type { ScheduledSlot, SlotRow } from './schedule-status';
 
 export function useScheduleStatusQuery(limit?: number) {
-  return useQuery<{ upcoming: ScheduledSlot[]; recent: ScheduledSlot[]; hasAnyPost: boolean }>({
+  return useQuery<{ upcoming: ScheduledSlot[]; recent: ScheduledSlot[]; hasAnyPost: boolean; awaitingCount?: number }>({
     queryKey: ['schedule-status', limit ?? 'default'],
     queryFn: () => fetchScheduleStatus(limit),
     refetchInterval: 60_000,
@@ -319,6 +319,7 @@ export interface SlotDetailPayload {
     slotAt: string;
     status: ScheduledSlot['status'];
     title: string | null;
+    description: string | null;
     error: string | null;
     publishedAt: string | null;
     publishLinks: PublishLink[];

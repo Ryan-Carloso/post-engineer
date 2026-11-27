@@ -78,7 +78,7 @@ describe('getSlotPost', () => {
     const detail = await getSlotPost(supabase, 'slot-1', 'user-1', null);
     expect(detail?.slot.id).toBe('slot-1');
     expect(chains['scheduled_posts'].select).toHaveBeenCalledWith(
-      'id, schedule_id, slot_at, status, title, error, published_at, publish_outcomes, prompt_version_id, media_kind, media_ref, media_content_type, first_comment'
+      'id, schedule_id, slot_at, status, title, description, error, published_at, publish_outcomes, prompt_version_id, media_kind, media_ref, media_content_type, first_comment'
     );
     expect(chains['schedules'].select).toHaveBeenCalledWith(
       'id, persona_id, providers, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, threads_account_ids, facebook_account_ids, pinterest_account_ids, pinterest_board_id, threespeak_account_ids, rumble_account_ids, fanvue_account_ids, telegram_account_ids, timezone, publish_mode'

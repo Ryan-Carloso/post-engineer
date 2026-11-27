@@ -6,6 +6,13 @@ const KEY_PREFIX = 'pe_live_';
 const MIN_KEY_LENGTH = 32;
 export const API_KEY_LAST_USED_TOUCH_INTERVAL_MS = 60 * 60 * 1000;
 
+export const APPROVAL_MODES = ['yolo', 'approval'] as const;
+export type ApprovalMode = (typeof APPROVAL_MODES)[number];
+
+export function isApprovalMode(value: unknown): value is ApprovalMode {
+  return value === 'yolo' || value === 'approval';
+}
+
 export function generateRawApiKey(): string {
   const bytes = randomBytes(24).toString('hex');
   return `${KEY_PREFIX}${bytes}`;
@@ -31,6 +38,7 @@ export interface ResolvedApiKey {
   userId: string;
   keyId: string;
   personaIds: string[] | null;
+  approvalMode: ApprovalMode;
 }
 
 export async function resolveApiKey(
@@ -45,12 +53,16 @@ export async function resolveApiKey(
 
   const { data, error } = await supabase
     .from('user_api_keys')
-    .select('id, user_id, persona_ids, revoked_at, last_used_at')
+    .select('id, user_id, persona_ids, approval_mode, revoked_at, last_used_at')
     .eq('key_hash', keyHash)
     .is('revoked_at', null)
     .single();
 
   if (error || !data) {
+    return null;
+  }
+
+  if (!isApprovalMode(data.approval_mode)) {
     return null;
   }
 
@@ -66,6 +78,7 @@ export async function resolveApiKey(
     userId: data.user_id as string,
     keyId: data.id as string,
     personaIds,
+    approvalMode: data.approval_mode,
   };
 }
 

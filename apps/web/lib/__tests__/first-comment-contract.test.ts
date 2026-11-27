@@ -24,7 +24,7 @@ function read(path: string): string {
 
 describe('first comment storage limit', () => {
   it('pins the migration check to FIRST_COMMENT_MAX_LENGTH', () => {
-    const migration = read('supabase/migrations/088_scheduled-posts-first-comment.sql');
+    const migration = read('supabase/migrations/090_scheduled-posts-first-comment.sql');
     const match = /char_length\(first_comment\) between 1 and (\d+)/.exec(migration);
     expect(match).not.toBeNull();
     expect(Number(match?.[1])).toBe(FIRST_COMMENT_MAX_LENGTH);
@@ -46,7 +46,7 @@ describe('first comment storage limit', () => {
   });
 
   it('is listed in the migration README', () => {
-    expect(read('supabase/README.md')).toContain('088_scheduled-posts-first-comment.sql');
+    expect(read('supabase/README.md')).toContain('090_scheduled-posts-first-comment.sql');
   });
 });
 

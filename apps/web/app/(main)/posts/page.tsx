@@ -27,6 +27,7 @@ import {
 import { AccountEmptyState, DayEmptyState, DayListRow, NewPostButton } from './day-section';
 import { CALENDAR_LAYOUT_CLASS, CalendarLoadingSkeleton } from './loading-skeleton';
 import { PostFiltersBar, SlotCard, usePostFilters, usePostJoins } from './post-joins';
+import { ApprovalQueue } from './approval-queue';
 import { PageHeader } from '@/components/ui/page-header';
 import { Button } from '@/components/ui/button';
 import { OnboardingWizard, OnboardingWizardButton } from './onboarding-wizard';
@@ -220,6 +221,7 @@ export default function PostsPage() {
           </>
         }
       />
+      <ApprovalQueue joins={joins} />
       <PostFiltersBar
         filters={{ ...filters, clear: handleClearFilters, hasActiveFilter }}
         disabled={isLoading || isAccountEmpty || isError}

@@ -75,6 +75,7 @@ describe('GET /api/posts/[id]', () => {
         slotAt: '2026-10-18T10:00:00.000Z',
         status: 'ready',
         title: 'myth busting',
+        description: 'Edited outside.',
         error: null,
         publishedAt: null,
         publishLinks: [],

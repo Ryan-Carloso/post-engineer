@@ -4,7 +4,7 @@ import type { SlotMedia, SlotMediaKind } from './slot-detail';
 import { displayMediaKind } from './slot-detail';
 
 const SIGNED_URL_TTL_SECONDS = 60 * 60;
-const PREVIEW_STATUSES = new Set(['ready', 'publishing']);
+const PREVIEW_STATUSES = new Set(['ready', 'publishing', 'awaiting_approval']);
 
 export interface SlotMediaRow {
   media_kind: string | null;
