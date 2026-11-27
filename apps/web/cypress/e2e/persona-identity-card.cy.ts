@@ -109,7 +109,7 @@ describe('Persona — identity card', () => {
 
     visitEdit();
     cy.wait('@getCard');
-    description().should('have.value', card.identity.description);
+    description().should('have.value', JSON.stringify(card, null, 2));
   });
 
   it('blocks an empty description in a pasted card and sends nothing', () => {

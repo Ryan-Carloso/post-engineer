@@ -1,101 +1,40 @@
 import {
-  CARD_STYLES,
   IDENTITY_CARD_MAX_BYTES,
   IDENTITY_CARD_WRITE_VERSION,
   parseIdentityCardJson,
   parseIdentityCardValue,
-  type CardStyle,
   type IdentityCard,
   type ParsedCardInput,
 } from './contracts/persona-identity-card';
 
-export const IDENTITY_CARD_FIELDS = ['text', 'style'] as const;
-
-export type IdentityCardFieldKey = (typeof IDENTITY_CARD_FIELDS)[number];
-
-export interface IdentityCardDraft {
-  text: string;
-  style: string;
-}
-
-export function emptyIdentityCardDraft(): IdentityCardDraft {
-  return { text: '', style: '' };
-}
-
-function knownStyle(value: string | undefined): CardStyle | '' {
-  return CARD_STYLES.find((style) => style === value) ?? '';
-}
-
-function cardStyle(card: IdentityCard): CardStyle | '' {
-  return card.version === 1 ? '' : knownStyle(card.defaults?.style);
-}
-
-export function cardToDraft(card: IdentityCard | null): IdentityCardDraft {
-  if (card === null) return emptyIdentityCardDraft();
-  const style = cardStyle(card);
-  if (card.version === 3) return { text: card.identity.description, style };
-  return { text: JSON.stringify(card, null, 2), style };
-}
-
-function normalizeDescription(text: string): string {
+function normalizeText(text: string): string {
   return text.replace(/\r\n?/g, '\n').trim();
 }
 
-function applyStyle(card: IdentityCard, style: CardStyle | ''): IdentityCard {
-  if (card.version === 1) {
-    if (style === '') return card;
-    const outfit = card.defaults?.outfit;
-    return outfit === undefined
-      ? { version: 2, identity: card.identity, defaults: { style } }
-      : { version: 2, identity: card.identity, defaults: { style, outfit } };
-  }
-  if (card.version === 2) {
-    const outfit = card.defaults?.outfit;
-    if (outfit !== undefined) {
-      return style === ''
-        ? { version: 2, identity: card.identity, defaults: { outfit } }
-        : { version: 2, identity: card.identity, defaults: { style, outfit } };
-    }
-    return style === ''
-      ? { version: 2, identity: card.identity }
-      : { version: 2, identity: card.identity, defaults: { style } };
-  }
-  return style === ''
-    ? { version: 3, identity: card.identity }
-    : { version: 3, identity: card.identity, defaults: { style } };
+export function cardToText(card: IdentityCard | null): string {
+  if (card === null) return '';
+  if (card.version === 3 && card.defaults === undefined) return card.identity.description;
+  return JSON.stringify(card, null, 2);
 }
 
-function descriptionCard(text: string, style: CardStyle | ''): IdentityCard {
-  const identity = { description: normalizeDescription(text) };
-  return style === ''
-    ? { version: IDENTITY_CARD_WRITE_VERSION, identity }
-    : { version: IDENTITY_CARD_WRITE_VERSION, identity, defaults: { style } };
+function descriptionCard(text: string): IdentityCard {
+  return { version: IDENTITY_CARD_WRITE_VERSION, identity: { description: normalizeText(text) } };
 }
 
-export function styleOfCardText(text: string): string | null {
-  const trimmed = normalizeDescription(text);
-  if (!trimmed.startsWith('{')) return null;
-  const parsed = parseIdentityCardJson(trimmed);
-  return parsed.ok ? cardStyle(parsed.value) : null;
+export function parseCardText(text: string): ParsedCardInput<IdentityCard | null> {
+  const value = normalizeText(text);
+  if (value === '') return { ok: true, value: null };
+  if (!value.startsWith('{')) return { ok: true, value: descriptionCard(value) };
+  return parseIdentityCardJson(value);
 }
 
-export function draftToCard(draft: IdentityCardDraft): ParsedCardInput<IdentityCard | null> {
-  const text = normalizeDescription(draft.text);
-  const style = knownStyle(draft.style);
-  if (text === '') return { ok: true, value: null };
-  if (!text.startsWith('{')) return { ok: true, value: descriptionCard(text, style) };
-  const parsed = parseIdentityCardJson(text);
-  if (!parsed.ok) return parsed;
-  return { ok: true, value: applyStyle(parsed.value, style) };
+export function sameIdentityCardText(a: string, b: string): boolean {
+  return normalizeText(a) === normalizeText(b);
 }
 
-export function sameIdentityCardDraft(a: IdentityCardDraft, b: IdentityCardDraft): boolean {
-  return normalizeDescription(a.text) === normalizeDescription(b.text) && knownStyle(a.style) === knownStyle(b.style);
-}
-
-export function identityCardFormValue(draft: IdentityCardDraft, loaded: IdentityCardDraft): string | null {
-  if (sameIdentityCardDraft(draft, loaded)) return null;
-  const built = draftToCard(draft);
+export function identityCardFormValue(draft: string, loaded: string): string | null {
+  if (sameIdentityCardText(draft, loaded)) return null;
+  const built = parseCardText(draft);
   if (!built.ok) return null;
   return built.value === null ? 'null' : JSON.stringify(built.value);
 }
@@ -127,13 +66,10 @@ export function identityCardErrorKey(message: string): IdentityCardErrorKey {
   return 'identityCard.errGeneric';
 }
 
-export type IdentityCardDraftValidation = { ok: true } | { ok: false; errorKey: IdentityCardErrorKey };
+export type IdentityCardTextValidation = { ok: true } | { ok: false; errorKey: IdentityCardErrorKey };
 
-export function validateIdentityCardDraft(draft: IdentityCardDraft): IdentityCardDraftValidation {
-  if (normalizeDescription(draft.text) === '' && knownStyle(draft.style) !== '') {
-    return { ok: false, errorKey: 'identityCard.errNoTrait' };
-  }
-  const built = draftToCard(draft);
+export function validateIdentityCardText(text: string): IdentityCardTextValidation {
+  const built = parseCardText(text);
   if (!built.ok) return { ok: false, errorKey: identityCardErrorKey(built.error) };
   if (built.value === null) return { ok: true };
   const parsed = parseIdentityCardValue(built.value);

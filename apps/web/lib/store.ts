@@ -13,12 +13,8 @@ import {
   type PersonaDefaultAccounts,
 } from '@/lib/persona-publishing-accounts';
 import {
-  emptyIdentityCardDraft,
   identityCardFormValue,
-  sameIdentityCardDraft,
-  styleOfCardText,
-  type IdentityCardDraft,
-  type IdentityCardFieldKey,
+  sameIdentityCardText,
 } from '@/lib/persona-identity-card-form';
 
 function emptySelection(): Record<SocialProvider, string[]> {
@@ -162,11 +158,11 @@ interface PersonaFormState {
   publishingAccounts: PersonaDefaultAccounts;
   publishingAccountsLoaded: boolean;
   loadedPublishingAccounts: PersonaDefaultAccounts | null;
-  identityCardDraft: IdentityCardDraft;
-  identityCardLoaded: IdentityCardDraft;
+  identityCardDraft: string;
+  identityCardLoaded: string;
   isSubmitting: boolean;
-  setIdentityCardField: (key: IdentityCardFieldKey, value: string) => void;
-  applyServerIdentityCard: (draft: IdentityCardDraft) => void;
+  setIdentityCardText: (value: string) => void;
+  applyServerIdentityCard: (text: string) => void;
   resetIdentityCard: () => void;
   setSubmitting: (value: boolean) => void;
   setPublishingAccounts: (accounts: PersonaDefaultAccounts) => void;
@@ -191,8 +187,8 @@ const initialPersonaState = {
   publishingAccounts: emptyPersonaDefaultAccounts(),
   publishingAccountsLoaded: true,
   loadedPublishingAccounts: null,
-  identityCardDraft: emptyIdentityCardDraft(),
-  identityCardLoaded: emptyIdentityCardDraft(),
+  identityCardDraft: '',
+  identityCardLoaded: '',
   isSubmitting: false,
 };
 
@@ -207,19 +203,13 @@ export const usePersonaStore = create<PersonaFormState>()(
     setPublishingAccounts: (publishingAccounts) => set({ publishingAccounts }),
     setPublishingAccountsLoaded: (publishingAccountsLoaded) => set({ publishingAccountsLoaded }),
     setLoadedPublishingAccounts: (loadedPublishingAccounts) => set({ loadedPublishingAccounts }),
-    setIdentityCardField: (key, value) =>
-      set((s) => {
-        const draft = { ...s.identityCardDraft, [key]: value };
-        if (key !== 'text') return { identityCardDraft: draft };
-        const pastedStyle = styleOfCardText(value);
-        return { identityCardDraft: pastedStyle === null ? draft : { ...draft, style: pastedStyle } };
-      }),
-    applyServerIdentityCard: (draft) =>
+    setIdentityCardText: (value) => set({ identityCardDraft: value }),
+    applyServerIdentityCard: (text) =>
       set((s) => ({
-        identityCardLoaded: draft,
-        identityCardDraft: sameIdentityCardDraft(s.identityCardDraft, s.identityCardLoaded) ? draft : s.identityCardDraft,
+        identityCardLoaded: text,
+        identityCardDraft: sameIdentityCardText(s.identityCardDraft, s.identityCardLoaded) ? text : s.identityCardDraft,
       })),
-    resetIdentityCard: () => set({ identityCardDraft: emptyIdentityCardDraft(), identityCardLoaded: emptyIdentityCardDraft() }),
+    resetIdentityCard: () => set({ identityCardDraft: '', identityCardLoaded: '' }),
     setSubmitting: (isSubmitting) => set({ isSubmitting }),
     resetForm: () => set({ ...initialPersonaState, publishingAccounts: emptyPersonaDefaultAccounts() }),
     buildPersonaFormData: () => {

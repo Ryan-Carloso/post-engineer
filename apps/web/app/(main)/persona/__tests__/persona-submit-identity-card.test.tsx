@@ -76,7 +76,7 @@ async function submit(): Promise<void> {
 
 describe('PersonaSubmit with an identity card', () => {
   it('sends the filled card with the create request and marks the store as submitting meanwhile', async () => {
-    usePersonaStore.getState().setIdentityCardField('text', 'green eyes, oval face');
+    usePersonaStore.getState().setIdentityCardText('green eyes, oval face');
     await submit();
     const formData = api.createPersona.mock.calls[0][0] as FormData;
     expect(JSON.parse(String(formData.get('identityCard')))).toEqual({
@@ -93,18 +93,18 @@ describe('PersonaSubmit with an identity card', () => {
   });
 
   it('blocks an invalid card before any request and shows the localized message', async () => {
-    usePersonaStore.getState().setIdentityCardField('style', 'business');
+    usePersonaStore.getState().setIdentityCardText('{not json');
     await submit();
     expect(api.createPersona).not.toHaveBeenCalled();
     expect(usePersonaStore.getState().result).toEqual({
       success: false,
-      error: enDictionary.identityCard.errNoTrait,
+      error: enDictionary.identityCard.errGeneric,
     });
     expect(usePersonaStore.getState().isSubmitting).toBe(false);
   });
 
   it('replaces an English server card error with the localized message', async () => {
-    usePersonaStore.getState().setIdentityCardField('text', 'green eyes');
+    usePersonaStore.getState().setIdentityCardText('green eyes');
     api.createPersona.mockResolvedValueOnce({ success: false, error: 'identityCard.identity.description: at most 800 characters' });
     await submit();
     expect(usePersonaStore.getState().result).toEqual({

@@ -1,15 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
-  cardToDraft,
-  draftToCard,
-  emptyIdentityCardDraft,
+  cardToText,
   identityCardErrorKey,
   identityCardFormValue,
   localizeIdentityCardResult,
-  sameIdentityCardDraft,
-  styleOfCardText,
-  validateIdentityCardDraft,
-  type IdentityCardDraft,
+  parseCardText,
+  sameIdentityCardText,
+  validateIdentityCardText,
 } from '../persona-identity-card-form';
 import { FIXTURE_CARD, FIXTURE_CARD_V2, FIXTURE_CARD_V3 } from '@/test/identity-card-fixtures';
 import {
@@ -21,181 +18,159 @@ import {
   type ParsedCardInput,
 } from '@/lib/contracts/persona-identity-card';
 
-function draftWith(values: Partial<IdentityCardDraft>): IdentityCardDraft {
-  return { ...emptyIdentityCardDraft(), ...values };
-}
-
-function cardOf(draft: IdentityCardDraft): IdentityCard | null {
-  const built = draftToCard(draft);
+function cardOf(text: string): IdentityCard | null {
+  const built = parseCardText(text);
   expect(built.ok).toBe(true);
   return built.ok ? built.value : null;
 }
 
-describe('identity card draft', () => {
-  it('has one free-text description and one style', () => {
-    expect(emptyIdentityCardDraft()).toEqual({ text: '', style: '' });
+describe('identity card text', () => {
+  it('turns no card into an empty box and an empty box into no card', () => {
+    expect(cardToText(null)).toBe('');
+    expect(parseCardText('')).toEqual({ ok: true, value: null });
+    expect(parseCardText('   \n ')).toEqual({ ok: true, value: null });
   });
 
-  it('reads a v3 card into its description and style and writes the same card back', () => {
-    const draft = cardToDraft(FIXTURE_CARD_V3);
-    expect(draft).toEqual({ text: FIXTURE_CARD_V3.identity.description, style: 'business' });
-    expect(cardOf(draft)).toEqual(FIXTURE_CARD_V3);
+  it('shows a plain v3 card as its description and writes the same card back', () => {
+    const card: IdentityCard = { version: 3, identity: { description: FIXTURE_CARD_V3.identity.description } };
+    expect(cardToText(card)).toBe(card.identity.description);
+    expect(cardOf(cardToText(card))).toEqual(card);
   });
 
-  it('shows a v1 and a v2 card as editable JSON with their style', () => {
-    const v2 = cardToDraft(FIXTURE_CARD_V2);
-    expect(JSON.parse(v2.text)).toEqual(FIXTURE_CARD_V2);
-    expect(v2.style).toBe('business');
-    expect(cardOf(v2)).toEqual(FIXTURE_CARD_V2);
-
-    const v1 = cardToDraft(FIXTURE_CARD);
-    expect(JSON.parse(v1.text)).toEqual(FIXTURE_CARD);
-    expect(v1.style).toBe('');
-    expect(cardOf(v1)).toEqual(FIXTURE_CARD);
+  it('shows a v3 card with defaults, a v1 card and a v2 card as JSON that round-trips', () => {
+    for (const card of [FIXTURE_CARD_V3, FIXTURE_CARD, FIXTURE_CARD_V2]) {
+      const text = cardToText(card);
+      expect(JSON.parse(text)).toEqual(card);
+      expect(cardOf(text)).toEqual(card);
+    }
   });
 
-  it('turns no card into a blank draft and a blank draft into no card', () => {
-    expect(cardToDraft(null)).toEqual(emptyIdentityCardDraft());
-    expect(draftToCard(emptyIdentityCardDraft())).toEqual({ ok: true, value: null });
-    expect(draftToCard(draftWith({ text: '   \n ' }))).toEqual({ ok: true, value: null });
-  });
-
-  it('drops a stored style the contract does not know instead of showing an empty style', () => {
-    const card = { ...FIXTURE_CARD_V2, defaults: { style: 'bikini' } } as unknown as IdentityCard;
-    expect(cardToDraft(card).style).toBe('');
-  });
-
-  it('writes free text as a version 3 description, trimmed and with Unix line breaks', () => {
-    expect(cardOf(draftWith({ text: '  brown eyes,\r\nsquare jaw  ' }))).toEqual({
+  it('writes plain text as a version 3 description, trimmed and with Unix line breaks', () => {
+    expect(cardOf('  brown eyes,\r\nsquare jaw  ')).toEqual({
       version: 3,
       identity: { description: 'brown eyes,\nsquare jaw' },
     });
   });
 
-  it('adds the chosen style to the description card', () => {
-    expect(cardOf(draftWith({ text: 'green eyes', style: 'sporty' }))).toEqual({
+  it('keeps a pasted card exactly as written, including its style', () => {
+    expect(cardOf(JSON.stringify(FIXTURE_CARD_V2))).toEqual(FIXTURE_CARD_V2);
+    expect(cardOf(JSON.stringify(FIXTURE_CARD_V3))).toEqual(FIXTURE_CARD_V3);
+  });
+
+  it('keeps a v3 card that names a style as JSON so the style is not lost', () => {
+    const text = cardToText(FIXTURE_CARD_V3);
+    expect(JSON.parse(text).defaults.style).toBe('business');
+    expect(cardOf(text)).toEqual(FIXTURE_CARD_V3);
+  });
+
+  it('accepts a description with line breaks and keeps them in the card', () => {
+    expect(cardOf('brown eyes\nsquare jaw\nathletic build')).toEqual({
       version: 3,
-      identity: { description: 'green eyes' },
-      defaults: { style: 'sporty' },
+      identity: { description: 'brown eyes\nsquare jaw\nathletic build' },
     });
   });
 
-  it('reads the style of a pasted card so the choice and the JSON agree', () => {
-    expect(styleOfCardText(JSON.stringify(FIXTURE_CARD_V2))).toBe('business');
-    expect(styleOfCardText(JSON.stringify(FIXTURE_CARD))).toBe('');
-    expect(styleOfCardText('{not json')).toBeNull();
-    expect(styleOfCardText('free text')).toBeNull();
+  it('keeps a stored v2 card as JSON with its outfit', () => {
+    const text = cardToText(FIXTURE_CARD_V2);
+    expect(JSON.parse(text).defaults.outfit).toEqual({ top: 'white shirt', footwear: 'black loafers' });
+    expect(cardOf(text)).toEqual(FIXTURE_CARD_V2);
   });
 
-  it('keeps a pasted card untouched and overrides only its style', () => {
-    expect(cardOf(draftWith({ text: JSON.stringify(FIXTURE_CARD_V2), style: 'business' }))).toEqual(FIXTURE_CARD_V2);
-    expect(cardOf(draftWith({ text: JSON.stringify(FIXTURE_CARD_V2), style: 'casual' }))).toEqual({
-      ...FIXTURE_CARD_V2,
-      defaults: { style: 'casual', outfit: FIXTURE_CARD_V2.defaults?.outfit },
-    });
+  it('ignores whitespace around a pasted card and keeps the card unchanged', () => {
+    expect(cardOf(`\n  ${JSON.stringify(FIXTURE_CARD)}  \n`)).toEqual(FIXTURE_CARD);
   });
 
-  it('clears the style of a pasted card when the style choice is none', () => {
-    expect(cardOf(draftWith({ text: JSON.stringify(FIXTURE_CARD_V2), style: '' }))).toEqual({
-      version: 2,
-      identity: FIXTURE_CARD_V2.identity,
-      defaults: { outfit: { top: 'white shirt', footwear: 'black loafers' } },
-    });
-    expect(cardOf(draftWith({ text: JSON.stringify(FIXTURE_CARD), style: '' }))).toEqual(FIXTURE_CARD);
+  it('does not send anything while the pasted JSON is invalid', () => {
+    expect(identityCardFormValue('{not json', '')).toBeNull();
+    expect(validateIdentityCardText('{not json')).toEqual({ ok: false, errorKey: 'identityCard.errGeneric' });
   });
 
-  it('upgrades a pasted v1 card to v2 when a style is chosen, keeping its outfit', () => {
-    expect(cardOf(draftWith({ text: JSON.stringify(FIXTURE_CARD), style: 'formal' }))).toEqual({
-      version: 2,
-      identity: FIXTURE_CARD.identity,
-      defaults: { style: 'formal', outfit: { top: 'sage-green t-shirt', bottom: 'jeans' } },
-    });
+  it('sends a pasted v3 card with a style as the new card', () => {
+    const value = identityCardFormValue(JSON.stringify(FIXTURE_CARD_V3), '');
+    expect(JSON.parse(value ?? 'null')).toEqual(FIXTURE_CARD_V3);
   });
 
   it('reports an unparseable card instead of sending it', () => {
-    const built = draftToCard(draftWith({ text: '{not json' }));
-    expect(built).toEqual({ ok: false, error: 'identityCard: not valid JSON' });
+    expect(parseCardText('{not json')).toEqual({ ok: false, error: 'identityCard: not valid JSON' });
   });
 
-  it('compares drafts by normalized text and known style', () => {
-    expect(sameIdentityCardDraft({ text: 'a', style: '' }, { text: ' a ', style: '' })).toBe(true);
-    expect(sameIdentityCardDraft({ text: 'a', style: '' }, { text: 'b', style: '' })).toBe(false);
-    expect(sameIdentityCardDraft({ text: 'a', style: 'casual' }, { text: 'a', style: '' })).toBe(false);
+  it('compares text by normalized value', () => {
+    expect(sameIdentityCardText('a', ' a ')).toBe(true);
+    expect(sameIdentityCardText('a', 'b')).toBe(false);
+    expect(sameIdentityCardText('a\r\nb', 'a\nb')).toBe(true);
   });
 });
 
 describe('identityCardFormValue', () => {
-  it('sends nothing when the draft is unchanged', () => {
-    expect(identityCardFormValue(emptyIdentityCardDraft(), emptyIdentityCardDraft())).toBeNull();
-    const loaded = cardToDraft(FIXTURE_CARD_V3);
+  it('sends nothing when the box is unchanged', () => {
+    expect(identityCardFormValue('', '')).toBeNull();
+    const loaded = cardToText(FIXTURE_CARD_V3);
     expect(identityCardFormValue(loaded, loaded)).toBeNull();
-    expect(identityCardFormValue(draftWith({ text: ` ${loaded.text} `, style: 'business' }), loaded)).toBeNull();
+    expect(identityCardFormValue(` ${loaded} `, loaded)).toBeNull();
   });
 
-  it('sends the card JSON when the draft changed', () => {
-    const value = identityCardFormValue(draftWith({ text: 'green eyes' }), emptyIdentityCardDraft());
+  it('sends the card JSON when the box changed', () => {
+    const value = identityCardFormValue('green eyes', '');
     expect(JSON.parse(value ?? 'null')).toEqual({ version: 3, identity: { description: 'green eyes' } });
   });
 
   it('keeps a stored v1 card untouched until the user edits its text', () => {
-    const loaded = cardToDraft(FIXTURE_CARD);
-    expect(identityCardFormValue(cardToDraft(FIXTURE_CARD), loaded)).toBeNull();
-    const edited = identityCardFormValue({ ...loaded, text: '{"version":1,"identity":{"body":{"height":"short"}}}' }, loaded);
+    const loaded = cardToText(FIXTURE_CARD);
+    expect(identityCardFormValue(cardToText(FIXTURE_CARD), loaded)).toBeNull();
+    const edited = identityCardFormValue('{"version":1,"identity":{"body":{"height":"short"}}}', loaded);
     expect(JSON.parse(edited ?? 'null')).toEqual({ version: 1, identity: { body: { height: 'short' } } });
   });
 
   it('sends the JSON literal null when a stored card was emptied', () => {
-    expect(identityCardFormValue(emptyIdentityCardDraft(), cardToDraft(FIXTURE_CARD))).toBe('null');
+    expect(identityCardFormValue('', cardToText(FIXTURE_CARD))).toBe('null');
   });
 });
 
-describe('validateIdentityCardDraft', () => {
-  it('accepts a blank draft, a description and a pasted card', () => {
-    expect(validateIdentityCardDraft(emptyIdentityCardDraft())).toEqual({ ok: true });
-    expect(validateIdentityCardDraft(draftWith({ text: 'green eyes', style: 'casual' }))).toEqual({ ok: true });
-    expect(validateIdentityCardDraft(draftWith({ text: JSON.stringify(FIXTURE_CARD_V2) }))).toEqual({ ok: true });
-  });
-
-  it('ignores a style the contract does not know instead of blocking the description', () => {
-    expect(cardOf(draftWith({ text: 'green eyes', style: 'bikini' }))).toEqual({
-      version: 3,
-      identity: { description: 'green eyes' },
-    });
-    expect(validateIdentityCardDraft(draftWith({ text: 'green eyes', style: 'bikini' }))).toEqual({ ok: true });
+describe('validateIdentityCardText', () => {
+  it('accepts an empty box, a description and a pasted card', () => {
+    expect(validateIdentityCardText('')).toEqual({ ok: true });
+    expect(validateIdentityCardText('green eyes')).toEqual({ ok: true });
+    expect(validateIdentityCardText(JSON.stringify(FIXTURE_CARD_V2))).toEqual({ ok: true });
+    expect(validateIdentityCardText(JSON.stringify(FIXTURE_CARD_V3))).toEqual({ ok: true });
   });
 
   it.each([
-    ['style only', draftWith({ style: 'business' }), 'identityCard.errNoTrait'],
-    ['an unparseable card', draftWith({ text: '{not json' }), 'identityCard.errGeneric'],
-    ['an empty description in a pasted card', draftWith({ text: '{"version":3,"identity":{"description":""}}' }), 'identityCard.errDescriptionMissing'],
-    [
-      'a description over the cap',
-      draftWith({ text: 'x'.repeat(IDENTITY_DESCRIPTION_MAX_LENGTH + 1) }),
-      'identityCard.errField',
-    ],
-    ['a description with a control character', draftWith({ text: 'green\u0001eyes' }), 'identityCard.errField'],
+    ['an unparseable card', '{not json', 'identityCard.errGeneric'],
+    ['an empty description in a pasted card', '{"version":3,"identity":{"description":""}}', 'identityCard.errDescriptionMissing'],
+    ['a description over the cap', 'x'.repeat(IDENTITY_DESCRIPTION_MAX_LENGTH + 1), 'identityCard.errField'],
+    ['a description with a control character', 'green\u0001eyes', 'identityCard.errField'],
     [
       'a one-piece with a top in a pasted card',
-      draftWith({ text: JSON.stringify({ version: 2, identity: { face: { eyes: 'green' } }, defaults: { outfit: { one_piece: 'dress', top: 'tee' } } }) }),
+      JSON.stringify({ version: 2, identity: { face: { eyes: 'green' } }, defaults: { outfit: { one_piece: 'dress', top: 'tee' } } }),
       'identityCard.errOnePiece',
     ],
     [
       'sexualised clothing in a pasted card',
-      draftWith({ text: JSON.stringify({ version: 2, identity: { face: { eyes: 'green' } }, defaults: { outfit: { top: 'lingerie' } } }) }),
+      JSON.stringify({ version: 2, identity: { face: { eyes: 'green' } }, defaults: { outfit: { top: 'lingerie' } } }),
       'identityCard.errContent',
     ],
     [
       'identity words in a pasted outfit',
-      draftWith({ text: JSON.stringify({ version: 2, identity: { face: { eyes: 'green' } }, defaults: { outfit: { top: 'shirt over muscular body' } } }) }),
+      JSON.stringify({ version: 2, identity: { face: { eyes: 'green' } }, defaults: { outfit: { top: 'shirt over muscular body' } } }),
       'identityCard.errOutfitIdentity',
     ],
     [
       'a pasted v2 card with empty defaults',
-      draftWith({ text: JSON.stringify({ version: 2, identity: { face: { eyes: 'green' } }, defaults: {} }) }),
+      JSON.stringify({ version: 2, identity: { face: { eyes: 'green' } }, defaults: {} }),
       'identityCard.errStyleOrOutfit',
     ],
-  ])('maps %s to its localized key', (_name, draft, key) => {
-    expect(validateIdentityCardDraft(draft)).toEqual({ ok: false, errorKey: key });
+    [
+      'a pasted v3 card with empty defaults',
+      JSON.stringify({ version: 3, identity: { description: 'green eyes' }, defaults: {} }),
+      'identityCard.errStyleOrOutfit',
+    ],
+    [
+      'a pasted v2 card without a trait',
+      JSON.stringify({ version: 2, identity: {}, defaults: { style: 'casual' } }),
+      'identityCard.errNoTrait',
+    ],
+  ])('maps %s to its localized key', (_name, text, key) => {
+    expect(validateIdentityCardText(text)).toEqual({ ok: false, errorKey: key });
   });
 });
 
