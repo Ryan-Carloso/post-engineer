@@ -6,6 +6,9 @@ import {
   publishToTelegram,
   telegramPostUrl,
 } from '@/lib/telegram';
+import { attemptFirstComment, readFirstCommentField } from '@/lib/first-comment/attempt';
+import { postTelegramFirstComment } from '@/lib/first-comment/telegram';
+import type { FirstCommentWarningCode } from '@/lib/contracts/first-comment';
 import { accountFailure } from '@/lib/upload/account-error';
 import { rememberDeadCredential, reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
@@ -17,6 +20,7 @@ interface TelegramAccountResult {
   permalink?: string;
   error?: string;
   errorCode?: string;
+  warnings?: FirstCommentWarningCode[];
 }
 
 export interface TelegramUploadResponse {
@@ -42,6 +46,8 @@ export async function handleTelegramUpload(
   ownerUserId: string,
 ): Promise<TelegramUploadResponse> {
   const accountIds = getAccountIdsFromFormData(formData, 'telegramAccountIds');
+  const firstComment = readFirstCommentField(formData);
+  if (!firstComment.ok) return rejected(firstComment.error);
   const captionRaw = formData.get('caption') ?? formData.get('description') ?? formData.get('title');
   const caption = typeof captionRaw === 'string' ? captionRaw.trim() : '';
   const rawFile = formData.get('video') ?? formData.get('image') ?? formData.get('audio');
@@ -85,6 +91,9 @@ export async function handleTelegramUpload(
         success: true,
         postId: String(published.messageId),
         ...(url === null ? {} : { permalink: url }),
+        ...(await attemptFirstComment({ provider: 'telegram', accountId, text: firstComment.text }, (text) =>
+          postTelegramFirstComment({ botToken, chatId: accountId, messageId: published.messageId, text }),
+        )),
       });
     } catch (error) {
       reportAccountUnauthorized('telegram', accountId, ownerUserId, error);

@@ -9,6 +9,9 @@ import { trackApiEvent } from '@/lib/analytics';
 import { markAccountNeedsReconnect } from '@/lib/account-needs-reconnect';
 import { TokenDecryptError } from '@/lib/token-crypto';
 import { AccountNotFoundError } from '@/lib/errors';
+import { postYouTubeFirstComment } from '@/lib/first-comment/youtube';
+import { postInstagramFirstComment } from '@/lib/first-comment/instagram';
+import { FirstCommentError } from '@/lib/first-comment/http';
 
 vi.mock('@/lib/analytics', () => ({ trackApiEvent: vi.fn() }));
 vi.mock('@/lib/account-needs-reconnect', () => ({ markAccountNeedsReconnect: vi.fn(async () => undefined) }));
@@ -105,6 +108,9 @@ vi.mock('@/lib/youtube', () => ({
   })),
   uploadYouTubeVideo: vi.fn().mockResolvedValue({ id: 'yt-123', url: 'https://youtube.com/watch?v=yt-123' }),
 }));
+
+vi.mock('@/lib/first-comment/youtube', () => ({ postYouTubeFirstComment: vi.fn() }));
+vi.mock('@/lib/first-comment/instagram', () => ({ postInstagramFirstComment: vi.fn() }));
 
 vi.mock('@/lib/timeout', () => ({
   withUploadTimeout: vi.fn((p: Promise<unknown>) => p),
@@ -839,4 +845,104 @@ describe('handleYoutubeUpload', () => {
     expect(vi.mocked(createVideoMetadata).mock.calls[0][0]).toMatchObject({ aiLabel: false });
   });
 
+});
+
+describe('first comment on YouTube and Instagram', () => {
+  const OWNER_USER_ID = 'u1';
+
+  function youtubeForm(extra: Record<string, string> = {}): FormData {
+    const fd = new FormData();
+    for (const [k, v] of Object.entries({ title: 'My Video', description: 'A description', tags: 'tag1', privacyStatus: 'public', accountIds: 'ch-1', ...extra })) fd.set(k, v);
+    fd.set('video', new File([new Uint8Array(100)], 'video.mp4', { type: 'video/mp4' }));
+    return fd;
+  }
+
+  function instagramForm(extra: Record<string, string> = {}): FormData {
+    const fd = new FormData();
+    fd.set('igAccountIds', 'ig-user-1');
+    fd.set('caption', 'Nice photo');
+    for (const [k, v] of Object.entries(extra)) fd.set(k, v);
+    fd.set('file', new File([new Uint8Array(100)], 'photo.jpg', { type: 'image/jpeg' }));
+    return fd;
+  }
+
+  async function withAccessToken(token: string | null | undefined): Promise<void> {
+    const { createGoogleOAuth2Client } = await import('@/lib/youtube');
+    vi.mocked(createGoogleOAuth2Client).mockResolvedValueOnce({
+      setCredentials: vi.fn(),
+      refreshAccessToken: vi.fn(),
+      getAccessToken: vi.fn().mockResolvedValue({ token }),
+    } as never);
+  }
+
+  it('YouTube: comments on the uploaded video with the account token', async () => {
+    vi.mocked(postYouTubeFirstComment).mockClear().mockResolvedValue('thread-1');
+    await withAccessToken('ya29.tok');
+    const response = await handleYoutubeUpload(youtubeForm({ firstComment: '  Link in bio ' }), OWNER_USER_ID, 'l', Date.now());
+    expect(postYouTubeFirstComment).toHaveBeenCalledWith({ accessToken: 'ya29.tok', videoId: 'yt-123', text: 'Link in bio' });
+    expect(response.success && response.results[0].warnings).toBeUndefined();
+  });
+
+  it('YouTube: does not comment without a first comment', async () => {
+    vi.mocked(postYouTubeFirstComment).mockClear();
+    await handleYoutubeUpload(youtubeForm(), OWNER_USER_ID, 'l', Date.now());
+    expect(postYouTubeFirstComment).not.toHaveBeenCalled();
+  });
+
+  it('YouTube: a 403 on the comment keeps the upload and asks to reconnect, not an unauthorized report', async () => {
+    vi.mocked(trackApiEvent).mockClear();
+    vi.mocked(postYouTubeFirstComment).mockClear().mockRejectedValue(
+      new FirstCommentError('YOUTUBE_COMMENT_FAILED: insufficient scopes', 403, { reason: 'insufficientPermissions' }),
+    );
+    await withAccessToken('ya29.tok');
+    const response = await handleYoutubeUpload(youtubeForm({ firstComment: 'Link in bio' }), OWNER_USER_ID, 'l', Date.now());
+    expect(response.success && response.results[0]).toMatchObject({
+      success: true,
+      videoId: 'yt-123',
+      warnings: ['FIRST_COMMENT_RECONNECT_REQUIRED'],
+    });
+    expect(trackApiEvent).not.toHaveBeenCalled();
+  });
+
+  it('YouTube: a missing access token is a comment failure, not an upload failure', async () => {
+    vi.mocked(postYouTubeFirstComment).mockClear();
+    await withAccessToken(undefined);
+    const response = await handleYoutubeUpload(youtubeForm({ firstComment: 'Link in bio' }), OWNER_USER_ID, 'l', Date.now());
+    expect(response.success && response.results[0]).toMatchObject({ success: true, warnings: ['FIRST_COMMENT_FAILED'] });
+    expect(postYouTubeFirstComment).not.toHaveBeenCalled();
+  });
+
+  it('YouTube: rejects an over-length first comment before uploading', async () => {
+    const { uploadYouTubeVideo } = await import('@/lib/youtube');
+    vi.mocked(uploadYouTubeVideo).mockClear();
+    await expect(
+      handleYoutubeUpload(youtubeForm({ firstComment: 'x'.repeat(1001) }), OWNER_USER_ID, 'l', Date.now()),
+    ).rejects.toThrow('firstComment');
+    expect(uploadYouTubeVideo).not.toHaveBeenCalled();
+  });
+
+  it('Instagram: comments on the published media id', async () => {
+    vi.mocked(postInstagramFirstComment).mockClear().mockResolvedValue('c1');
+    const response = await handleInstagramUpload(instagramForm({ firstComment: 'Link in bio' }), OWNER_USER_ID, 'l', Date.now());
+    expect(postInstagramFirstComment).toHaveBeenCalledWith({ accessToken: 'ig-token', mediaId: 'p1', text: 'Link in bio' });
+    expect(response.success && response.results[0].warnings).toBeUndefined();
+  });
+
+  it('Instagram: a failed comment keeps the post and warns', async () => {
+    vi.mocked(postInstagramFirstComment).mockClear().mockRejectedValue(new FirstCommentError('INSTAGRAM_COMMENT_FAILED: boom', 500));
+    const response = await handleInstagramUpload(instagramForm({ firstComment: 'Link in bio' }), OWNER_USER_ID, 'l', Date.now());
+    expect(response.success && response.results[0]).toMatchObject({ success: true, postId: 'p1', warnings: ['FIRST_COMMENT_FAILED'] });
+  });
+
+  it('Instagram: does not comment without a first comment', async () => {
+    vi.mocked(postInstagramFirstComment).mockClear();
+    await handleInstagramUpload(instagramForm(), OWNER_USER_ID, 'l', Date.now());
+    expect(postInstagramFirstComment).not.toHaveBeenCalled();
+  });
+
+  it('Instagram: rejects an over-length first comment', async () => {
+    await expect(
+      handleInstagramUpload(instagramForm({ firstComment: 'x'.repeat(1001) }), OWNER_USER_ID, 'l', Date.now()),
+    ).rejects.toThrow('firstComment');
+  });
 });

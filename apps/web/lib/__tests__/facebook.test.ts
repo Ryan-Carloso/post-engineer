@@ -44,7 +44,7 @@ describe('buildFacebookAuthorizationUrl', () => {
     expect(url.searchParams.get('client_id')).toBe('fb-cid');
     expect(url.searchParams.get('state')).toBe('st-1');
     expect(url.searchParams.get('redirect_uri')).toBe('https://app.example/fb/cb');
-    expect(url.searchParams.get('scope')).toBe('public_profile,pages_show_list,pages_read_engagement,pages_manage_posts');
+    expect(url.searchParams.get('scope')).toBe('public_profile,pages_show_list,pages_read_engagement,pages_manage_posts,pages_manage_engagement');
     expect(FACEBOOK_SCOPES).toContain('pages_manage_posts');
   });
 

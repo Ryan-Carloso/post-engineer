@@ -41,7 +41,7 @@ describe('buildThreadsAuthorizationUrl', () => {
     expect(url.searchParams.get('client_id')).toBe('tcid');
     expect(url.searchParams.get('state')).toBe('st-1');
     expect(url.searchParams.get('redirect_uri')).toBe('https://app.example/cb');
-    expect(url.searchParams.get('scope')).toBe('threads_basic,threads_content_publish,threads_manage_insights');
+    expect(url.searchParams.get('scope')).toBe('threads_basic,threads_content_publish,threads_manage_insights,threads_manage_replies');
   });
 
   it('fails when the Threads client id is missing and ignores a leftover Instagram client id', () => {

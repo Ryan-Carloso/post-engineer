@@ -356,3 +356,76 @@ describe('handleBlueskyUpload', () => {
     expect(mockBlueskyLogin).not.toHaveBeenCalled();
   });
 });
+
+describe('handleBlueskyUpload first comment', () => {
+  const POST_CID = 'bafyreib2rxk3rybk3aobmv5cjuql3bm2twh4jo5uxgf5kpqcsgz7soitae';
+
+  function mockPostThenComment(commentStatus: number) {
+    mockSession();
+    mockFetch.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      savedCalls.push({ url, method: init?.method, headers: init?.headers, body: init?.body });
+      if (url.includes('createRecord')) {
+        const record = (JSON.parse(String(init?.body)) as { record: { reply?: unknown } }).record;
+        if (record.reply !== undefined) {
+          return new Response(JSON.stringify({ uri: `at://${DID}/app.bsky.feed.post/comment-1`, cid: 'bafyreic' }), { status: commentStatus });
+        }
+        return new Response(JSON.stringify({ uri: `at://${DID}/app.bsky.feed.post/post-1`, cid: POST_CID }), { status: 200 });
+      }
+      return responseFor(url);
+    });
+  }
+
+  function commentRecords(): Array<{ reply: { root: unknown; parent: unknown }; text: string }> {
+    return savedCalls
+      .filter((call) => call.url.includes('createRecord'))
+      .map((call) => (JSON.parse(String(call.body)) as { record: { reply?: { root: unknown; parent: unknown }; text: string } }).record)
+      .filter((record): record is { reply: { root: unknown; parent: unknown }; text: string } => record.reply !== undefined);
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    savedCalls.length = 0;
+    mockFetch.mockReset();
+    vi.mocked(getSocialAccountTokens).mockResolvedValue({
+      tokens: { access_token: 'app-pass-1', handle: 'eu.bsky.social', did: DID },
+      account: {} as never,
+    });
+  });
+
+  it('replies to the published post with its uri and cid as root and parent', async () => {
+    mockPostThenComment(200);
+    const res = await handleBlueskyUpload(formData({ firstComment: 'Link in bio' }), USER_ID);
+    const ref = { uri: `at://${DID}/app.bsky.feed.post/post-1`, cid: POST_CID };
+    expect(commentRecords()).toEqual([expect.objectContaining({ text: 'Link in bio', reply: { root: ref, parent: ref } })]);
+    expect(res.results[0]).toEqual({ accountId: DID, success: true, postId: ref.uri });
+  });
+
+  it('does not reply without a first comment', async () => {
+    mockPostThenComment(200);
+    await handleBlueskyUpload(formData(), USER_ID);
+    expect(commentRecords()).toEqual([]);
+  });
+
+  it('keeps the post published and warns when the reply is rejected', async () => {
+    mockPostThenComment(500);
+    const res = await handleBlueskyUpload(formData({ firstComment: 'Link in bio' }), USER_ID);
+    expect(res.success).toBe(true);
+    expect(res.results[0]).toMatchObject({ success: true, warnings: ['FIRST_COMMENT_FAILED'] });
+    expect(markAccountNeedsReconnect).not.toHaveBeenCalled();
+  });
+
+  it('warns FIRST_COMMENT_TOO_LONG over 300 graphemes without a second record', async () => {
+    mockPostThenComment(200);
+    const res = await handleBlueskyUpload(formData({ firstComment: 'x'.repeat(301) }), USER_ID);
+    expect(res.results[0].warnings).toEqual(['FIRST_COMMENT_TOO_LONG']);
+    expect(commentRecords()).toEqual([]);
+  });
+
+  it('rejects an over-length first comment before touching the network', async () => {
+    mockPostThenComment(200);
+    const res = await handleBlueskyUpload(formData({ firstComment: 'x'.repeat(1001) }), USER_ID);
+    expect(res.success).toBe(false);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+});

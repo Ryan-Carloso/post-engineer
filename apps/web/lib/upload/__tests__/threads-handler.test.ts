@@ -11,6 +11,7 @@ vi.mock('@/lib/upload/publish-media', () => ({
 }));
 vi.mock('@/lib/logger', () => ({ logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn() } }));
 vi.mock('@/lib/analytics', () => ({ trackApiEvent: vi.fn() }));
+vi.mock('@/lib/first-comment/threads', () => ({ postThreadsFirstComment: vi.fn() }));
 vi.mock('@/lib/threads', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/threads')>()),
   publishThreadsMedia: vi.fn(),
@@ -24,6 +25,8 @@ import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-account
 import { cleanupPublishMedia, presignPublishMedia, uploadPublishMedia } from '@/lib/upload/publish-media';
 import { publishThreadsMedia } from '@/lib/threads';
 import { markAccountNeedsReconnect } from '@/lib/account-needs-reconnect';
+import { postThreadsFirstComment } from '@/lib/first-comment/threads';
+import { FirstCommentError } from '@/lib/first-comment/http';
 
 const MP4_BYTES = new Uint8Array([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d]);
 
@@ -203,6 +206,47 @@ describe('handleThreadsUpload', () => {
     const result = await handleThreadsUpload(formData(), 'user-1');
     expect(result.results[0]).toMatchObject({ success: false, errorCode: 'token_missing' });
     expect(markAccountNeedsReconnect).toHaveBeenCalledWith('user-1', 'threads', '42');
+    expect(publishThreadsMedia).not.toHaveBeenCalled();
+  });
+});
+
+describe('handleThreadsUpload first comment', () => {
+  function withComment(text: string): FormData {
+    const fd = formData();
+    fd.append('firstComment', text);
+    return fd;
+  }
+
+  it('replies to the published post as the account', async () => {
+    vi.mocked(postThreadsFirstComment).mockResolvedValue('reply-1');
+    const result = await handleThreadsUpload(withComment('Link in bio'), 'user-1');
+    expect(postThreadsFirstComment).toHaveBeenCalledWith({ accessToken: 'tok', userId: '42', postId: 'p1', text: 'Link in bio' });
+    expect(result.results[0].warnings).toBeUndefined();
+  });
+
+  it('does not reply when the form has no first comment', async () => {
+    await handleThreadsUpload(formData(), 'user-1');
+    expect(postThreadsFirstComment).not.toHaveBeenCalled();
+  });
+
+  it('keeps the post published and asks to reconnect when the reply scope is missing', async () => {
+    vi.mocked(postThreadsFirstComment).mockRejectedValue(new FirstCommentError('THREADS_REPLY_FAILED: permission', 400, { providerCode: 10 }));
+    const result = await handleThreadsUpload(withComment('Link in bio'), 'user-1');
+    expect(result.success).toBe(true);
+    expect(result.results[0]).toMatchObject({ success: true, postId: 'p1', warnings: ['FIRST_COMMENT_RECONNECT_REQUIRED'] });
+    expect(trackApiEvent).not.toHaveBeenCalled();
+    expect(markAccountNeedsReconnect).not.toHaveBeenCalled();
+  });
+
+  it('warns FIRST_COMMENT_TOO_LONG over the 500-character Threads limit without calling the API', async () => {
+    const result = await handleThreadsUpload(withComment('x'.repeat(501)), 'user-1');
+    expect(result.results[0].warnings).toEqual(['FIRST_COMMENT_TOO_LONG']);
+    expect(postThreadsFirstComment).not.toHaveBeenCalled();
+  });
+
+  it('rejects an over-length first comment before publishing', async () => {
+    const result = await handleThreadsUpload(withComment('x'.repeat(1001)), 'user-1');
+    expect(result.success).toBe(false);
     expect(publishThreadsMedia).not.toHaveBeenCalled();
   });
 });

@@ -2,6 +2,9 @@ import { logger } from '@/lib/logger';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
 import { publishFacebookMedia, FACEBOOK_TEXT_MAX_CHARS, FACEBOOK_VIDEO_MAX_BYTES } from '@/lib/facebook';
+import { attemptFirstComment, readFirstCommentField } from '@/lib/first-comment/attempt';
+import { postFacebookFirstComment } from '@/lib/first-comment/facebook';
+import type { FirstCommentWarningCode } from '@/lib/contracts/first-comment';
 import { accountFailure } from '@/lib/upload/account-error';
 import { rememberDeadCredential, reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
@@ -15,6 +18,7 @@ interface FacebookAccountResult {
   permalink?: string;
   error?: string;
   errorCode?: string;
+  warnings?: FirstCommentWarningCode[];
 }
 
 export interface FacebookUploadResponse {
@@ -35,6 +39,8 @@ export async function handleFacebookUpload(
   if (aiLabelRaw !== null && aiLabelRaw !== 'true' && aiLabelRaw !== 'false') {
     return rejected('Invalid aiLabel. Use "true" or "false"');
   }
+  const firstComment = readFirstCommentField(formData);
+  if (!firstComment.ok) return rejected(firstComment.error);
   const captionRaw = formData.get('caption');
   const rawFile = formData.get('video');
 
@@ -86,6 +92,10 @@ export async function handleFacebookUpload(
         success: true,
         postId: published.postId,
         ...(published.permalink === null ? {} : { permalink: published.permalink }),
+        ...(await attemptFirstComment({ provider: 'facebook', accountId, text: firstComment.text }, async (text) => {
+          await postFacebookFirstComment({ pageAccessToken, postId: published.postId, text });
+          return 'posted';
+        })),
       });
     } catch (error) {
       reportAccountUnauthorized('facebook', accountId, ownerUserId, error);

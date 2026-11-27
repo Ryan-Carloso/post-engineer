@@ -10,6 +10,7 @@ vi.mock('@/lib/upload/publish-media', () => ({
 }));
 vi.mock('@/lib/logger', () => ({ logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn() } }));
 vi.mock('@/lib/analytics', () => ({ trackApiEvent: vi.fn() }));
+vi.mock('@/lib/first-comment/facebook', () => ({ postFacebookFirstComment: vi.fn() }));
 vi.mock('@/lib/facebook', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/facebook')>()),
   publishFacebookMedia: vi.fn(),
@@ -22,6 +23,8 @@ import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-account
 import { cleanupPublishMedia, presignPublishMedia, uploadPublishMedia } from '@/lib/upload/publish-media';
 import { publishFacebookMedia, FACEBOOK_TEXT_MAX_CHARS } from '@/lib/facebook';
 import { logger } from '@/lib/logger';
+import { postFacebookFirstComment } from '@/lib/first-comment/facebook';
+import { FirstCommentError } from '@/lib/first-comment/http';
 
 const MP4_BYTES = new Uint8Array([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d]);
 
@@ -234,5 +237,49 @@ describe('handleFacebookUpload', () => {
     const result = await handleFacebookUpload(formData(), 'user-1');
     expect(result).toEqual({ success: false, results: [{ accountId: '111', success: false, error: 'Unknown error', errorCode: 'transient' }] });
     expect(cleanupPublishMedia).toHaveBeenCalledWith('facebook');
+  });
+});
+
+describe('handleFacebookUpload first comment', () => {
+  function withComment(text: string): FormData {
+    const fd = formData();
+    fd.append('firstComment', text);
+    return fd;
+  }
+
+  it('comments on the published post with the Page token', async () => {
+    vi.mocked(postFacebookFirstComment).mockResolvedValue('111_c1');
+    const result = await handleFacebookUpload(withComment('  Link in bio  '), 'user-1');
+    expect(postFacebookFirstComment).toHaveBeenCalledWith({ pageAccessToken: 'page-tok', postId: 'vid-1', text: 'Link in bio' });
+    expect(result.results[0].warnings).toBeUndefined();
+    expect(result.results[0].success).toBe(true);
+  });
+
+  it('does not comment when the form has no first comment', async () => {
+    await handleFacebookUpload(formData(), 'user-1');
+    expect(postFacebookFirstComment).not.toHaveBeenCalled();
+  });
+
+  it('keeps the post published and warns when the comment fails, without reporting the account as unauthorized', async () => {
+    vi.mocked(postFacebookFirstComment).mockRejectedValue(new FirstCommentError('FACEBOOK_COMMENT_FAILED: token rejected on comment', 401));
+    const result = await handleFacebookUpload(withComment('Link in bio'), 'user-1');
+    expect(result.success).toBe(true);
+    expect(result.results[0]).toMatchObject({ accountId: '111', success: true, postId: 'vid-1', warnings: ['FIRST_COMMENT_RECONNECT_REQUIRED'] });
+    expect(result.results[0].errorCode).toBeUndefined();
+    expect(trackApiEvent).not.toHaveBeenCalled();
+  });
+
+  it('warns with FIRST_COMMENT_FAILED on any other failure', async () => {
+    vi.mocked(postFacebookFirstComment).mockRejectedValue(new FirstCommentError('FACEBOOK_COMMENT_FAILED: boom', 500));
+    const result = await handleFacebookUpload(withComment('Link in bio'), 'user-1');
+    expect(result.results[0].warnings).toEqual(['FIRST_COMMENT_FAILED']);
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('first comment failed'), expect.objectContaining({ provider: 'facebook', accountId: '111' }));
+  });
+
+  it('rejects an over-length first comment before publishing', async () => {
+    const result = await handleFacebookUpload(withComment('x'.repeat(1001)), 'user-1');
+    expect(result.success).toBe(false);
+    expect(result.results[0].error).toContain('firstComment');
+    expect(publishFacebookMedia).not.toHaveBeenCalled();
   });
 });

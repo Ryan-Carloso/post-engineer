@@ -20,6 +20,9 @@ import { cleanupPublishMedia, presignPublishMedia, uploadPublishMedia } from '@/
 import { httpStatusOf, rememberDeadCredential, reportAccountUnauthorized } from './account-unauthorized';
 import { TokenDecryptError } from '@/lib/token-crypto';
 import { classifyUploadAccountError } from '@/lib/upload/account-error';
+import { attemptFirstComment, readFirstCommentField } from '@/lib/first-comment/attempt';
+import { postInstagramFirstComment } from '@/lib/first-comment/instagram';
+import { postYouTubeFirstComment } from '@/lib/first-comment/youtube';
 import type { OAuth2Client } from 'google-auth-library';
 
 import type { ContentUploadAccountResult, ContentUploadResponse } from './content-upload-result';
@@ -131,6 +134,8 @@ export async function handleYoutubeUpload(
   if (aiLabelRaw !== null && aiLabelRaw !== 'true' && aiLabelRaw !== 'false') {
     throw new ValidationError('Invalid aiLabel. Use "true" or "false"', 'aiLabel');
   }
+  const firstComment = readFirstCommentField(formData);
+  if (!firstComment.ok) throw new ValidationError(firstComment.error, 'firstComment');
   const metadata = {
     title: title.trim(),
     description: description.trim(),
@@ -168,6 +173,12 @@ export async function handleYoutubeUpload(
         videoId: uploadResult.id,
         videoUrl: uploadResult.url,
         uploadDuration: durationStr,
+        ...(await attemptFirstComment({ provider: 'youtube', accountId, text: firstComment.text }, async (text) => {
+          const { token } = await oauth2Client.getAccessToken();
+          if (typeof token !== 'string' || token === '') throw new AuthError('No access token for the comment', 'invalid_token');
+          await postYouTubeFirstComment({ accessToken: token, videoId: uploadResult.id, text });
+          return 'posted';
+        })),
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown upload error';
@@ -223,6 +234,8 @@ export async function handleInstagramUpload(
   if (typeof captionRaw !== 'string' || captionRaw.trim() === '') {
     throw new ValidationError('Caption is required', 'caption');
   }
+  const firstComment = readFirstCommentField(formData);
+  if (!firstComment.ok) throw new ValidationError(firstComment.error, 'firstComment');
 
   const storagePathRaw = formData.get('videoStoragePath');
   let publicUrl: string;
@@ -318,6 +331,12 @@ export async function handleInstagramUpload(
         postId: published.postId,
         mediaId: published.mediaId,
         permalink: published.permalink,
+        ...(await attemptFirstComment({ provider: 'instagram', accountId: igUserId, text: firstComment.text }, async (text) => {
+          const accessToken = tokens.access_token;
+          if (typeof accessToken !== 'string') throw new InstagramApiError('Instagram token not found', 401);
+          await postInstagramFirstComment({ accessToken, mediaId: published.postId, text });
+          return 'posted';
+        })),
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown publishing error';

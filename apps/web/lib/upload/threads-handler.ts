@@ -2,6 +2,9 @@ import { logger } from '@/lib/logger';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
 import { publishThreadsMedia, THREADS_TEXT_MAX_CHARS, THREADS_VIDEO_MAX_BYTES } from '@/lib/threads';
+import { attemptFirstComment, readFirstCommentField } from '@/lib/first-comment/attempt';
+import { postThreadsFirstComment } from '@/lib/first-comment/threads';
+import type { FirstCommentWarningCode } from '@/lib/contracts/first-comment';
 import { accountFailure } from '@/lib/upload/account-error';
 import { rememberDeadCredential, reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
@@ -15,6 +18,7 @@ interface ThreadsAccountResult {
   permalink?: string;
   error?: string;
   errorCode?: string;
+  warnings?: FirstCommentWarningCode[];
 }
 
 export interface ThreadsUploadResponse {
@@ -35,6 +39,8 @@ export async function handleThreadsUpload(
   if (aiLabelRaw !== null && aiLabelRaw !== 'true' && aiLabelRaw !== 'false') {
     return rejected('Invalid aiLabel. Use "true" or "false"');
   }
+  const firstComment = readFirstCommentField(formData);
+  if (!firstComment.ok) return rejected(firstComment.error);
   const captionRaw = formData.get('caption');
   const rawFile = formData.get('video');
 
@@ -90,6 +96,10 @@ export async function handleThreadsUpload(
         success: true,
         postId: published.postId,
         ...(published.permalink === null ? {} : { permalink: published.permalink }),
+        ...(await attemptFirstComment({ provider: 'threads', accountId, text: firstComment.text }, async (text) => {
+          await postThreadsFirstComment({ accessToken, userId: accountId, postId: published.postId, text });
+          return 'posted';
+        })),
       });
     } catch (error) {
       reportAccountUnauthorized('threads', accountId, ownerUserId, error);

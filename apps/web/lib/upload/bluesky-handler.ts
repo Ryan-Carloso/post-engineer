@@ -1,5 +1,8 @@
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
+import { attemptFirstComment, readFirstCommentField } from '@/lib/first-comment/attempt';
+import { postBlueskyFirstComment } from '@/lib/first-comment/bluesky';
+import type { FirstCommentWarningCode } from '@/lib/contracts/first-comment';
 import { accountFailure } from '@/lib/upload/account-error';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
 import {
@@ -25,6 +28,7 @@ interface BlueskyAccountResult {
   postId?: string;
   error?: string;
   errorCode?: string;
+  warnings?: FirstCommentWarningCode[];
 }
 
 export interface BlueskyUploadResponse {
@@ -51,6 +55,10 @@ export async function handleBlueskyUpload(
   ownerUserId: string,
 ): Promise<BlueskyUploadResponse> {
   const dids = getAccountIdsFromFormData(formData, 'did');
+  const firstComment = readFirstCommentField(formData);
+  if (!firstComment.ok) {
+    return { success: false, results: [accountFailure('', firstComment.error, 'publish_rejected')] };
+  }
   const captionRaw = formData.get('caption');
   const rawFile = formData.get('video');
 
@@ -102,7 +110,7 @@ export async function handleBlueskyUpload(
         continue;
       }
 
-      const postId = await publishToBluesky({
+      const published = await publishToBluesky({
         appPassword,
         handle,
         did,
@@ -113,7 +121,20 @@ export async function handleBlueskyUpload(
       });
 
       await touchSocialAccount(supabase, ownerUserId, 'bluesky', did);
-      results.push({ accountId: did, success: true, postId });
+      results.push({
+        accountId: did,
+        success: true,
+        postId: published.uri,
+        ...(await attemptFirstComment({ provider: 'bluesky', accountId: did, text: firstComment.text }, async (text) => {
+          await postBlueskyFirstComment({
+            accessJwt: published.accessJwt,
+            did: published.did,
+            post: { uri: published.uri, cid: published.cid },
+            text,
+          });
+          return 'posted';
+        })),
+      });
     } catch (error) {
       reportAccountUnauthorized('bluesky', did, ownerUserId, error);
       results.push(accountFailure(did, error));
@@ -224,7 +245,7 @@ async function publishToBluesky(args: {
   buffer: Buffer;
   mimeType: string;
   kind: 'video' | 'image';
-}): Promise<string> {
+}): Promise<{ uri: string; cid: string; accessJwt: string; did: string }> {
   const session = await loginToBlueskySession(args.handle, args.appPassword);
   if (session.emailConfirmed === false) {
     throw new BlueskyError('email_not_verified', 'Bluesky email is not verified.');
@@ -270,6 +291,11 @@ async function publishToBluesky(args: {
   if (!postResponse.ok) {
     throw new Error(`Bluesky post failed (${postResponse.status})`);
   }
-  const postBody = (await postResponse.json()) as { uri?: string };
-  return postBody.uri ?? `at://${session.did}/app.bsky.feed.post/unknown`;
+  const postBody = (await postResponse.json()) as { uri?: string; cid?: string };
+  return {
+    uri: postBody.uri ?? `at://${session.did}/app.bsky.feed.post/unknown`,
+    cid: postBody.cid ?? '',
+    accessJwt: session.accessJwt,
+    did: session.did,
+  };
 }

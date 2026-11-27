@@ -132,11 +132,13 @@ OAuth cujos **redirect URIs correspondam exatamente** aos valores em
   O caso de uso "Access the Threads API" do app da Meta tem App ID e App Secret
   próprios (`THREADS_CLIENT_ID` / `THREADS_CLIENT_SECRET`), diferentes dos do
   Instagram. Adicione o produto Threads (permissões `threads_basic`,
-  `threads_content_publish` e `threads_manage_insights`) e registre
+  `threads_content_publish`, `threads_manage_insights` e
+  `threads_manage_replies`) e registre
   `THREADS_REDIRECT_URI`.
 - **Páginas do Facebook** — [Meta for Developers](https://developers.facebook.com):
   adicione o Facebook Login for Business com as permissões `pages_show_list`,
-  `pages_read_engagement` e `pages_manage_posts`, defina
+  `pages_read_engagement`, `pages_manage_posts` e
+  `pages_manage_engagement`, defina
   `FACEBOOK_CLIENT_ID` / `FACEBOOK_CLIENT_SECRET` e registre
   `FACEBOOK_REDIRECT_URI`. Conectar uma vez adiciona todas as Páginas que o
   usuário gerencia.
