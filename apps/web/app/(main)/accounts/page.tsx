@@ -2,7 +2,6 @@
 
 import type { ReactNode } from 'react';
 import AccountCard from '@/components/account-card';
-import SocialAccountsSection from '@/components/ui/social-accounts-section';
 import {
   useInstagramAccountsQuery,
   useLinkedinAccountsQuery,
@@ -24,11 +23,10 @@ import { useThreadsOAuth } from '@/lib/oauth/threads-handler';
 import { useFacebookOAuth } from '@/lib/oauth/facebook-handler';
 import { usePinterestOAuth } from '@/lib/oauth/pinterest-handler';
 import { useFanvueOAuth } from '@/lib/oauth/fanvue-handler';
-import { ProviderBrandIcon } from '@/components/provider-brand-icon';
-import { useAccountListErrorTelemetry } from '@/lib/account-card-telemetry';
 import { useI18n } from '@/lib/i18n/provider';
 import { AccountsHeader } from './accounts-header';
-import { connectedLabel, errorLabel, useDisconnectFlow } from './accounts-section-helpers';
+import type { OAuthConnectProvider } from '@/lib/contracts/providers';
+import { ProviderAccountsSection, storedLabelOrigin, storedName, type StoredNameAccount } from './provider-accounts-section';
 import { ThreespeakAccountsSection } from './threespeak-accounts-section';
 import { TelegramAccountsSection } from './telegram-accounts-section';
 
@@ -54,227 +52,91 @@ export default function AccountsPage(): React.ReactElement {
 }
 
 function YoutubeAccountsSection(): ReactNode {
-  const { t } = useI18n();
-  const query = useYouTubeAccountsQuery();
   const oauth = useYouTubeOAuth();
-  const flow = useDisconnectFlow('youtube');
   const selectedIds = useUploadStore((state) => state.selectedAccountIds.youtube);
   const toggle = useUploadStore((state) => state.toggleSelectedAccount);
-  const accounts = query.data?.accounts ?? [];
-  const errorAccounts = accounts.filter((account) => account.status === 'error');
-  useAccountListErrorTelemetry('youtube', query.error?.message ?? null);
   return (
-    <SocialAccountsSection
-      icon={<ProviderBrandIcon provider="youtube" />}
-      label={t('accounts.youtubeLabel')}
-      description={t('accounts.youtubeDescription')}
-      connectedLabel={connectedLabel(t, accounts.length)}
-      errorLabel={errorAccounts.length > 0 ? errorLabel(t, errorAccounts.length) : null}
-      count={accounts.length}
-      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="youtube" name={account.channelName} email={account.email} thumbnail={account.thumbnail} customUrl={account.customUrl} onSelect={() => toggle('youtube', account.channelId)} selected={selectedIds.includes(account.channelId)} error={account.status === 'error'} onReconnect={() => void oauth.startOAuth()} showDisconnect onDisconnect={() => flow.onDisconnect(account.channelId, account.channelName)} />)}
-      isLoading={query.isLoading}
-      loadError={query.error?.message ?? null}
-      connectLabel={t(accounts.length > 0 ? 'accounts.connectAnother' : 'accounts.connectFirst')}
-      connectError={oauth.error}
-      disconnectError={flow.disconnectError}
-      connectDisabled={oauth.isLoading}
-      retryLabel={t('accounts.tryAgain')}
+    <ProviderAccountsSection
+      provider="youtube"
+      labelKey="accounts.youtubeLabel"
+      descriptionKey="accounts.youtubeDescription"
+      query={useYouTubeAccountsQuery()}
+      renderAccount={(account, onDisconnect) => <AccountCard key={account.recordId} type="youtube" name={account.channelName} email={account.email} thumbnail={account.thumbnail} customUrl={account.customUrl} onSelect={() => toggle('youtube', account.channelId)} selected={selectedIds.includes(account.channelId)} error={account.status === 'error'} onReconnect={() => void oauth.startOAuth()} showDisconnect onDisconnect={() => onDisconnect(account.channelId, account.channelName)} />}
       onConnect={() => void oauth.startOAuth()}
-      onRetry={() => void query.refetch()}
-      dialog={flow.dialog}
+      connectError={oauth.error}
+      connectDisabled={oauth.isLoading}
     />
   );
 }
 
 function InstagramAccountsSection(): ReactNode {
-  const { t } = useI18n();
-  const query = useInstagramAccountsQuery();
   const oauth = useInstagramOAuth();
-  const flow = useDisconnectFlow('instagram');
   const selectedIds = useUploadStore((state) => state.selectedAccountIds.instagram);
   const toggle = useUploadStore((state) => state.toggleSelectedAccount);
-  const accounts = query.data?.accounts ?? [];
-  const errorAccounts = accounts.filter((account) => account.status === 'error');
-  useAccountListErrorTelemetry('instagram', query.error?.message ?? null);
   return (
-    <SocialAccountsSection
-      icon={<ProviderBrandIcon provider="instagram" />}
-      label={t('accounts.instagramLabel')}
-      description={t('accounts.instagramDescription')}
-      connectedLabel={connectedLabel(t, accounts.length)}
-      errorLabel={errorAccounts.length > 0 ? errorLabel(t, errorAccounts.length) : null}
-      count={accounts.length}
-      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="instagram" name={`@${account.username}`} storedDisplayName={account.name} thumbnail={account.profilePictureUrl} onSelect={() => toggle('instagram', account.igUserId)} selected={selectedIds.includes(account.igUserId)} error={account.status === 'error'} onReconnect={() => void oauth.startOAuth()} showDisconnect onDisconnect={() => flow.onDisconnect(account.igUserId, `@${account.username}`)} />)}
-      isLoading={query.isLoading}
-      loadError={query.error?.message ?? null}
-      connectLabel={t(accounts.length > 0 ? 'accounts.connectAnother' : 'accounts.connectFirst')}
-      connectError={oauth.error}
-      disconnectError={flow.disconnectError}
-      connectDisabled={oauth.isLoading}
-      retryLabel={t('accounts.tryAgain')}
+    <ProviderAccountsSection
+      provider="instagram"
+      labelKey="accounts.instagramLabel"
+      descriptionKey="accounts.instagramDescription"
+      query={useInstagramAccountsQuery()}
+      renderAccount={(account, onDisconnect) => <AccountCard key={account.recordId} type="instagram" name={`@${account.username}`} storedDisplayName={account.name} thumbnail={account.profilePictureUrl} onSelect={() => toggle('instagram', account.igUserId)} selected={selectedIds.includes(account.igUserId)} error={account.status === 'error'} onReconnect={() => void oauth.startOAuth()} showDisconnect onDisconnect={() => onDisconnect(account.igUserId, `@${account.username}`)} />}
       onConnect={() => void oauth.startOAuth()}
-      onRetry={() => void query.refetch()}
-      dialog={flow.dialog}
+      connectError={oauth.error}
+      connectDisabled={oauth.isLoading}
     />
   );
 }
-
-
 
 function LinkedinAccountsSection(): ReactNode {
-  const { t } = useI18n();
-  const query = useLinkedinAccountsQuery();
   const oauth = useLinkedInOAuth();
-  const flow = useDisconnectFlow('linkedin');
-  const accounts = query.data?.accounts ?? [];
-  const errorAccounts = accounts.filter((account) => account.status === 'error');
-  useAccountListErrorTelemetry('linkedin', query.error?.message ?? null);
   return (
-    <SocialAccountsSection
-      icon={<ProviderBrandIcon provider="linkedin" />}
-      label={t('accounts.linkedinLabel')}
-      description={t('accounts.linkedinDescription')}
-      connectedLabel={connectedLabel(t, accounts.length)}
-      errorLabel={errorAccounts.length > 0 ? errorLabel(t, errorAccounts.length) : null}
-      count={accounts.length}
-      accounts={accounts.map((account) => <LinkedinAccountCard key={account.recordId} name={account.accountName || account.providerAccountId} thumbnail={account.profilePictureUrl} storedDisplayName={account.accountMetadata?.name ?? undefined} labelOrigin={account.accountName ? 'stored' : 'provider_id'} isOrganization={account.providerAccountId.startsWith('urn:li:organization:')} error={account.status === 'error'} onReconnect={() => void oauth.startOAuth()} showDisconnect onDisconnect={() => flow.onDisconnect(account.providerAccountId, account.accountName || account.providerAccountId)} />)}
-      isLoading={query.isLoading}
-      loadError={query.error?.message ?? null}
-      connectLabel={t(accounts.length > 0 ? 'accounts.connectAnother' : 'accounts.connectFirst')}
-      connectError={oauth.error}
-      disconnectError={flow.disconnectError}
-      connectDisabled={oauth.isLoading}
-      retryLabel={t('accounts.tryAgain')}
+    <ProviderAccountsSection
+      provider="linkedin"
+      labelKey="accounts.linkedinLabel"
+      descriptionKey="accounts.linkedinDescription"
+      query={useLinkedinAccountsQuery()}
+      renderAccount={(account, onDisconnect) => <LinkedinAccountCard key={account.recordId} name={account.accountName || account.providerAccountId} thumbnail={account.profilePictureUrl} storedDisplayName={account.accountMetadata?.name ?? undefined} labelOrigin={account.accountName ? 'stored' : 'provider_id'} isOrganization={account.providerAccountId.startsWith('urn:li:organization:')} error={account.status === 'error'} onReconnect={() => void oauth.startOAuth()} showDisconnect onDisconnect={() => onDisconnect(account.providerAccountId, account.accountName || account.providerAccountId)} />}
       onConnect={() => void oauth.startOAuth()}
-      onRetry={() => void query.refetch()}
-      dialog={flow.dialog}
+      connectError={oauth.error}
+      connectDisabled={oauth.isLoading}
     />
   );
 }
 
+interface StoredOAuthAccount extends StoredNameAccount {
+  status?: string;
+  profilePictureUrl?: string;
+}
 
-function ThreadsAccountsSection(): ReactNode {
-  const { t } = useI18n();
-  const query = useThreadsAccountsQuery();
-  const oauth = useThreadsOAuth();
-  const flow = useDisconnectFlow('threads');
-  const accounts = query.data?.accounts ?? [];
-  const errorAccounts = accounts.filter((account) => account.status === 'error');
-  useAccountListErrorTelemetry('threads', query.error?.message ?? null);
+function StoredOAuthAccountsSection<Account extends StoredOAuthAccount>({ provider, query, oauth }: { provider: OAuthConnectProvider; query: Parameters<typeof ProviderAccountsSection<Account>>[0]['query']; oauth: { startOAuth: () => Promise<void>; error: string | null; isLoading: boolean } }): ReactNode {
   return (
-    <SocialAccountsSection
-      icon={<ProviderBrandIcon provider="threads" />}
-      label={t('accounts.threadsLabel')}
-      description={t('accounts.threadsDescription')}
-      connectedLabel={connectedLabel(t, accounts.length)}
-      errorLabel={errorAccounts.length > 0 ? errorLabel(t, errorAccounts.length) : null}
-      count={accounts.length}
-      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="threads" name={account.accountName ?? account.providerAccountId} labelOrigin={account.accountName ? 'stored' : 'provider_id'} thumbnail={account.profilePictureUrl} error={account.status === 'error'} onReconnect={() => void oauth.startOAuth()} showDisconnect onDisconnect={() => flow.onDisconnect(account.providerAccountId, account.accountName ?? account.providerAccountId)} />)}
-      isLoading={query.isLoading}
-      loadError={query.error?.message ?? null}
-      connectLabel={t(accounts.length > 0 ? 'accounts.connectAnother' : 'accounts.connectFirst')}
-      connectError={oauth.error}
-      disconnectError={flow.disconnectError}
-      connectDisabled={oauth.isLoading}
-      retryLabel={t('accounts.tryAgain')}
+    <ProviderAccountsSection
+      provider={provider}
+      labelKey={`accounts.${provider}Label`}
+      descriptionKey={`accounts.${provider}Description`}
+      query={query}
+      renderAccount={(account, onDisconnect) => <AccountCard key={account.recordId} type={provider} name={storedName(account)} labelOrigin={storedLabelOrigin(account)} thumbnail={account.profilePictureUrl} error={account.status === 'error'} onReconnect={() => void oauth.startOAuth()} showDisconnect onDisconnect={() => onDisconnect(account.providerAccountId, storedName(account))} />}
       onConnect={() => void oauth.startOAuth()}
-      onRetry={() => void query.refetch()}
-      dialog={flow.dialog}
+      connectError={oauth.error}
+      connectDisabled={oauth.isLoading}
     />
   );
+}
+
+function ThreadsAccountsSection(): ReactNode {
+  return <StoredOAuthAccountsSection provider="threads" query={useThreadsAccountsQuery()} oauth={useThreadsOAuth()} />;
 }
 
 function FacebookAccountsSection(): ReactNode {
-  const { t } = useI18n();
-  const query = useFacebookAccountsQuery();
-  const oauth = useFacebookOAuth();
-  const flow = useDisconnectFlow('facebook');
-  const accounts = query.data?.accounts ?? [];
-  const errorAccounts = accounts.filter((account) => account.status === 'error');
-  useAccountListErrorTelemetry('facebook', query.error?.message ?? null);
-  return (
-    <SocialAccountsSection
-      icon={<ProviderBrandIcon provider="facebook" />}
-      label={t('accounts.facebookLabel')}
-      description={t('accounts.facebookDescription')}
-      connectedLabel={connectedLabel(t, accounts.length)}
-      errorLabel={errorAccounts.length > 0 ? errorLabel(t, errorAccounts.length) : null}
-      count={accounts.length}
-      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="facebook" name={account.accountName ?? account.providerAccountId} labelOrigin={account.accountName ? 'stored' : 'provider_id'} thumbnail={account.profilePictureUrl} error={account.status === 'error'} onReconnect={() => void oauth.startOAuth()} showDisconnect onDisconnect={() => flow.onDisconnect(account.providerAccountId, account.accountName ?? account.providerAccountId)} />)}
-      isLoading={query.isLoading}
-      loadError={query.error?.message ?? null}
-      connectLabel={t(accounts.length > 0 ? 'accounts.connectAnother' : 'accounts.connectFirst')}
-      connectError={oauth.error}
-      disconnectError={flow.disconnectError}
-      connectDisabled={oauth.isLoading}
-      retryLabel={t('accounts.tryAgain')}
-      onConnect={() => void oauth.startOAuth()}
-      onRetry={() => void query.refetch()}
-      dialog={flow.dialog}
-    />
-  );
+  return <StoredOAuthAccountsSection provider="facebook" query={useFacebookAccountsQuery()} oauth={useFacebookOAuth()} />;
 }
 
 function PinterestAccountsSection(): ReactNode {
-  const { t } = useI18n();
-  const query = usePinterestAccountsQuery();
-  const oauth = usePinterestOAuth();
-  const flow = useDisconnectFlow('pinterest');
-  const accounts = query.data?.accounts ?? [];
-  const errorAccounts = accounts.filter((account) => account.status === 'error');
-  useAccountListErrorTelemetry('pinterest', query.error?.message ?? null);
-  return (
-    <SocialAccountsSection
-      icon={<ProviderBrandIcon provider="pinterest" />}
-      label={t('accounts.pinterestLabel')}
-      description={t('accounts.pinterestDescription')}
-      connectedLabel={connectedLabel(t, accounts.length)}
-      errorLabel={errorAccounts.length > 0 ? errorLabel(t, errorAccounts.length) : null}
-      count={accounts.length}
-      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="pinterest" name={account.accountName ?? account.providerAccountId} labelOrigin={account.accountName ? 'stored' : 'provider_id'} thumbnail={account.profilePictureUrl} error={account.status === 'error'} onReconnect={() => void oauth.startOAuth()} showDisconnect onDisconnect={() => flow.onDisconnect(account.providerAccountId, account.accountName ?? account.providerAccountId)} />)}
-      isLoading={query.isLoading}
-      loadError={query.error?.message ?? null}
-      connectLabel={t(accounts.length > 0 ? 'accounts.connectAnother' : 'accounts.connectFirst')}
-      connectError={oauth.error}
-      disconnectError={flow.disconnectError}
-      connectDisabled={oauth.isLoading}
-      retryLabel={t('accounts.tryAgain')}
-      onConnect={() => void oauth.startOAuth()}
-      onRetry={() => void query.refetch()}
-      dialog={flow.dialog}
-    />
-  );
+  return <StoredOAuthAccountsSection provider="pinterest" query={usePinterestAccountsQuery()} oauth={usePinterestOAuth()} />;
 }
 
 function FanvueAccountsSection(): ReactNode {
-  const { t } = useI18n();
-  const query = useFanvueAccountsQuery();
-  const oauth = useFanvueOAuth();
-  const flow = useDisconnectFlow('fanvue');
-  const accounts = query.data?.accounts ?? [];
-  const errorAccounts = accounts.filter((account) => account.status === 'error');
-  useAccountListErrorTelemetry('fanvue', query.error?.message ?? null);
-  return (
-    <SocialAccountsSection
-      icon={<ProviderBrandIcon provider="fanvue" />}
-      label={t('accounts.fanvueLabel')}
-      description={t('accounts.fanvueDescription')}
-      connectedLabel={connectedLabel(t, accounts.length)}
-      errorLabel={errorAccounts.length > 0 ? errorLabel(t, errorAccounts.length) : null}
-      count={accounts.length}
-      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="fanvue" name={account.accountName ?? account.providerAccountId} labelOrigin={account.accountName ? 'stored' : 'provider_id'} thumbnail={account.profilePictureUrl} error={account.status === 'error'} onReconnect={() => void oauth.startOAuth()} showDisconnect onDisconnect={() => flow.onDisconnect(account.providerAccountId, account.accountName ?? account.providerAccountId)} />)}
-      isLoading={query.isLoading}
-      loadError={query.error?.message ?? null}
-      connectLabel={t(accounts.length > 0 ? 'accounts.connectAnother' : 'accounts.connectFirst')}
-      connectError={oauth.error}
-      disconnectError={flow.disconnectError}
-      connectDisabled={oauth.isLoading}
-      retryLabel={t('accounts.tryAgain')}
-      onConnect={() => void oauth.startOAuth()}
-      onRetry={() => void query.refetch()}
-      dialog={flow.dialog}
-    />
-  );
+  return <StoredOAuthAccountsSection provider="fanvue" query={useFanvueAccountsQuery()} oauth={useFanvueOAuth()} />;
 }
 
 function LinkedinAccountCard({ name, thumbnail, storedDisplayName, labelOrigin, isOrganization, showDisconnect, onDisconnect, error, onReconnect }: { name: string; thumbnail?: string; storedDisplayName?: string; labelOrigin?: 'stored' | 'provider_id'; isOrganization: boolean; showDisconnect?: boolean; onDisconnect?: () => void; error?: boolean; onReconnect?: () => void }): ReactNode {

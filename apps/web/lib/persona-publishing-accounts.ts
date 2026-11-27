@@ -132,11 +132,7 @@ async function validateOwnedAccounts(
   }
 }
 
-export async function getPersonaDefaultAccounts(
-  supabase: SupabaseClient,
-  personaId: string,
-  userId: string,
-): Promise<PersonaDefaultAccounts> {
+async function assertOwnedPersona(supabase: SupabaseClient, personaId: string, userId: string): Promise<void> {
   const { data: persona, error: personaError } = await supabase
     .from('personas')
     .select('id')
@@ -151,6 +147,14 @@ export async function getPersonaDefaultAccounts(
     (notFound as { code?: string }).code = 'PERSONA_NOT_FOUND';
     throw notFound;
   }
+}
+
+export async function getPersonaDefaultAccounts(
+  supabase: SupabaseClient,
+  personaId: string,
+  userId: string,
+): Promise<PersonaDefaultAccounts> {
+  await assertOwnedPersona(supabase, personaId, userId);
 
   const defaults = emptyPersonaDefaultAccounts();
   const { data, error } = await supabase
@@ -209,20 +213,7 @@ export async function setPersonaDefaultAccounts({
   personaId,
   accounts,
 }: SetPersonaDefaultAccountsParams): Promise<PersonaDefaultAccounts> {
-  const { data: persona, error: personaError } = await supabase
-    .from('personas')
-    .select('id')
-    .eq('id', personaId)
-    .eq('user_id', userId)
-    .maybeSingle();
-  if (personaError) {
-    throw new Error(`Failed to load persona: ${personaError.message}`);
-  }
-  if (!persona) {
-    const notFound = new Error('Persona not found.');
-    (notFound as { code?: string }).code = 'PERSONA_NOT_FOUND';
-    throw notFound;
-  }
+  await assertOwnedPersona(supabase, personaId, userId);
 
   const wanted = normalizePublishingAccountsInput(accounts);
   if (totalBoundAccounts(wanted) === 0) {

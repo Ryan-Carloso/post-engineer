@@ -1,25 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { createSupabaseRequestClient } from '@/lib/supabase/request-client'
+import { getSupabaseEnv } from '@/lib/supabase/env'
 import { isCodeRelayTarget } from '@/lib/auth-code-relay'
 import { safeNextPath } from '@/lib/safe-next-path'
 import { sameOriginRedirect } from '@/lib/same-origin-redirect'
 
-function getSupabaseEnv() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-  if (!url) {
-    throw new Error('NEXT_PUBLIC_SUPABASE_URL is not defined')
-  }
-  if (!key) {
-    throw new Error('NEXT_PUBLIC_SUPABASE_ANON_KEY is not defined')
-  }
-
-  return { url, key }
-}
-
 export async function GET(request: NextRequest) {
-  const { url, key } = getSupabaseEnv()
+  getSupabaseEnv()
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get('code')
   const rawNext = requestUrl.searchParams.get('next') ?? '/'
@@ -40,37 +27,7 @@ export async function GET(request: NextRequest) {
     const next = safeNextPath(rawNext)
     const response = sameOriginRedirect(next)
 
-    const supabase = createServerClient(url, key, {
-      cookies: {
-        get(name: string) {
-          return request.cookies.get(name)?.value
-        },
-        set(name: string, value: string, options: CookieOptions) {
-          request.cookies.set({
-            name,
-            value,
-            ...options,
-          })
-          response.cookies.set({
-            name,
-            value,
-            ...options,
-          })
-        },
-        remove(name: string, options: CookieOptions) {
-          request.cookies.set({
-            name,
-            value: '',
-            ...options,
-          })
-          response.cookies.set({
-            name,
-            value: '',
-            ...options,
-          })
-        },
-      },
-    })
+    const supabase = createSupabaseRequestClient(request, response)
 
     const { error } = await supabase.auth.exchangeCodeForSession(code)
 

@@ -2,13 +2,12 @@ import { NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
-import { isPersonaAllowed } from '@/lib/api-keys';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { apiErrorResponse } from '@/lib/api-error';
 import { ERROR_CODES } from '@/lib/error-codes';
 import { logger } from '@/lib/logger';
-import { parsePersonaIdQuery } from '@/lib/contracts/personas';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
+import { scopedPersonaIdQuery } from '../persona-id-query';
 
 const ROUTE = 'GET /api/persona/delete-preview';
 const UPCOMING_SLOT_STATUSES = ['ready', 'publishing'];
@@ -23,22 +22,9 @@ async function getHandler(request: Request): Promise<NextResponse> {
       ? createSupabaseServiceClient()
       : await createSupabaseServerClient();
 
-  const parsedPersonaId = parsePersonaIdQuery(request.url);
-  if (!parsedPersonaId.ok) {
-    return apiErrorResponse(400, parsedPersonaId.error, {
-      route: ROUTE,
-      code: ERROR_CODES.VALIDATION_FAILED,
-      field: 'personaId',
-    });
-  }
-  const personaId = parsedPersonaId.query.personaId;
-  if (!isPersonaAllowed(auth.personaIds, personaId)) {
-    return apiErrorResponse(403, 'This API key cannot access this persona.', {
-      route: ROUTE,
-      code: ERROR_CODES.PERSONA_SCOPE_DENIED,
-      field: 'personaId',
-    });
-  }
+  const requested = scopedPersonaIdQuery(request, auth.personaIds, ROUTE);
+  if ('error' in requested) return requested.error;
+  const personaId = requested.personaId;
 
   const { data: persona, error: personaError } = await supabase
     .from('personas')

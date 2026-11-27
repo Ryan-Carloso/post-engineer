@@ -150,7 +150,7 @@ const RetentionCurveQuerySchema = z.strictObject({
   video: z.string(),
 });
 
-const MetricsRowSchema = z.object({
+const PostCountsShape = {
   postId: z.string(),
   personaId: z.string().nullable(),
   provider: z.enum(SOCIAL_PROVIDERS),
@@ -161,6 +161,10 @@ const MetricsRowSchema = z.object({
   likes: z.number().nullable(),
   comments: z.number().nullable(),
   saves: z.number().nullable(),
+};
+
+const MetricsRowSchema = z.object({
+  ...PostCountsShape,
   analyticsViews: z.number().nullable(),
   engagedViews: z.number().nullable(),
   stayedToWatchPct: z.number().nullable(),
@@ -199,16 +203,7 @@ export type MetricsResponse = z.infer<typeof MetricsResponseSchema>;
 const LAST_24H_BASELINES = ['reading', 'lifetime'] as const;
 
 const Last24hRowSchema = z.object({
-  postId: z.string(),
-  personaId: z.string().nullable(),
-  provider: z.enum(SOCIAL_PROVIDERS),
-  accountId: z.string(),
-  externalId: z.string(),
-  publishedAt: z.string(),
-  views: z.number().nullable(),
-  likes: z.number().nullable(),
-  comments: z.number().nullable(),
-  saves: z.number().nullable(),
+  ...PostCountsShape,
   baseline: z.enum(LAST_24H_BASELINES),
   collectedAt: z.string(),
   baselineCollectedAt: z.string().nullable(),

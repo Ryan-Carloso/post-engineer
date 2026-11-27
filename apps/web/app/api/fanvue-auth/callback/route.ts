@@ -1,42 +1,17 @@
 import { NextRequest } from 'next/server';
 import { oauthPopupResponse } from '@/lib/oauth-utils';
-import { resolveOAuthCallbackAuth } from '@/lib/oauth-connect';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { createSupabaseServiceClient } from '@/lib/supabase/service';
+import { readSocialCallback } from '@/lib/oauth/social-callback';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting } from '@/lib/api-error-reporting';
 import { reportProfileFetched, reportProfileFetchFailed } from '@/lib/account-profile-telemetry';
 
-async function getSessionUserId(): Promise<string | null> {
-  const supabase = await createSupabaseServerClient();
-  const { data: { user }, error } = await supabase.auth.getUser();
-
-  if (error || !user) return null;
-  return user.id;
-}
-
 async function getHandler(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const code = searchParams.get('code');
-  const state = searchParams.get('state');
-
-  if (searchParams.get('error')) {
-    return oauthPopupResponse('fanvue-oauth-error', { error: 'Fanvue authorization was not completed.' });
-  }
-  if (!code) {
-    return oauthPopupResponse('fanvue-oauth-error', { error: 'Missing authorization code' });
-  }
-
-  const callbackAuth = await resolveOAuthCallbackAuth(
-    request,
-    state,
-    await getSessionUserId(),
-    () => createSupabaseServiceClient(),
-    'fanvue'
-  );
+  const callbackAuth = await readSocialCallback(request, 'fanvue', 'Fanvue authorization was not completed.');
   if (!callbackAuth.ok) {
     return oauthPopupResponse('fanvue-oauth-error', { error: callbackAuth.error });
   }
+  const code = callbackAuth.code;
 
   const codeVerifier = callbackAuth.codeVerifier;
   if (codeVerifier === undefined || codeVerifier === '') {

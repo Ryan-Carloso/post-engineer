@@ -7,21 +7,11 @@ import { oauthPopupResponse } from '@/lib/oauth-utils';
 import { resolveOAuthCallbackAuth, oauthStateRef } from '@/lib/oauth-connect';
 import { logger } from '@/lib/logger';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { sessionUserId } from '@/lib/oauth/session-user';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { withApiErrorReporting } from '@/lib/api-error-reporting';
 import { reportProfileFetched, reportProfileFetchFailed } from '@/lib/account-profile-telemetry';
 import { INSTAGRAM_USERNAME_FALLBACK } from '@/lib/providers/registry';
-
-async function getSessionUserId(): Promise<string | null> {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-
-  if (error || !user) return null;
-  return user.id;
-}
 
 async function getHandler(request: NextRequest) {
   const logId = logger.generateLogId();
@@ -61,7 +51,7 @@ async function getHandler(request: NextRequest) {
   const callbackAuth = await resolveOAuthCallbackAuth(
     request,
     state,
-    await getSessionUserId(),
+    await sessionUserId(),
     () => createSupabaseServiceClient(),
     'instagram'
   );

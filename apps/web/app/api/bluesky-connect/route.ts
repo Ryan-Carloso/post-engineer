@@ -4,9 +4,10 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { encryptTokens } from '@/lib/token-crypto';
 import { BlueskyError, loginToBluesky } from '@/lib/bluesky';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
-import { apiErrorResponse } from '@/lib/api-error';
+import { routeErrorResponse } from '@/lib/api-error';
 import { ERROR_CODES, errorMessage } from '@/lib/error-codes';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
+import { isFilled, readConnectFields } from '@/lib/connect-fields';
 import { fetchBlueskyPublicProfile } from '@/lib/bluesky-profile';
 import { reportProfileFetched, reportProfileFetchFailed } from '@/lib/account-profile-telemetry';
 import { logger } from '@/lib/logger';
@@ -29,52 +30,15 @@ async function readBlueskyProfileMetadata(did: string): Promise<Record<string, u
   }
 }
 
-function errorResponse(
-  status: number,
-  error: string,
-  route: string,
-  options?: { cause?: unknown; code?: string; logMessage?: string; metadata?: Record<string, unknown> },
-): NextResponse {
-  return apiErrorResponse(status, error, { route, ...options });
-}
-
 async function readCredentials(request: Request): Promise<
   | { ok: true; handle: string; appPassword: string }
   | { ok: false; error: string }
 > {
-  const contentType = request.headers.get('content-type') ?? '';
-  if (contentType.includes('application/json')) {
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
-      return { ok: false, error: 'Invalid JSON payload.' };
-    }
-    const handle = (body as Record<string, unknown>).handle;
-    const appPassword = (body as Record<string, unknown>).appPassword;
-    if (typeof handle !== 'string' || !handle.trim()) {
-      return { ok: false, error: 'Bluesky handle is required.' };
-    }
-    if (typeof appPassword !== 'string' || !appPassword.trim()) {
-      return { ok: false, error: 'Bluesky app password is required.' };
-    }
-    return { ok: true, handle: handle.trim(), appPassword };
-  }
-
-  let formData: FormData;
-  try {
-    formData = await request.formData();
-  } catch {
-    return { ok: false, error: 'Invalid multipart payload.' };
-  }
-  const handle = formData.get('handle');
-  const appPassword = formData.get('appPassword');
-  if (typeof handle !== 'string' || !handle.trim()) {
-    return { ok: false, error: 'Bluesky handle is required.' };
-  }
-  if (typeof appPassword !== 'string' || !appPassword.trim()) {
-    return { ok: false, error: 'Bluesky app password is required.' };
-  }
+  const read = await readConnectFields(request, ['handle', 'appPassword']);
+  if (!read.ok) return read;
+  const { handle, appPassword } = read.fields;
+  if (!isFilled(handle)) return { ok: false, error: 'Bluesky handle is required.' };
+  if (!isFilled(appPassword)) return { ok: false, error: 'Bluesky app password is required.' };
   return { ok: true, handle: handle.trim(), appPassword };
 }
 
@@ -84,12 +48,12 @@ async function postHandler(request: Request): Promise<NextResponse> {
 
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) {
-    return errorResponse(401, 'Authentication required.', 'POST /api/bluesky-connect');
+    return routeErrorResponse(401, 'Authentication required.', 'POST /api/bluesky-connect');
   }
 
   const credentials = await readCredentials(request);
   if (!credentials.ok) {
-    return errorResponse(400, credentials.error, 'POST /api/bluesky-connect');
+    return routeErrorResponse(400, credentials.error, 'POST /api/bluesky-connect');
   }
   const { handle, appPassword } = credentials;
 
@@ -124,7 +88,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
       .single();
 
     if (upsertError || !upserted) {
-      return errorResponse(500, 'Could not save the Bluesky account.', 'POST /api/bluesky-connect', {
+      return routeErrorResponse(500, 'Could not save the Bluesky account.', 'POST /api/bluesky-connect', {
         cause: upsertError,
         metadata: { userId: auth.userId },
       });
@@ -136,11 +100,11 @@ async function postHandler(request: Request): Promise<NextResponse> {
       (error instanceof BlueskyError && error.code === 'invalid_credentials') ||
       (error instanceof Error && error.name === 'BlueskyError' && /Invalid Bluesky/i.test(error.message));
     if (isInvalidCredentials) {
-      return errorResponse(422, errorMessage(ERROR_CODES.BLUESKY_CREDENTIAL_REJECTED), 'POST /api/bluesky-connect', {
+      return routeErrorResponse(422, errorMessage(ERROR_CODES.BLUESKY_CREDENTIAL_REJECTED), 'POST /api/bluesky-connect', {
         code: ERROR_CODES.BLUESKY_CREDENTIAL_REJECTED,
       });
     }
-    return errorResponse(500, 'Could not connect the Bluesky account.', 'POST /api/bluesky-connect', {
+    return routeErrorResponse(500, 'Could not connect the Bluesky account.', 'POST /api/bluesky-connect', {
       cause: error,
       metadata: { userId: auth.userId },
       logMessage: 'Bluesky connection failed.',
