@@ -10,6 +10,7 @@ import requests
 from loguru import logger
 
 from app.services.publisher.constants import (
+    SLOT_EXPIRED,
     SLOT_PUBLISHING,
     SLOT_READY,
 )
@@ -176,6 +177,35 @@ class ScheduleStore:
                 **self._headers,
                 "Prefer": "return=representation",
             },
+        )
+        return bool(rows)
+
+    def trial_ends_at_by_user(self, user_ids: list[str]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for start in range(0, len(user_ids), 100):
+            chunk = user_ids[start : start + 100]
+            if not chunk:
+                continue
+            rows = self._request(
+                "GET",
+                "user_profiles",
+                params={
+                    "id": f"in.({','.join(chunk)})",
+                    "select": "id,trial_ends_at",
+                },
+            )
+            for row in rows if isinstance(rows, list) else []:
+                if isinstance(row, dict) and isinstance(row.get("id"), str):
+                    result[str(row["id"])] = row.get("trial_ends_at")
+        return result
+
+    def expire_ready_slot(self, slot_id: str) -> bool:
+        rows = self._request(
+            "PATCH",
+            "scheduled_posts",
+            json={"status": SLOT_EXPIRED, "publish_not_before": None},
+            params={"id": f"eq.{slot_id}", "status": f"eq.{SLOT_READY}"},
+            headers={**self._headers, "Prefer": "return=representation"},
         )
         return bool(rows)
 

@@ -14,6 +14,7 @@ import {
   CALENDAR_GROUP_PILL,
   STATUS_STYLE,
   calendarGroupOf,
+  slotDisplayStatus,
 } from './status';
 
 export { EmptyState } from '@/components/ui/empty-state';
@@ -44,14 +45,15 @@ export function AccountEmptyState() {
   );
 }
 
-export function DayListRow({ slot, joins }: { slot: ScheduledSlot; joins: PostJoins }) {
+export function DayListRow({ slot, joins, accountActive = true }: { slot: ScheduledSlot; joins: PostJoins; accountActive?: boolean }) {
   const { t, locale } = useI18n();
   const schedule = joins.scheduleById.get(slot.scheduleId);
   const personaId = schedule?.personaId ?? null;
   const personaName = personaId === null ? t('posts.noPersona') : joins.personaNameById.get(personaId) ?? t('posts.personaFallback');
-  const isHistory = slot.status === 'published' || slot.status === 'failed';
-  const shownAt = isHistory && slot.publishedAt ? slot.publishedAt : slot.slotAt;
-  const group = calendarGroupOf(slot.status);
+  const displayStatus = slotDisplayStatus(slot.status, accountActive);
+  const isHistory = slot.status === 'published' || slot.status === 'failed' || slot.status === 'expired';
+  const shownAt = isHistory && slot.status !== 'expired' && slot.publishedAt ? slot.publishedAt : slot.slotAt;
+  const group = calendarGroupOf(displayStatus);
   const chipLabel = t(CALENDAR_GROUP_KEY[group]);
   const displayTitle = slot.title ?? t('posts.unknownTitle');
   return (
@@ -66,9 +68,9 @@ export function DayListRow({ slot, joins }: { slot: ScheduledSlot; joins: PostJo
         <span className="block truncate text-sm font-semibold text-primary">{displayTitle}</span>
       </span>
       <StatusBadge
-        status={slot.status}
+        status={displayStatus}
         label={chipLabel}
-        style={STATUS_STYLE[slot.status] ?? CALENDAR_GROUP_PILL[group]}
+        style={STATUS_STYLE[displayStatus] ?? CALENDAR_GROUP_PILL[group]}
       />
     </Link>
   );

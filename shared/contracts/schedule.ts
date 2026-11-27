@@ -70,6 +70,7 @@ export const RANGE_STATUSES = [
   'publishing',
   'published',
   'failed',
+  'expired',
 ] as const;
 
 export type RangeParseResult =
@@ -125,6 +126,7 @@ export const StatusSlotSchema = z.object({
     'publishing',
     'published',
     'failed',
+    'expired',
   ]),
   title: z.string().nullable(),
   error: z.string().nullable(),

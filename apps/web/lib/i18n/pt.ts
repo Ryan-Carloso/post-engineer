@@ -37,6 +37,8 @@ export const ptDictionary = {
     statusPublishing: 'Publicando',
     statusPublished: 'Publicado',
     statusFailed: 'Falhou',
+    statusExpired: 'Expirado',
+    statusPaused: 'Pausado',
     unknownTitle: 'Sem título',
     uploadedImage: 'Imagem enviada',
     unknownCaption: 'Sem legenda',

@@ -46,6 +46,9 @@ class _MemoryStore:
             return []
         return [dict(self.slot)]
 
+    def trial_ends_at_by_user(self, user_ids: list[str]) -> dict[str, str]:
+        return {uid: "2099-01-01T00:00:00+00:00" for uid in user_ids}
+
     def claim_ready_slot(self, slot_id: str, now_utc=None) -> bool:
         if self.slot.get("status", "ready") != "ready":
             return False

@@ -18,6 +18,9 @@ vi.mock('@/lib/social-accounts-queries', () => ({
   useSocialAccountsQuery: vi.fn(),
 }));
 
+vi.mock('@/lib/trial-query', () => ({
+  useTrialStatusQuery: vi.fn(() => ({ data: { active: true, endsAt: '2030-01-01T00:00:00.000Z', daysLeft: 1 } })),
+}));
 vi.mock('@/lib/schedule-range', () => ({
   RANGE_MAX_SLOTS: 1000,
   useScheduleRangeQuery: vi.fn(),

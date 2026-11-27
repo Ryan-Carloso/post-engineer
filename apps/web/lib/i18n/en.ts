@@ -38,6 +38,8 @@ export const enDictionary: Dictionary = {
     statusPublishing: 'Publishing',
     statusPublished: 'Published',
     statusFailed: 'Failed',
+    statusExpired: 'Expired',
+    statusPaused: 'Paused',
     unknownTitle: 'No title',
     uploadedImage: 'Uploaded image',
     unknownCaption: 'No caption',

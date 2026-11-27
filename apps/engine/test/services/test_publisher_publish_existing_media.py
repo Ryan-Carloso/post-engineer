@@ -796,6 +796,7 @@ class PublishExistingMediaSchedulerTests(unittest.TestCase):
         )
         store = MagicMock()
         store.ready_due_slots.return_value = [dict(slot)]
+        store.trial_ends_at_by_user.return_value = {USER_ID: "2027-11-14T12:00:00+00:00"}
         store.claim_ready_slot.return_value = True
         store.resumable_publishing_slots.return_value = []
         store.download_storage_object.return_value = b"image-bytes"

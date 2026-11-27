@@ -29,6 +29,9 @@ vi.mock('@/lib/api', () => ({
   useDeleteSlotMutation: vi.fn(),
 }));
 
+vi.mock('@/lib/trial-query', () => ({
+  useTrialStatusQuery: vi.fn(() => ({ data: { active: true, endsAt: '2030-01-01T00:00:00.000Z', daysLeft: 1 } })),
+}));
 vi.mock('@/lib/api-slot-reschedule', () => ({
   useRescheduleSlotMutation: vi.fn(),
 }));
@@ -608,6 +611,7 @@ describe('PostDetailPage — status badge', () => {
     ['publishing', 'posts.statusPublishing', 'bg-info-soft'],
     ['published', 'posts.statusPublished', 'bg-success-soft'],
     ['failed', 'posts.statusFailed', 'bg-destructive-soft'],
+    ['expired', 'posts.statusExpired', 'bg-line'],
   ] as const)('labels a %s slot with %s', (status, label, style) => {
     mockQueries({ slot: slotPayload({ id: 'u1', status }) });
     vi.mocked(useParams).mockReturnValue({ id: 'u1' });

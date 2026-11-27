@@ -38,6 +38,7 @@ from app.services.publisher.publish_events import (
 from app.services.owner_alert import notify_owner_async, notify_publish_failed, notify_publish_partial
 from app.services.publisher.store import ScheduleStore
 from app.services.publisher.support import notify_safe, slot_user_id
+from app.services.publisher.trial_gate import partition_slots, trial_states
 
 
 def _failed_outcomes(
@@ -92,12 +93,70 @@ class BatchPublisher:
                 logger.warning(
                     f"publisher: resumable publish lookup failed: {notify_module.safe_diagnostic(exc)}"
                 )
+        due = [row for row in self.store.ready_due_slots(now) if isinstance(row, dict)]
+        owners: list[str] = []
+        for slot in [*due, *resumable]:
+            uid = slot_user_id(slot)
+            if uid is not None:
+                owners.append(uid)
+        states = trial_states(self.store, owners, now)
+        due_active, due_inactive, due_unknown = partition_slots(due, states)
+        res_active, res_inactive, res_unknown = partition_slots(resumable, states)
         published = 0
-        for slot in self.store.ready_due_slots(now):
+        expired = 0
+        for slot in due_active:
             published += self._publish_one(slot, now, resumed=False)
-        for slot in resumable:
+        for slot in res_active:
             published += self._publish_one(slot, now, resumed=True)
+        for slot in due_inactive:
+            if self._expire_slot(slot):
+                expired += 1
+        skipped = len(due_unknown) + len(res_unknown) + len(res_inactive)
+        if published or expired or skipped:
+            logger.info(
+                f"publisher tick counters: published={published} expired={expired} skipped={skipped}"
+            )
         return published
+
+    def _expire_cleanup(self, slot: dict[str, Any]) -> Any:
+        cleanup = image_cleanup(slot)
+        if cleanup is not None:
+            return cleanup
+        if slot.get("media_kind") != "upload":
+            return None
+        media_ref = slot.get("media_ref")
+        if not isinstance(media_ref, str) or not media_ref:
+            return None
+        try:
+            row = self.store.get_video_upload(media_ref)
+        except Exception as exc:
+            logger.warning(
+                f"publisher: slot {slot['id']} expire upload lookup failed: {notify_module.safe_diagnostic(exc)}"
+            )
+            return None
+        if not isinstance(row, dict):
+            return None
+        storage_path = row.get("storage_path")
+        if not isinstance(storage_path, str) or not storage_path:
+            return None
+        return ("videos", storage_path)
+
+    def _expire_slot(self, slot: dict[str, Any]) -> bool:
+        expire = getattr(self.store, "expire_ready_slot", None)
+        if callable(expire):
+            try:
+                won = bool(expire(str(slot["id"])))
+            except Exception as exc:
+                logger.warning(
+                    f"publisher: slot {slot['id']} expire failed: {notify_module.safe_diagnostic(exc)}"
+                )
+                return False
+            if not won:
+                return False
+        else:
+            self.store.update_slot(slot["id"], status="expired", publish_not_before=None)
+        cleanup_existing_media(self.store, slot, self._expire_cleanup(slot))
+        return True
 
     def _publish_one(self, slot: dict[str, Any], now: datetime, resumed: bool) -> int:
         schedule = slot.get("schedules") or {}

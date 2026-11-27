@@ -126,13 +126,13 @@ describe('calendar groups and day counts', () => {
         { status: 'published' as const },
         { status: 'failed' as const },
       ]),
-    ).toEqual({ published: 1, failed: 1, inProgress: 1, scheduled: 2 });
+    ).toEqual({ published: 1, failed: 1, inProgress: 1, scheduled: 2, expired: 0, paused: 0 });
   });
 });
 
 describe('calendar vocabulary', () => {
   it('lists a failure first everywhere the calendar orders its groups', () => {
-    expect(CALENDAR_GROUP_ORDER).toEqual(['failed', 'published', 'inProgress', 'scheduled']);
+    expect(CALENDAR_GROUP_ORDER).toEqual(['failed', 'expired', 'published', 'inProgress', 'paused', 'scheduled']);
   });
 
   it('gives every group a word, an icon and a card pill', () => {
