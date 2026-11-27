@@ -11,6 +11,7 @@ import { SUPPORT_EMAIL } from '@/components/ui/pricing-contact';
 import VersionBadge from '@/components/ui/version-badge';
 import AppLogo from '@/components/ui/app-logo';
 import { TrialNotice } from '@/components/trial-notice';
+import { APPROVAL_QUEUE_LIMIT, useApprovalQueue } from '@/lib/approval-queue';
 import {
   AccountsIcon,
   BoltIcon,
@@ -61,6 +62,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 const MainSidebar = () => {
   const pathname = usePathname();
   const { t } = useI18n();
+  const approval = useApprovalQueue();
 
   const navItems: Array<NavItem> = [
     { href: '/posts', labelKey: 'nav.posts', hintKey: 'nav.postsHint', icon: CalendarIcon },
@@ -90,7 +92,12 @@ const MainSidebar = () => {
 
       <nav className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-3.5 py-4 lg:px-4 lg:py-6">
         {navItems.map((item) => (
-          <SidebarTab key={item.href} item={item} isActive={isNavActive(item.href, pathname)} />
+          <SidebarTab
+            key={item.href}
+            item={item}
+            isActive={isNavActive(item.href, pathname)}
+            badgeCount={item.href === '/posts' ? approval.count : 0}
+          />
         ))}
       </nav>
 
@@ -102,13 +109,15 @@ const MainSidebar = () => {
   );
 };
 
-const SidebarTab = ({ item, isActive }: { item: NavItem; isActive: boolean }) => {
+const SidebarTab = ({ item, isActive, badgeCount }: { item: NavItem; isActive: boolean; badgeCount: number }) => {
   const { t } = useI18n();
   const Icon = item.icon;
+  const badgeLabel = badgeCount >= APPROVAL_QUEUE_LIMIT ? `${APPROVAL_QUEUE_LIMIT}+` : String(badgeCount);
   return (
     <Link
       href={item.href}
       title={t(item.labelKey)}
+      aria-label={badgeCount > 0 ? t('posts.approvalNavBadge', { count: badgeCount }) : undefined}
       className={`group relative flex items-center gap-3 rounded-[20px] px-4 transition-colors lg:gap-4 lg:rounded-[20px] lg:px-5 ${
         isActive
           ? 'bg-brand-soft text-ink'
@@ -119,6 +128,14 @@ const SidebarTab = ({ item, isActive }: { item: NavItem; isActive: boolean }) =>
         <Icon />
       </span>
       <span className="hidden min-w-0 text-[16px] leading-snug font-medium tracking-[-0.02em] md:block lg:text-[18px]">{t(item.labelKey)}</span>
+      {badgeCount > 0 && (
+        <span
+          data-testid="nav-posts-approval-badge"
+          className="ml-auto inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-warning-soft px-1.5 text-xs font-bold text-warning tabular-nums"
+        >
+          {badgeLabel}
+        </span>
+      )}
     </Link>
   );
 };
@@ -142,6 +159,7 @@ const MOBILE_TAB_CLASS = 'flex min-w-0 flex-1 flex-col items-center gap-0.5 px-1
 const MobileNavigation = () => {
   const { t } = useI18n();
   const pathname = usePathname();
+  const approval = useApprovalQueue();
   const [moreOpen, setMoreOpen] = useState(false);
   useEffect(() => setMoreOpen(false), [pathname]);
 
@@ -168,14 +186,28 @@ const MobileNavigation = () => {
       {tabs.map((tab) => {
         const Icon = tab.icon;
         const isActive = isNavActive(tab.href, pathname) && !moreActive;
+        const tabBadgeCount = tab.href === '/posts' ? approval.count : 0;
+        const tabBadgeLabel =
+          tabBadgeCount >= APPROVAL_QUEUE_LIMIT ? `${APPROVAL_QUEUE_LIMIT}+` : String(tabBadgeCount);
         return (
           <Link
             key={tab.href}
             href={tab.href}
             aria-current={isActive ? 'page' : undefined}
+            aria-label={tabBadgeCount > 0 ? t('posts.approvalNavBadge', { count: tabBadgeCount }) : undefined}
             className={`${MOBILE_TAB_CLASS} ${isActive ? 'font-semibold text-primary' : 'text-muted-text'}`}
           >
-            <span className="[&>svg]:size-5"><Icon /></span>
+            <span className="relative [&>svg]:size-5">
+              <Icon />
+              {tabBadgeCount > 0 && (
+                <span
+                  data-testid="nav-posts-approval-badge-mobile"
+                  className="absolute -top-1.5 -right-2.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-warning-soft px-1 text-[10px] font-bold text-warning tabular-nums"
+                >
+                  {tabBadgeLabel}
+                </span>
+              )}
+            </span>
             <span className="whitespace-nowrap">{t(tab.shortLabelKey ?? tab.labelKey)}</span>
           </Link>
         );

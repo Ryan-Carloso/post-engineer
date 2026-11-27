@@ -191,7 +191,7 @@ describe('contracts typecheck', () => {
     };
     expect(cancel.cancelledSlotIds).toEqual([]);
     expectTypeOf(cancel).exclude<undefined>().not.toHaveProperty('cancelled_slot_ids');
-    const posts: ListPostsResponse = { success: true, upcoming: [], recent: [], hasAnyPost: false };
+    const posts: ListPostsResponse = { success: true, upcoming: [], recent: [], hasAnyPost: false, awaitingCount: 0 };
     expect(posts.hasAnyPost).toBe(false);
     expectTypeOf(posts).exclude<undefined>().not.toHaveProperty('has_any_post');
     const slot: GetSlotResponse = {

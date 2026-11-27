@@ -17,6 +17,11 @@ interface SlotRow {
   schedule_id: string;
   status: string;
   title: string | null;
+  description: string | null;
+  slot_at: string;
+  media_ref: string | null;
+  media_kind: string | null;
+  media_content_type: string | null;
 }
 
 interface ScheduleRow {
@@ -26,7 +31,7 @@ interface ScheduleRow {
   publish_mode: string | null;
 }
 
-async function loadOwnedSlot(
+export async function loadOwnedSlot(
   supabase: ReturnType<typeof createSupabaseServiceClient>,
   slotId: string,
   userId: string,
@@ -34,7 +39,7 @@ async function loadOwnedSlot(
 ): Promise<{ slot: SlotRow; publishMode: 'scheduled' | 'asap' } | { error: NextResponse }> {
   const { data: slot, error } = await supabase
     .from('scheduled_posts')
-    .select('id, schedule_id, status, title')
+    .select('id, schedule_id, status, title, description, slot_at, media_ref, media_kind, media_content_type')
     .eq('id', slotId)
     .eq('user_id', userId)
     .single();
@@ -140,7 +145,7 @@ async function deleteHandler(
   if ('error' in owned) return owned.error;
   const slot = owned.slot;
 
-  const DELETABLE_STATUSES = new Set(['ready', 'failed']);
+  const DELETABLE_STATUSES = new Set(['ready', 'failed', 'awaiting_approval']);
   if (!DELETABLE_STATUSES.has(slot.status)) {
     return apiErrorResponse(
       409,
@@ -205,9 +210,9 @@ async function patchHandler(
   if ('error' in owned) return owned.error;
   const { slot, publishMode } = owned;
 
-  const EDITABLE_STATUSES = new Set(['ready']);
+  const EDITABLE_STATUSES = new Set(['ready', 'awaiting_approval']);
   if (!EDITABLE_STATUSES.has(slot.status)) {
-    return apiErrorResponse(409, 'Only a ready slot can be edited.', {
+    return apiErrorResponse(409, 'Only a ready or awaiting-approval slot can be edited.', {
       route: 'PATCH /api/schedule/slots',
       metadata: { status: slot.status },
     });
@@ -226,6 +231,12 @@ async function patchHandler(
   if (rawTitle === undefined && rawSlotAt === undefined) {
     return apiErrorResponse(400, 'Provide title or slotAt to update.', {
       route: 'PATCH /api/schedule/slots',
+    });
+  }
+  if (slot.status === 'awaiting_approval' && rawTitle !== undefined) {
+    return apiErrorResponse(409, 'An awaiting-approval slot can only move its scheduled time.', {
+      route: 'PATCH /api/schedule/slots',
+      metadata: { status: slot.status },
     });
   }
   const patch: { title?: string; slot_at?: string } = {};
@@ -273,12 +284,12 @@ async function patchHandler(
     .update(patch)
     .eq('id', slot.id)
     .eq('user_id', auth.userId)
-    .in('status', ['ready'])
+    .in('status', slot.status === 'awaiting_approval' ? ['awaiting_approval'] : ['ready'])
     .select('id')
     .single();
   if (updateError) {
     if ((updateError as { code?: string }).code === 'PGRST116') {
-      return apiErrorResponse(409, 'Only a ready slot can be edited.', {
+      return apiErrorResponse(409, 'The slot changed before this update. Reload and try again.', {
         route: 'PATCH /api/schedule/slots',
         metadata: { status: slot.status },
       });

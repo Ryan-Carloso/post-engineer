@@ -89,6 +89,24 @@ describe('resolveSlotMedia', () => {
     expect(media).toEqual({ kind: 'upload', url: null, contentType: 'video/mp4' });
   });
 
+  it('signs the stored file of an awaiting_approval upload slot', async () => {
+    const { service, storageFrom } = fakeService({
+      upload: { storage_path: 'user-1/direct-uploads/upload-1.mp4', user_id: 'user-1', status: 'ready' },
+    });
+    const media = await resolveSlotMedia(service, 'slot-1', 'user-1', { ...UPLOAD_ROW, status: 'awaiting_approval' });
+    expect(media).toEqual({ kind: 'upload', url: 'https://signed.test/video.mp4', contentType: 'video/mp4' });
+    expect(storageFrom).toHaveBeenCalledWith('videos');
+  });
+
+  it('signs a scheduled image of an awaiting_approval slot', async () => {
+    const { service, storageFrom } = fakeService({});
+    const media = await resolveSlotMedia(service, 'slot-1', 'user-1', {
+      media_kind: 'image', media_ref: 'scheduled-media/user-1/pic.jpg', media_content_type: 'image/jpeg', status: 'awaiting_approval',
+    });
+    expect(media).toEqual({ kind: 'image', url: 'https://signed.test/video.mp4', contentType: 'image/jpeg' });
+    expect(storageFrom).toHaveBeenCalledWith('uploads');
+  });
+
   it('returns no preview url for a published upload slot whose bytes were cleaned up', async () => {
     const { service, from } = fakeService({});
     const media = await resolveSlotMedia(service, 'slot-1', 'user-1', { ...UPLOAD_ROW, status: 'published' });

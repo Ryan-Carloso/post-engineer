@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { RANGE_STATUSES } from '@/lib/contracts/schedule';
+import { SHARE_POST_STATUSES } from '@/lib/share-links/share-view-types';
 import { findRepoRoot } from '@/test/repo-root';
 
 const root = findRepoRoot(import.meta.url);
@@ -24,10 +25,16 @@ function paramNames(name: string): string[] {
 }
 
 describe('080_share-links migration', () => {
-  it('lists in the latest share_week_posts exactly the statuses the schedule contract treats as listable', () => {
+  it('lists in the latest share_week_posts exactly the statuses the public share view lists', () => {
     const match = /sp\.status in \(([^)]*)\)/.exec(functionBody('share_week_posts', latestShareWeekPosts));
     const statuses = [...(match?.[1] ?? '').matchAll(/'([a-z]+)'/g)].map((item) => item[1]);
-    expect(statuses).toEqual([...RANGE_STATUSES]);
+    expect(statuses).toEqual([...SHARE_POST_STATUSES]);
+  });
+
+  it('keeps unapproved and rejected slots out of the public share view', () => {
+    expect([...SHARE_POST_STATUSES]).toEqual(
+      [...RANGE_STATUSES].filter((status) => status !== 'awaiting_approval' && status !== 'cancelled'),
+    );
   });
 
   it('keeps the SQL argument names the code calls create_share_link with', () => {

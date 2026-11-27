@@ -50,6 +50,7 @@ beforeEach(() => {
     userId: 'user-api',
     keyId: 'key-1',
     personaIds: null,
+    approvalMode: 'yolo',
   });
 });
 

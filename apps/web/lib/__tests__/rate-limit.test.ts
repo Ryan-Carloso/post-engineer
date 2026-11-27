@@ -128,6 +128,7 @@ describe('rate-limit', () => {
       expect(RATE_LIMITS.youtubeUpload.limit).toBeGreaterThan(0);
       expect(RATE_LIMITS.youtubeUpload.windowMs).toBeGreaterThan(0);
       expect(RATE_LIMITS.instagramPost.name).toBe('instagram-post');
+      expect(RATE_LIMITS.slotApprove).toEqual({ name: 'slot-approve', limit: 30, windowMs: 60_000 });
     });
 
     it('exposes the auth/credential profiles added for the public release', () => {

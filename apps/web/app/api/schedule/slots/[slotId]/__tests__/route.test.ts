@@ -275,6 +275,42 @@ describe('DELETE /api/schedule/slots/[slotId]', () => {
     }
   });
 
+  it('deletes an awaiting_approval slot owned by the user', async () => {
+    const client = mockSlotsClient({
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'awaiting_approval', title: 'T' },
+      schedule: { id: 's1', user_id: USER_ID },
+      rpcResult: 'deleted',
+    });
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await deleteSlot(SLOT_ID);
+
+    expect(response.status).toBe(200);
+    expect(client.rpc).toHaveBeenCalledWith('delete_slot_if_not_last', {
+      p_slot_id: 'slot-1',
+      p_user_id: USER_ID,
+    });
+  });
+
+  it('returns 409 when deleting the last awaiting_approval slot of its schedule', async () => {
+    const client = mockSlotsClient({
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'awaiting_approval', title: 'T' },
+      schedule: { id: 's1', user_id: USER_ID },
+      rpcResult: 'is_last_slot',
+    });
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await deleteSlot(SLOT_ID);
+
+    expect(response.status).toBe(409);
+    expect(client.rpc).toHaveBeenCalledWith('delete_slot_if_not_last', {
+      p_slot_id: 'slot-1',
+      p_user_id: USER_ID,
+    });
+  });
+
   it('returns 409 when deleting the schedule’s only remaining slot', async () => {
     const client = mockSlotsClient({
       slot: { id: 'slot-1', schedule_id: 's1', status: 'ready', title: 'T' },
@@ -455,6 +491,56 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
     expect(client.calls.some((c) => c.op === 'update')).toBe(false);
   });
 
+  it('reschedules an awaiting_approval slot without touching its title', async () => {
+    const slotAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const client = mockSlotsClient({
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'awaiting_approval', title: 'Old' },
+      schedule: { id: 's1', user_id: USER_ID },
+    });
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await patchSlot(SLOT_ID, { slotAt });
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { success: boolean; slotAt: string };
+    expect(body).toEqual({ success: true, slotAt });
+    const updateCall = client.calls.find((c) => c.op === 'update');
+    expect(updateCall?.args?.[0]).toEqual({ slot_at: slotAt });
+    const inCall = client.calls.find((c) => c.op === 'in');
+    expect(inCall?.args?.[0]).toBe('status');
+    expect(inCall?.args?.[1]).toEqual(['awaiting_approval']);
+  });
+
+  it('returns 409 when editing the title of an awaiting_approval slot', async () => {
+    const client = mockSlotsClient({
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'awaiting_approval', title: 'Old' },
+      schedule: { id: 's1', user_id: USER_ID },
+    });
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await patchSlot(SLOT_ID, { title: 'Novo tema' });
+
+    expect(response.status).toBe(409);
+    expect(client.calls.some((c) => c.op === 'update')).toBe(false);
+  });
+
+  it('returns 409 when editing title and time of an awaiting_approval slot together', async () => {
+    const slotAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const client = mockSlotsClient({
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'awaiting_approval', title: 'Old' },
+      schedule: { id: 's1', user_id: USER_ID },
+    });
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await patchSlot(SLOT_ID, { title: 'Novo tema', slotAt });
+
+    expect(response.status).toBe(409);
+    expect(client.calls.some((c) => c.op === 'update')).toBe(false);
+  });
+
   it('returns 400 when neither title nor slotAt is provided', async () => {
     const client = mockSlotsClient({
       slot: { id: 'slot-1', schedule_id: 's1', status: 'ready', title: 'Old' },
@@ -481,6 +567,25 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
     const response = await patchSlot(SLOT_ID, { title: 'Novo tema' });
 
     expect(response.status).toBe(409);
+    const body = (await response.json()) as { error: string };
+    expect(body.error).toBe('The slot changed before this update. Reload and try again.');
+  });
+
+  it('returns a retry message, not the move-only message, when a slotAt-only move of an awaiting slot loses the race', async () => {
+    const slotAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const client = mockSlotsClient({
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'awaiting_approval', title: 'Old' },
+      schedule: { id: 's1', user_id: USER_ID },
+      updateConflict: true,
+    });
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await patchSlot(SLOT_ID, { slotAt });
+
+    expect(response.status).toBe(409);
+    const body = (await response.json()) as { error: string };
+    expect(body.error).toBe('The slot changed before this update. Reload and try again.');
   });
 
   it('uses the service client for OAuth callers (no cookie session)', async () => {
@@ -1083,7 +1188,7 @@ describe('slot id normalization', () => {
       client.calls
         .filter((c) => c.table === 'scheduled_posts' && c.op === 'select')
         .map((c) => c.args),
-    ).toEqual([['id, schedule_id, slot_at, status, title, error, published_at, publish_outcomes, prompt_version_id, media_kind, media_ref, media_content_type']]);
+    ).toEqual([['id, schedule_id, slot_at, status, title, description, error, published_at, publish_outcomes, prompt_version_id, media_kind, media_ref, media_content_type']]);
     expect(
       client.calls
         .filter((c) => c.table === 'scheduled_posts' && c.op === 'eq')

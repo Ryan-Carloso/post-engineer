@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
-import { generateRawApiKey, hashApiKey, extractKeyPrefix } from '@/lib/api-keys';
+import { generateRawApiKey, hashApiKey, extractKeyPrefix, isApprovalMode, type ApprovalMode } from '@/lib/api-keys';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
@@ -9,6 +9,13 @@ import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-r
 interface CreateKeyBody {
   name?: unknown;
   personaIds?: unknown;
+  approvalMode?: unknown;
+}
+
+function parseApprovalMode(value: unknown): { ok: true; approvalMode: ApprovalMode } | { ok: false; error: string } {
+  if (value === undefined || value === null) return { ok: true, approvalMode: 'approval' };
+  if (isApprovalMode(value)) return { ok: true, approvalMode: value };
+  return { ok: false, error: 'approvalMode must be "yolo" or "approval".' };
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -42,7 +49,7 @@ async function getHandler(request: Request): Promise<NextResponse> {
   const supabase = createSupabaseServiceClient();
   const { data, error } = await supabase
     .from('user_api_keys')
-    .select('id, name, key_prefix, persona_ids, created_at, last_used_at, revoked_at')
+    .select('id, name, key_prefix, persona_ids, approval_mode, created_at, last_used_at, revoked_at')
     .eq('user_id', auth.userId)
     .order('created_at', { ascending: false });
 
@@ -61,6 +68,7 @@ async function getHandler(request: Request): Promise<NextResponse> {
       name: k.name,
       keyPrefix: k.key_prefix,
       personaIds: Array.isArray(k.persona_ids) ? k.persona_ids : null,
+      approvalMode: isApprovalMode(k.approval_mode) ? k.approval_mode : 'approval',
       createdAt: k.created_at,
       lastUsedAt: k.last_used_at,
       revokedAt: k.revoked_at,
@@ -102,6 +110,14 @@ async function postHandler(request: Request): Promise<NextResponse> {
     );
   }
 
+  const mode = parseApprovalMode(body.approvalMode);
+  if (!mode.ok) {
+    return NextResponse.json(
+      { success: false, error: mode.error },
+      { status: 400 },
+    );
+  }
+
   const supabase = createSupabaseServiceClient();
 
   if (scope.personaIds !== null) {
@@ -131,8 +147,9 @@ async function postHandler(request: Request): Promise<NextResponse> {
       key_hash: keyHash,
       key_prefix: keyPrefix,
       persona_ids: scope.personaIds,
+      approval_mode: mode.approvalMode,
     })
-    .select('id, name, key_prefix, persona_ids, created_at')
+    .select('id, name, key_prefix, persona_ids, approval_mode, created_at')
     .single();
 
   if (error || !data) {
@@ -151,6 +168,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
       name: data.name,
       keyPrefix: data.key_prefix,
       personaIds: Array.isArray(data.persona_ids) ? data.persona_ids : null,
+      approvalMode: isApprovalMode(data.approval_mode) ? data.approval_mode : 'approval',
       createdAt: data.created_at,
     },
     { status: 201 },

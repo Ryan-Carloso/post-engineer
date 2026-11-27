@@ -25,6 +25,12 @@ vi.mock('@/lib/api', () => ({
   useInstagramAccountsQuery: vi.fn(),
 }));
 
+vi.mock('@/lib/approval-queue', () => ({
+  APPROVAL_QUEUE_LIMIT: 200,
+  useApprovalQueue: vi.fn(() => ({ slots: [], count: 0, isLoading: false, isError: false })),
+  isSlotExpired: vi.fn(() => false),
+}));
+
 vi.mock('@/lib/ui', () => ({
   AccountsIcon: () => <span data-testid="icon-accounts" />,
   BoltIcon: () => <span data-testid="icon-bolt" />,

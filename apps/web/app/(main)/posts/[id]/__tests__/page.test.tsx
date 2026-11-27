@@ -391,6 +391,17 @@ describe('PostDetailPage', () => {
     expect(screen.getByRole('button', { name: 'posts.delete' })).toBeInTheDocument();
   });
 
+  it('offers delete but no edit on an awaiting_approval slot', () => {
+    mockQueries({
+      slot: slotPayload({ id: 'a1', status: 'awaiting_approval' }),
+    });
+    vi.mocked(useParams).mockReturnValue({ id: 'a1' });
+    render(<DetailPage />);
+
+    expect(screen.queryByRole('button', { name: 'posts.editCaption' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'posts.delete' })).toBeInTheDocument();
+  });
+
   it('prefills the reschedule input with the slot time in the schedule timezone', async () => {
     const user = userEvent.setup();
     render(<DetailPage />);

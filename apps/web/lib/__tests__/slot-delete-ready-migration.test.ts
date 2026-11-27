@@ -24,7 +24,7 @@ describe('supabase/migrations/058_slot-delete-ready.sql', () => {
   });
 
   it('keeps the standalone guard file in sync on the deletable statuses', () => {
-    expect(standalone).toContain("if v_status not in ('pending', 'ready', 'failed') then");
+    expect(standalone).toContain("if v_status not in ('pending', 'ready', 'awaiting_approval', 'failed') then");
     expect(standalone).toContain('create or replace function public.delete_slot_if_not_last(');
   });
 });
@@ -38,7 +38,7 @@ function functionBody(sql: string): string {
 
 describe('supabase/slot-delete-guard.sql mirrors the live delete_slot_if_not_last', () => {
   const live = readFileSync(
-    join(repoRoot, 'supabase', 'migrations', '065_definer-function-grants.sql'),
+    join(repoRoot, 'supabase', 'migrations', '089_slot-delete-awaiting-approval.sql'),
     'utf8',
   );
 
@@ -46,7 +46,11 @@ describe('supabase/slot-delete-guard.sql mirrors the live delete_slot_if_not_las
     expect(functionBody(standalone)).toContain('security definer set search_path = public as $$');
   });
 
-  it('carries the same function body as migration 065', () => {
+  it('carries the same function body as migration 089', () => {
     expect(functionBody(standalone)).toBe(functionBody(live));
+  });
+
+  it('admits awaiting_approval slots for deletion', () => {
+    expect(functionBody(live)).toContain("if v_status not in ('pending', 'ready', 'awaiting_approval', 'failed') then");
   });
 });

@@ -656,12 +656,19 @@
                     "type": "uuid[]",
                     "default": null,
                     "notNull": false
+                },
+                {
+                    "name": "approval_mode",
+                    "type": "text",
+                    "default": "'approval'::text",
+                    "notNull": true
                 }
             ],
             "policies": {
             },
             "constraints": {
-                "user_api_keys_pkey": "PRIMARY KEY (id)"
+                "user_api_keys_pkey": "PRIMARY KEY (id)",
+                "user_api_keys_approval_mode_check": "CHECK ((approval_mode = ANY (ARRAY['yolo'::text, 'approval'::text])))"
             }
         },
         "user_profiles": {

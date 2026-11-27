@@ -5,6 +5,7 @@ import {
   PublishProviderFailureSchema,
   PublishUserNoticeSchema,
   SlotDetailSchema,
+  SlotMediaSchema,
 } from './posts.js';
 
 export const ScheduleRowSchema = z.object({
@@ -67,9 +68,11 @@ export const RANGE_MAX_SPAN_DAYS = 62;
 export const RANGE_MAX_SLOTS = 1000;
 export const RANGE_STATUSES = [
   'ready',
+  'awaiting_approval',
   'publishing',
   'published',
   'failed',
+  'cancelled',
 ] as const;
 
 export type RangeParseResult =
@@ -122,15 +125,19 @@ export const StatusSlotSchema = z.object({
   slot_at: z.string(),
   status: z.enum([
     'ready',
+    'awaiting_approval',
     'publishing',
     'published',
     'failed',
+    'cancelled',
   ]),
   title: z.string().nullable(),
+  description: z.string().nullable().optional(),
   error: z.string().nullable(),
   published_at: z.string().nullable(),
   schedule_id: z.string(),
   postUrl: z.string().nullable(),
+  media: SlotMediaSchema.nullable().optional(),
   userNotices: z.array(PublishUserNoticeSchema).optional(),
   providerFailures: z.array(PublishProviderFailureSchema).optional(),
 });
@@ -140,6 +147,7 @@ export const ListPostsResponseSchema = z.object({
   upcoming: z.array(StatusSlotSchema),
   recent: z.array(StatusSlotSchema),
   hasAnyPost: z.boolean(),
+  awaitingCount: z.number(),
 });
 
 export const ListPostsInRangeResponseSchema = z.object({

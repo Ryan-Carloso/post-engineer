@@ -41,6 +41,7 @@ const apiKeyItem: ApiKeyItem = {
   name: 'CI key',
   keyPrefix: 'pe_live_abc...',
   personaIds: null,
+  approvalMode: 'yolo',
   createdAt: '2026-11-05T00:00:00.000Z',
   lastUsedAt: null,
   revokedAt: null,
@@ -52,6 +53,7 @@ const createdKey = {
   key: 'pe_live_raw',
   keyPrefix: 'pe_live_abc...',
   personaIds: null,
+  approvalMode: 'yolo',
   createdAt: '2026-11-05T00:00:00.000Z',
 };
 
@@ -85,7 +87,18 @@ describe('api-keys-client — fetchers', () => {
     expect(fetch).toHaveBeenCalledWith('/api/api-keys', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'CI key', personaIds: null }),
+      body: JSON.stringify({ name: 'CI key', personaIds: null, approvalMode: 'approval' }),
+    });
+  });
+
+  it('createApiKey sends the chosen approval mode', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => response(200, { ...createdKey, approvalMode: 'approval' })));
+    const created = await createApiKey({ name: 'CI key', personaIds: null, approvalMode: 'approval' });
+    expect(created.approvalMode).toBe('approval');
+    expect(fetch).toHaveBeenCalledWith('/api/api-keys', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'CI key', personaIds: null, approvalMode: 'approval' }),
     });
   });
 

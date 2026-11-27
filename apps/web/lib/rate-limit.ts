@@ -49,6 +49,7 @@ export const RATE_LIMITS = {
   healthProbe: { name: 'health-probe', limit: 30, windowMs: 60_000 },
   versionProbe: { name: 'version-probe', limit: 60, windowMs: 60_000 },
   scheduleDelete: { name: 'schedule-delete', limit: 10, windowMs: 60_000 },
+  slotApprove: { name: 'slot-approve', limit: 30, windowMs: 60_000 },
   slotWrite: { name: 'slot-write', limit: 30, windowMs: 60_000 },
   shareLinkList: { name: 'share-link-list', limit: 60, windowMs: 60_000 },
   oauthAuthorize: { name: 'oauth-authorize', limit: 30, windowMs: 60_000 },
