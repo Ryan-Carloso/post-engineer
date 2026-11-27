@@ -253,8 +253,28 @@ jobs:
       - name: Install Cypress binary
         run: pnpm exec cypress install
 
+      # webpack's persistent cache: a warm cache cut the instrumented compile
+      # from 3.2 min to 20s locally. Only main saves it (after its build), so
+      # pull requests restore main's cache and never evict each other's.
+      - name: Restore Next.js build cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: apps/web/.next/cache
+          key: next-build-cypress-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            next-build-cypress-${{ hashFiles('pnpm-lock.yaml') }}-
+            next-build-cypress-
+
+      # Lint already runs in web-ci (its build and its lint job).
       - name: Production build
-        run: pnpm build
+        run: pnpm build --no-lint
+
+      - name: Save Next.js build cache
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: apps/web/.next/cache
+          key: next-build-cypress-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
 
       - name: Start app server
         shell: bash
@@ -382,10 +402,30 @@ jobs:
           }
           EOF
 
+      # webpack's persistent cache: a warm cache cut the instrumented compile
+      # from 3.2 min to 20s locally. Only main saves it (after its build), so
+      # pull requests restore main's cache and never evict each other's.
+      - name: Restore Next.js build cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: apps/web/.next/cache
+          key: next-build-cypress-coverage-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            next-build-cypress-coverage-${{ hashFiles('pnpm-lock.yaml') }}-
+            next-build-cypress-coverage-
+
       # CYPRESS_COVERAGE=1 comes from the job-level env: the build must
       # be instrumented (and use the layout.tsx font fallback).
+      # Lint already runs in web-ci (its build and its lint job).
       - name: Instrumented production build
-        run: pnpm build
+        run: pnpm build --no-lint
+
+      - name: Save Next.js build cache
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: apps/web/.next/cache
+          key: next-build-cypress-coverage-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
 
       - name: Start instrumented app server
         shell: bash
