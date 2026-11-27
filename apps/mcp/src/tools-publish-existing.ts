@@ -122,19 +122,6 @@ function summary(result: PublishExistingResult, mediaKind: string, resolvedNote:
       })
     );
   }
-  if (result.mode === 'asap' && 'approvalRequired' in result && result.approvalRequired === false) {
-    return (
-      `${resolved}This hold was already ${result.slot.status}; nothing new was posted.\n` +
-      JSON.stringify({
-        success: true,
-        mode: 'asap',
-        replayed: result.replayed,
-        held: false,
-        approvalRequired: false,
-        slot: result.slot,
-      })
-    );
-  }
   const lines = result.publishes.map((publish) => {
     const accounts = publish.results
       .map((account) => {
