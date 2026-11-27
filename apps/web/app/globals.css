@@ -163,7 +163,7 @@
   --chart-5: #ff8c52;
 }
 
-@custom-variant dark (&:where(.dark, .dark *));
+@custom-variant dark (&:where(.dark, .neon, .dark *, .neon *));
 
 @theme inline {
   --color-background: var(--background);
