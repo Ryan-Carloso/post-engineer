@@ -4,6 +4,7 @@ import type { PostEngineerClient } from './client.js';
 import { getPersonaIdentityCard, renderPersonaIdentityPrompt } from './client-persona-card.js';
 import {
   IDENTITY_CARD_MAX_BYTES,
+  IDENTITY_DESCRIPTION_MAX_LENGTH,
   CARD_STYLES,
   IdentityCardSchema,
   SceneSchema,
@@ -15,9 +16,9 @@ export const IdentityCardField = z
   .pipe(IdentityCardSchema)
   .meta({
     type: 'object',
-    properties: { version: { type: 'integer', enum: [1, 2] }, identity: { type: 'object' }, defaults: { type: 'object' } },
+    properties: { version: { type: 'integer', enum: [1, 2, 3] }, identity: { type: 'object' }, defaults: { type: 'object' } },
     required: ['version', 'identity'],
-    description: `The persona's identity card: a versioned JSON object of at most ${IDENTITY_CARD_MAX_BYTES} bytes. Write version 2: { version: 2, identity: { face, body }, defaults: { style?, outfit? } } (a stored version 1 card has no style and is accepted too). face: shape, eyes, eye_color, eyebrows, nose, lips, teeth, smile, skin, jawline, cheekbones, chin, forehead, ears, hair { color, style, length, texture, parting }, facial_hair, marks, tattoos. body: build, height, shoulders, arms, hands, waist, hips, legs, posture, proportions. defaults.style is one of ${CARD_STYLES.join(', ')}; defaults.outfit has the slots top, bottom, one_piece, outerwear, footwear, accessories, and defaults must name a style or an outfit. Every level is strict (an unknown key is rejected) and every trait is one line of at most 80 characters. Fill only what is visible in the base photo and never invent a trait. It describes a real person's physical traits: fill it only with their consent. The server stores it and renders prompts from it; it never generates an image.`,
+    description: `The persona's identity card: a versioned JSON object of at most ${IDENTITY_CARD_MAX_BYTES} bytes. Write version 3: { version: 3, identity: { description }, defaults?: { style? } }. description is one free-form text of at most ${IDENTITY_DESCRIPTION_MAX_LENGTH} characters (line breaks allowed) that the server uses verbatim as the Person line of the rendered prompt: face, hair, eyes, skin, body build and posture, only what is visible in the base photo and never an invented trait. defaults.style is one of ${CARD_STYLES.join(', ')}. A stored version 1 or 2 card — { version, identity: { face, body }, defaults?: { style?, outfit? } } with one line of at most 80 characters per trait and outfit slots top, bottom, one_piece, outerwear, footwear, accessories — is still accepted and rendered. Every level is strict (an unknown key is rejected). It describes a real person's physical traits: fill it only with their consent. The server stores it and renders prompts from it; it never generates an image.`,
   });
 
 export const GetCardShape = {};

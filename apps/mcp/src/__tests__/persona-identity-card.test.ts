@@ -29,6 +29,11 @@ const CARD_V2 = {
   },
   defaults: { style: 'business', outfit: { footwear: 'black loafers' } },
 } as const;
+const CARD_V3 = {
+  version: 3,
+  identity: { description: 'blue-grey wide-set eyes, soft jawline, blonde wavy hair, athletic build.' },
+  defaults: { style: 'casual' },
+} as const;
 const SCENE = { lighting: 'golden_hour', framing: 'waist_up', setting: 'city street', outfit: { top: 'navy blazer' } } as const;
 
 interface Seen {
@@ -172,7 +177,7 @@ describe('persona_media render_prompt', () => {
     expect(JSON.parse(result.text)).toEqual(rendered);
   });
 
-  it.each([1, 2])('returns cardVersion %i as the server reports it', async (cardVersion) => {
+  it.each([1, 2, 3])('returns cardVersion %i as the server reports it', async (cardVersion) => {
     const { call } = setup({ 'POST /api/persona/identity-card': { ...rendered, cardVersion } });
     const result = await call('persona_media', { action: 'render_prompt', persona: MARIA, scene: SCENE });
     expect(result.isError).toBe(false);
@@ -180,7 +185,7 @@ describe('persona_media render_prompt', () => {
   });
 
   it('reports a card version the contract does not know as a malformed response', async () => {
-    const { call } = setup({ 'POST /api/persona/identity-card': { ...rendered, cardVersion: 3 } });
+    const { call } = setup({ 'POST /api/persona/identity-card': { ...rendered, cardVersion: 4 } });
     const result = await call('persona_media', { action: 'render_prompt', persona: MARIA, scene: SCENE });
     expect(result.isError).toBe(true);
     expect(result.text).toContain('Malformed response');
@@ -284,6 +289,13 @@ describe('identityCard on personas create and update', () => {
     expect(JSON.parse(seen[0].form?.identityCard ?? 'null')).toEqual(CARD_V2);
   });
 
+  it('sends a v3 description card as a JSON string in the multipart update', async () => {
+    const { call, seen } = setup({ 'PATCH /api/persona': { success: true } });
+    const result = await call('personas', { action: 'update', persona: MARIA, identityCard: CARD_V3 });
+    expect(result.isError).toBe(false);
+    expect(JSON.parse(seen[0].form?.identityCard ?? 'null')).toEqual(CARD_V3);
+  });
+
   it('refuses a v2 card without a style or an outfit before any request', async () => {
     const { call, seen } = setup({ 'PATCH /api/persona': { success: true } });
     const result = await call('personas', { action: 'update', persona: MARIA, identityCard: { ...CARD_V2, defaults: {} } });
@@ -311,6 +323,8 @@ describe('identityCard on personas create and update', () => {
     expect(JSON.parse(seen[0].form?.identityCard ?? 'null')).toEqual(CARD);
     await api.createPersona({ name: 'Maria', accounts: { youtube: ['UC1'] }, identityCard: CARD_V2 });
     expect(JSON.parse(seen[1].form?.identityCard ?? 'null')).toEqual(CARD_V2);
+    await api.createPersona({ name: 'Maria', accounts: { youtube: ['UC1'] }, identityCard: CARD_V3 });
+    expect(JSON.parse(seen[2].form?.identityCard ?? 'null')).toEqual(CARD_V3);
     seen.length = 0;
     await api.createPersona({ name: 'Maria', accounts: { youtube: ['UC1'] } });
     expect(seen[0].form).not.toHaveProperty('identityCard');
@@ -321,7 +335,7 @@ describe('identityCard on personas create and update', () => {
     expect(UpdatePersonaSchema.safeParse({ personaId: MARIA, identityCard: bad }).success).toBe(false);
     expect(UpdatePersonaRemoteSchema.safeParse({ personaId: MARIA, identityCard: bad }).success).toBe(false);
     expect(UpdatePersonaSchema.safeParse({ personaId: MARIA, identityCard: { ...CARD, extra: 1 } }).success).toBe(false);
-    expect(UpdatePersonaSchema.safeParse({ personaId: MARIA, identityCard: { ...CARD, version: 3 } }).success).toBe(false);
+    expect(UpdatePersonaSchema.safeParse({ personaId: MARIA, identityCard: { ...CARD, version: 4 } }).success).toBe(false);
     expect(UpdatePersonaSchema.safeParse({ personaId: MARIA, identityCard: CARD }).success).toBe(true);
     expect(UpdatePersonaSchema.safeParse({ personaId: MARIA, identityCard: null }).success).toBe(true);
     const create = { name: 'Maria', accounts: { youtube: ['UC1'] } };

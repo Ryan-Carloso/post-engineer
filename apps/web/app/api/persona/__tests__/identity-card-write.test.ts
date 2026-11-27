@@ -28,7 +28,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { trackApiEvent } from '@/lib/analytics';
 import { logger } from '@/lib/logger';
-import { CARD_SENTINEL, FIXTURE_CARD, cardWithSentinel } from '@/test/identity-card-fixtures';
+import { CARD_SENTINEL, FIXTURE_CARD, FIXTURE_CARD_V3, cardWithSentinel } from '@/test/identity-card-fixtures';
 
 const USER_ID = 'user-uuid-1';
 const spies = [
@@ -141,6 +141,13 @@ describe('POST /api/persona with an identity card', () => {
     expect(inserted[0].identity_card).toEqual(FIXTURE_CARD);
   });
 
+  it('stores a version 3 description card on the new persona', async () => {
+    const { inserted } = mockSupabase();
+    const res = await POST(createRequest(JSON.stringify(FIXTURE_CARD_V3)));
+    expect(res.status).toBe(200);
+    expect(inserted[0].identity_card).toEqual(FIXTURE_CARD_V3);
+  });
+
   it('stores null when no card is sent', async () => {
     const { inserted } = mockSupabase();
     const res = await POST(createRequest());
@@ -150,7 +157,7 @@ describe('POST /api/persona with an identity card', () => {
 
   it.each([
     ['invalid JSON', '{nope', 'identityCard: not valid JSON'],
-    ['a bad version', JSON.stringify({ ...FIXTURE_CARD, version: 3 }), 'identityCard.version: unsupported version'],
+    ['a bad version', JSON.stringify({ ...FIXTURE_CARD, version: 4 }), 'identityCard.version: unsupported version'],
     ['an unknown key', JSON.stringify({ ...FIXTURE_CARD, extra: true }), 'identityCard: unknown field'],
     ['an over-size card', 'x'.repeat(5000), 'identityCard: at most 4096 bytes'],
   ])('rejects %s with a 400 and inserts nothing', async (_name, raw, message) => {

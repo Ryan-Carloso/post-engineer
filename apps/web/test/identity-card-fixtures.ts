@@ -1,6 +1,6 @@
-import type { IdentityCard, Scene } from '@/lib/contracts/persona-identity-card';
+import type { IdentityCard, IdentityCardV1, IdentityCardV2, IdentityCardV3, Scene } from '@/lib/contracts/persona-identity-card';
 
-export const FIXTURE_CARD: IdentityCard = {
+export const FIXTURE_CARD: IdentityCardV1 = {
   version: 1,
   identity: {
     face: {
@@ -40,7 +40,15 @@ export function cardWithSentinel(): IdentityCard {
   };
 }
 
-export const FIXTURE_CARD_V2: IdentityCard = {
+export const FIXTURE_CARD_V3: IdentityCardV3 = {
+  version: 3,
+  identity: {
+    description: 'Deep-set brown eyes, straight nose,\nfull lips, oval face, dark wavy hair, athletic build.',
+  },
+  defaults: { style: 'business' },
+};
+
+export const FIXTURE_CARD_V2: IdentityCardV2 = {
   version: 2,
   identity: {
     face: {

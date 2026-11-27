@@ -4,6 +4,7 @@ import { defineEndpoint } from './endpoint.js';
 import {
   IDENTITY_CARD_ACCEPTED_VERSIONS,
   IDENTITY_CARD_MAX_BYTES,
+  IDENTITY_DESCRIPTION_MAX_LENGTH,
   IDENTITY_TEXT_MAX_LENGTH,
   OUTFIT_SLOTS,
   SCENE_ASPECTS,
@@ -17,9 +18,10 @@ import { CARD_STYLES } from './persona-identity-card-styles.js';
 export * from './persona-identity-card-limits.js';
 export * from './persona-identity-card-styles.js';
 
-function hasControlCharacter(value: string): boolean {
+function hasControlCharacter(value: string, allowNewline = false): boolean {
   for (let index = 0; index < value.length; index += 1) {
     const code = value.charCodeAt(index);
+    if (allowNewline && code === 10) continue;
     if (code < 32 || (code >= 127 && code <= 159) || code === 0x2028 || code === 0x2029) return true;
   }
   return false;
@@ -31,6 +33,13 @@ const freeText = z
   .min(1)
   .max(IDENTITY_TEXT_MAX_LENGTH)
   .refine((value) => !hasControlCharacter(value), { message: 'must be a single line without control characters' });
+
+const descriptionText = z
+  .string()
+  .trim()
+  .min(1)
+  .max(IDENTITY_DESCRIPTION_MAX_LENGTH)
+  .refine((value) => !hasControlCharacter(value, true), { message: 'must be text without control characters' });
 
 const sceneText = freeText
   .refine((value) => !mentionsIdentity(value, true), {
@@ -172,8 +181,28 @@ export const IdentityCardV2Schema = z.strictObject({
     }),
 });
 
-export const IdentityCardSchema = z.discriminatedUnion('version', [IdentityCardV1Schema, IdentityCardV2Schema]);
+const IdentityV3Schema = z.strictObject({ description: descriptionText });
+
+export const IdentityCardV3Schema = z.strictObject({
+  version: z.literal(3),
+  identity: IdentityV3Schema,
+  defaults: z
+    .strictObject({ style: z.enum(CARD_STYLES).optional() })
+    .optional()
+    .refine((defaults) => defaults === undefined || defaults.style !== undefined, {
+      message: 'must name a style',
+    }),
+});
+
+export const IdentityCardSchema = z.discriminatedUnion('version', [
+  IdentityCardV1Schema,
+  IdentityCardV2Schema,
+  IdentityCardV3Schema,
+]);
 export type IdentityCard = z.infer<typeof IdentityCardSchema>;
+export type IdentityCardV1 = z.infer<typeof IdentityCardV1Schema>;
+export type IdentityCardV2 = z.infer<typeof IdentityCardV2Schema>;
+export type IdentityCardV3 = z.infer<typeof IdentityCardV3Schema>;
 export type IdentityLeaves = z.infer<typeof IdentityV2Schema>;
 export type Outfit = z.infer<typeof OutfitSchema>;
 

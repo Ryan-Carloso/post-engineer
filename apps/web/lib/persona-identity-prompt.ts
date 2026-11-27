@@ -54,8 +54,7 @@ const OUTFIT_SLOT_LABELS: Record<(typeof OUTFIT_SLOTS)[number], string> = {
   accessories: 'accessories',
 };
 
-function identityParts(card: IdentityCard): string[] {
-  const identity: IdentityLeaves = card.identity;
+function identityParts(identity: IdentityLeaves): string[] {
   const { face, body } = identity;
   const candidates: Array<[string, string | undefined]> = [
     ['face shape', face?.shape],
@@ -94,6 +93,19 @@ function identityParts(card: IdentityCard): string[] {
   return candidates.flatMap(([label, value]) => (value === undefined ? [] : [`${label}: ${value}`]));
 }
 
+function sentence(value: string): string {
+  return value.replace(/\s+/g, ' ').trim().replace(/[.!?;,]+$/, '');
+}
+
+function identityText(card: IdentityCard): string | null {
+  if (card.version === 3) {
+    const description = sentence(card.identity.description);
+    return description === '' ? null : description;
+  }
+  const parts = identityParts(card.identity);
+  return parts.length === 0 ? null : parts.join('; ');
+}
+
 function outfitValues(outfit: Outfit): string[] {
   return OUTFIT_SLOTS.flatMap((slot) => {
     const value = outfit[slot];
@@ -129,8 +141,8 @@ function mergeOutfit(base: Outfit | undefined, override: Outfit): Outfit {
 }
 
 function resolveStyleOutfit(card: IdentityCard, scene: Scene): StyleOutfit {
-  const defaultStyle = card.version === 2 ? card.defaults?.style : undefined;
-  const defaultOutfit = card.defaults?.outfit;
+  const defaultStyle = card.version === 1 ? undefined : card.defaults?.style;
+  const defaultOutfit = card.version === 3 ? undefined : card.defaults?.outfit;
   const style = scene.style ?? defaultStyle;
   if (scene.outfit === undefined) {
     return { style, outfit: scene.style === undefined ? defaultOutfit : undefined };
@@ -172,8 +184,8 @@ export function buildIdentityPrompt(card: IdentityCard, scene: Scene): IdentityP
   const { style, outfit } = resolveStyleOutfit(card, scene);
   const lines: string[] = [REFERENCE_LINE];
 
-  const identity = identityParts(card);
-  if (identity.length > 0) lines.push(`Person: ${identity.join('; ')}.`);
+  const identity = identityText(card);
+  if (identity !== null) lines.push(`Person: ${identity}.`);
   if (style !== undefined) lines.push(styleLine(style));
   if (outfit !== undefined) lines.push(outfitLine(outfit, style));
   if (style === undefined && outfit === undefined) lines.push(KEEP_OUTFIT_LINE);

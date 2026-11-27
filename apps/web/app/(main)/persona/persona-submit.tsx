@@ -10,7 +10,7 @@ import { useI18n } from '@/lib/i18n/provider';
 import { scrollToErrorField } from '@/lib/scroll-to-error';
 import { notifyIfSessionExpired } from '@/lib/session-expiry';
 import { surfaceAppErrorMessage } from '@/lib/errors';
-import { localizeIdentityCardResult, validateIdentityCardDraft } from '@/lib/persona-identity-card-form';
+import { localizeIdentityCardResult, validateIdentityCardText } from '@/lib/persona-identity-card-form';
 import { PERSONA_IDENTITY_CARD_QUERY_KEY } from '@/lib/persona-identity-card-api';
 import { totalBoundAccounts, type PersonaDefaultAccounts, samePublishingAccounts } from '@/lib/persona-publishing-accounts';
 import { SpinnerIcon } from '@/lib/ui';
@@ -74,7 +74,7 @@ export const PersonaSubmit = ({ editId }: { editId: string | null }) => {
       return;
     }
 
-    const cardCheck = validateIdentityCardDraft(state.identityCardDraft);
+    const cardCheck = validateIdentityCardText(state.identityCardDraft);
     if (!cardCheck.ok) {
       state.setResult({ success: false, error: t(cardCheck.errorKey) });
       scrollToErrorField('identity-card');
