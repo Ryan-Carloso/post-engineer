@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NextResponse } from 'next/server';
 
-vi.mock('@/lib/trial', () => ({ assertTrialActive: vi.fn(async () => null) }));
+vi.mock('@/lib/access', () => ({ assertAccessActive: vi.fn(async () => null) }));
 vi.mock('@/lib/request-auth', () => ({
   requireSupabaseSession: vi.fn(),
   engineAuthHeaders: vi.fn(() => ({ Authorization: 'Bearer secret', 'x-user-id': 'user-uuid-1' })),
@@ -79,7 +79,7 @@ import {
 import { dispatchPublish } from '@/lib/videos/publish-uploaded';
 import type { SocialProvider } from '@/lib/providers/registry';
 import { deterministicUuid } from '@/lib/idempotency';
-import { assertTrialActive } from '@/lib/trial';
+import { assertAccessActive } from '@/lib/access';
 
 const USER_ID = 'user-uuid-1';
 const UPLOAD_ID = '22222222-2222-4222-8222-222222222222';
@@ -1348,12 +1348,12 @@ describe('POST /api/media/publish-existing', () => {
   it('answers 402 and neither claims nor schedules once the free trial has ended', async () => {
     const client = fakeSupabase({ socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }] });
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
-    vi.mocked(assertTrialActive).mockResolvedValueOnce(
+    vi.mocked(assertAccessActive).mockResolvedValueOnce(
       NextResponse.json({ success: false, code: 'TRIAL_EXPIRED' }, { status: 402 }),
     );
     const response = await POST(jsonRequest({ media: { kind: 'upload', uploadId: UPLOAD_ID }, title: 'T', description: 'D', publishing: { mode: 'asap', providers: ['youtube'], accounts: { youtube: ['UC1'] } }, tags: ['t'], privacyStatus: 'public' }));
     expect(response.status).toBe(402);
-    expect(vi.mocked(assertTrialActive)).toHaveBeenCalledWith(USER_ID, { route: 'POST /api/media/publish-existing' });
+    expect(vi.mocked(assertAccessActive)).toHaveBeenCalledWith(USER_ID, { route: 'POST /api/media/publish-existing' });
     expect(vi.mocked(claimUploadForPublish)).not.toHaveBeenCalled();
     expect(client.__insertedSchedules).toHaveLength(0);
   });

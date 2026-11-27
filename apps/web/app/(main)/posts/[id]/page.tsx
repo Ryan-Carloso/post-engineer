@@ -25,7 +25,8 @@ import { PROVIDER_LABELS, scheduleAccountIds } from '@/lib/account-options';
 import { useI18n } from '@/lib/i18n/provider';
 import { useCopyText } from '@/lib/use-copy-text';
 import { Button } from '@/components/ui/button';
-import { STATUS_KEY, STATUS_STYLE } from '../status';
+import { STATUS_KEY, STATUS_STYLE, slotDisplayStatus } from '../status';
+import { useAccessQuery } from '@/lib/access-query';
 import { PostFailureNotice } from './post-failure-notice';
 
 export default function PostDetailPage() {
@@ -34,6 +35,8 @@ export default function PostDetailPage() {
   const id = typeof params.id === 'string' ? params.id : '';
 
   const postQuery = usePostDetailQuery(id);
+  const accessQuery = useAccessQuery();
+  const hasAccess = accessQuery.data?.active ?? true;
   const accountOptions = usePostAccountCards();
 
   const post: PostDetail | null = postQuery.data ?? null;
@@ -66,8 +69,8 @@ export default function PostDetailPage() {
     <div className="mx-auto max-w-3xl">
       <DetailHeader
         title={personaName}
-        statusLabel={t(STATUS_KEY[slot?.status ?? 'ready'] ?? 'posts.statusReady')}
-        statusStyle={STATUS_STYLE[slot?.status ?? 'ready'] ?? STATUS_STYLE.ready}
+        statusLabel={t(STATUS_KEY[slotDisplayStatus(slot?.status ?? 'ready', hasAccess)] ?? 'posts.statusReady')}
+        statusStyle={STATUS_STYLE[slotDisplayStatus(slot?.status ?? 'ready', hasAccess)] ?? STATUS_STYLE.ready}
       />
       {slot && slotDetail && (
         <SlotDetail
@@ -191,7 +194,7 @@ export const SlotDetail = ({
 
   const canEdit = slot.status === 'ready';
   const canDelete =
-    slot.status === 'ready' || slot.status === 'failed' || slot.status === 'awaiting_approval';
+    slot.status === 'ready' || slot.status === 'failed' || slot.status === 'expired' || slot.status === 'awaiting_approval';
   const mutationError =
     (updateTitle.isError ? updateTitle.error?.message : null) ??
     (deleteSlot.isError ? deleteSlot.error?.message : null);

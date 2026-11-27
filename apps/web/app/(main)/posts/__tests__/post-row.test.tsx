@@ -25,10 +25,10 @@ const ACCOUNTS = [
   { id: 'ig1', provider: 'instagram' as const, label: '@vivalave' },
 ];
 
-function renderRow(slot: Partial<ScheduledSlot> = {}, timeOnly = false, accounts = ACCOUNTS) {
+function renderRow(slot: Partial<ScheduledSlot> = {}, timeOnly = false, accounts = ACCOUNTS, hasAccess = true) {
   cleanup();
   return render(
-    <PostRow slot={{ ...SLOT, ...slot }} personaName="Viva Leve" accounts={accounts} locale="en" timeOnly={timeOnly} />,
+    <PostRow slot={{ ...SLOT, ...slot }} personaName="Viva Leve" accounts={accounts} locale="en" timeOnly={timeOnly} hasAccess={hasAccess} />,
   );
 }
 
@@ -103,6 +103,26 @@ describe('PostRow status', () => {
     expect(document.querySelector(`[data-status="${status}"]`)).toHaveTextContent(label);
   });
 
+  it('labels an expired post with its own group and dates it by the slot, never published_at', () => {
+    renderRow({ status: 'expired', publishedAt: '2030-06-02T09:30:00.000Z', slotAt: '2030-06-01T10:00:00.000Z' }, true);
+
+    expect(document.querySelector('[data-status="expired"]')).toHaveTextContent('posts.groupExpired');
+    expect(screen.getByText(formatTime('2030-06-01T10:00:00.000Z', 'en'))).toBeInTheDocument();
+    expect(screen.queryByText(formatTime('2030-06-02T09:30:00.000Z', 'en'))).not.toBeInTheDocument();
+  });
+
+  it('labels a ready post as paused when the account is inactive', () => {
+    renderRow({ status: 'ready' }, false, ACCOUNTS, false);
+
+    expect(document.querySelector('[data-status="paused"]')).toHaveTextContent('posts.groupPaused');
+  });
+
+  it('keeps a ready post scheduled when the account is active', () => {
+    renderRow({ status: 'ready' }, false, ACCOUNTS, true);
+
+    expect(document.querySelector('[data-status="ready"]')).toHaveTextContent('posts.groupScheduled');
+    expect(document.querySelector('[data-status="paused"]')).toBeNull();
+  });
 });
 
 describe('PostRow failure', () => {

@@ -5,6 +5,8 @@ import { RefreshCw, TriangleAlert } from 'lucide-react';
 import { useI18n } from '@/lib/i18n/provider';
 import type { TranslationKey } from '@/lib/i18n';
 import { RANGE_MAX_SLOTS, useHasAnyPostQuery, useScheduleRangeQuery } from '@/lib/schedule-range';
+import { useAccessQuery } from '@/lib/access-query';
+import { slotDisplayStatus } from './status';
 import { cn } from '@/lib/utils';
 import { PostsCalendar } from './calendar-provider';
 import { slotToCalendarEvent } from './calendar-adapter';
@@ -64,6 +66,9 @@ export default function PostsPage() {
   const daySectionRef = useRef<HTMLElement>(null);
   const joins = usePostJoins();
   const filters = usePostFilters(joins);
+  const accessQuery = useAccessQuery();
+  const hasAccess = accessQuery.data?.active ?? true;
+  const prevActiveRef = useRef<boolean | undefined>(undefined);
 
   const firstWeekday = FIRST_WEEKDAY[locale];
   const gridDays = useMemo(() => buildMonthGrid(cursor.year, cursor.month, firstWeekday), [cursor, firstWeekday]);
@@ -73,6 +78,15 @@ export default function PostsPage() {
     [view, monthRange, weekDate, firstWeekday],
   );
   const rangeQuery = useScheduleRangeQuery(monthKey(cursor.year, cursor.month), range.from, range.to, true);
+  const rangeRefetch = rangeQuery.refetch;
+  useEffect(() => {
+    const active = accessQuery.data?.active;
+    if (active === undefined) return;
+    if (prevActiveRef.current === true && active === false) {
+      void rangeRefetch();
+    }
+    prevActiveRef.current = active;
+  }, [accessQuery.data?.active, rangeRefetch]);
   const passes = filters.passes;
   const slotsByDay = useMemo(
     () => bucketByDay((rangeQuery.data?.slots ?? []).filter(passes)),
@@ -171,8 +185,12 @@ export default function PostsPage() {
   );
   const calendarEvents = useMemo(
     () =>
-      [...slotsByDay.values()].flatMap((slots) => slots.map((slot) => slotToCalendarEvent(slot, t('posts.unknownTitle')))),
-    [slotsByDay, t],
+      [...slotsByDay.values()].flatMap((slots) =>
+        slots.map((slot) =>
+          slotToCalendarEvent({ ...slot, status: slotDisplayStatus(slot.status, hasAccess) }, t('posts.unknownTitle')),
+        ),
+      ),
+    [slotsByDay, t, hasAccess],
   );
   const handleRefresh = () => {
     void rangeQuery.refetch();
@@ -314,7 +332,7 @@ export default function PostsPage() {
                         ) : (
                           <div className="divide-y divide-line rounded-xl border border-line bg-card px-3">
                             {selectedSlots.map((slot) => (
-                              <DayListRow key={slot.id} slot={slot} joins={joins} />
+                              <DayListRow key={slot.id} slot={slot} joins={joins} hasAccess={hasAccess} />
                             ))}
                           </div>
                         )}
@@ -349,7 +367,7 @@ export default function PostsPage() {
                         ) : (
                           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
                             {selectedSlots.map((slot) => (
-                              <SlotCard key={slot.id} slot={slot} joins={joins} timeOnly />
+                              <SlotCard key={slot.id} slot={slot} joins={joins} timeOnly hasAccess={hasAccess} />
                             ))}
                           </div>
                         )}

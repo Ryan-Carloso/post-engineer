@@ -7,6 +7,8 @@ export const CALENDAR_GROUP_EVENT_COLOR: Record<CalendarGroup, EventColor> = {
   published: 'green',
   inProgress: 'blue',
   scheduled: 'gray',
+  expired: 'gray',
+  paused: 'gray',
 };
 
 export type AdapterSlot = Pick<ScheduledSlot, 'id' | 'scheduleId' | 'slotAt' | 'title'> & { status: string };

@@ -217,7 +217,7 @@ export function PostFiltersBar({
   );
 }
 
-export function SlotCard({ slot, joins, timeOnly = false }: { slot: ScheduledSlot; joins: PostJoins; timeOnly?: boolean }) {
+export function SlotCard({ slot, joins, timeOnly = false, hasAccess = true }: { slot: ScheduledSlot; joins: PostJoins; timeOnly?: boolean; hasAccess?: boolean }) {
   const { t, locale } = useI18n();
   const schedule = joins.scheduleById.get(slot.scheduleId);
   const personaId = schedule?.personaId ?? null;
@@ -229,6 +229,7 @@ export function SlotCard({ slot, joins, timeOnly = false }: { slot: ScheduledSlo
       accounts={resolveSlotAccounts(schedule, joins.accountOptions)}
       locale={locale}
       timeOnly={timeOnly}
+      hasAccess={hasAccess}
     />
   );
 }

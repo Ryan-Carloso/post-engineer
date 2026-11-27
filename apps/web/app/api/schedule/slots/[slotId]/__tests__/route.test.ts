@@ -15,6 +15,9 @@ vi.mock('@/lib/supabase/server', () => ({
 vi.mock('@/lib/supabase/service', () => ({
   createSupabaseServiceClient: vi.fn(),
 }));
+vi.mock('@/lib/access', () => ({
+  assertAccessActive: vi.fn(async () => null),
+}));
 vi.mock('@/lib/rate-limit', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/rate-limit')>();
   return { ...actual, applyRateLimit: vi.fn().mockResolvedValue(null) };
@@ -22,6 +25,7 @@ vi.mock('@/lib/rate-limit', async (importOriginal) => {
 
 import { DELETE, GET, PATCH } from '../route';
 import { DeleteSlotResponseSchema, GetSlotResponseSchema, UpdateSlotResponseSchema } from '@/lib/contracts/schedule';
+import { assertAccessActive } from '@/lib/access';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -145,6 +149,26 @@ describe('DELETE /api/schedule/slots/[slotId]', () => {
 
     expect(response.status).toBe(200);    const body = (await response.json()) as { success: boolean };
     expect(DeleteSlotResponseSchema.safeParse(body).success).toBe(true);
+    expect(body.success).toBe(true);
+    expect(client.rpc).toHaveBeenCalledWith('delete_slot_if_not_last', {
+      p_slot_id: 'slot-1',
+      p_user_id: USER_ID,
+    });
+  });
+
+  it('deletes an expired slot owned by the user', async () => {
+    const client = mockSlotsClient({
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'expired', title: 'T' },
+      schedule: { id: 's1', user_id: USER_ID },
+      rpcResult: 'deleted',
+    });
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await deleteSlot(SLOT_ID);
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { success: boolean };
     expect(body.success).toBe(true);
     expect(client.rpc).toHaveBeenCalledWith('delete_slot_if_not_last', {
       p_slot_id: 'slot-1',
@@ -393,6 +417,22 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
     expect(response.status).toBe(200);
     const body = (await response.json()) as { success: boolean; slotAt: string };
     expect(body).toEqual({ success: true, slotAt });
+  });
+
+  it('rejects rescheduling with 402 when the trial is inactive but allows a title edit', async () => {
+    const slotAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const client = mockSlotsClient({
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'ready', title: 'Old' },
+      schedule: { id: 's1', user_id: USER_ID },
+    });
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    vi.mocked(assertAccessActive).mockResolvedValueOnce(NextResponse.json({ success: false, error: 'Trial expired' }, { status: 402 }));
+    const blocked = await patchSlot(SLOT_ID, { slotAt });
+    expect(blocked.status).toBe(402);
+    expect(client.calls.some((c) => c.op === 'update')).toBe(false);
+    const allowed = await patchSlot(SLOT_ID, { title: 'New title' });
+    expect(allowed.status).toBe(200);
   });
 
   it('edits the title and reschedules in one call', async () => {

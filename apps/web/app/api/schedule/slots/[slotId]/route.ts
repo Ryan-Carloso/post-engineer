@@ -11,6 +11,7 @@ import { validateScheduleWindow } from '@/lib/schedule-window';
 import { hasExplicitOffset } from '@/lib/timezone';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
+import { assertAccessActive } from '@/lib/access';
 
 interface SlotRow {
   id: string;
@@ -145,7 +146,7 @@ async function deleteHandler(
   if ('error' in owned) return owned.error;
   const slot = owned.slot;
 
-  const DELETABLE_STATUSES = new Set(['ready', 'failed', 'awaiting_approval']);
+  const DELETABLE_STATUSES = new Set(['ready', 'failed', 'expired', 'awaiting_approval']);
   if (!DELETABLE_STATUSES.has(slot.status)) {
     return apiErrorResponse(
       409,
@@ -238,6 +239,10 @@ async function patchHandler(
       route: 'PATCH /api/schedule/slots',
       metadata: { status: slot.status },
     });
+  }
+  if (rawSlotAt !== undefined) {
+    const blocked = await assertAccessActive(auth.userId, { route: 'PATCH /api/schedule/slots' });
+    if (blocked) return blocked;
   }
   const patch: { title?: string; slot_at?: string } = {};
   let title: string | undefined;

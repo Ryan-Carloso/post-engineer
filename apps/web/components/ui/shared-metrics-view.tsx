@@ -69,8 +69,8 @@ function PostRow({ post, formatDateTime }: { post: SharePost; formatDateTime: (i
           </span>
         </p>
       </div>
-      <span className={cn('shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold', STATUS_STYLE[post.status])}>
-        {t(STATUS_KEY[post.status])}
+      <span className={cn('shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold', STATUS_STYLE[post.status] ?? STATUS_STYLE.expired)}>
+        {t(STATUS_KEY[post.status] ?? 'posts.statusExpired')}
       </span>
     </li>
   );

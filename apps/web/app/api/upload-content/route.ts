@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { assertTrialActive } from '@/lib/trial';
+import { assertAccessActive } from '@/lib/access';
 import type { ApprovalMode } from '@/lib/api-keys';
 import { logger } from '@/lib/logger';
 import { ValidationError } from '@/lib/errors';
@@ -102,8 +102,8 @@ async function postHandler(request: NextRequest) {
     const limited = await applyRateLimit(request, rateProfile, userId);
     if (limited) return limited;
     if (upload.kind === 'session') {
-      const trialBlocked = await assertTrialActive(userId, { route: 'POST /api/upload-content' });
-      if (trialBlocked) return trialBlocked;
+      const blocked = await assertAccessActive(userId, { route: 'POST /api/upload-content' });
+      if (blocked) return blocked;
     }
 
     logger.info('[upload-content] request recebido', {

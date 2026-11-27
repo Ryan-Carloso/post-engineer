@@ -140,7 +140,7 @@ async function getHandler(request: Request): Promise<NextResponse> {
     .from('scheduled_posts')
     .select(RESULT_SELECT)
     .eq('user_id', userId)
-    .in('status', ['published', 'failed'])
+    .in('status', ['published', 'failed', 'expired'])
     .order('slot_at', { ascending: false });
   let publishingQuery = supabase
     .from('scheduled_posts')

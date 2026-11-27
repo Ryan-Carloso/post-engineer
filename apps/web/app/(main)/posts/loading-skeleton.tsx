@@ -41,7 +41,7 @@ export function CalendarLoadingSkeleton({ weeks }: { weeks: number }) {
             ))}
           </div>
         </div>
-        <div aria-hidden data-skeleton-panel className="mt-6 min-w-0 xl:mt-0 xl:min-h-[22rem]">
+        <div aria-hidden data-skeleton-panel className="mt-6 min-w-0 xl:mt-0 xl:min-h-88">
           <div className={`h-5 w-64 max-w-full rounded ${SHAPE}`} />
           <div className="mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
             {Array.from({ length: 2 }, (_, i) => (

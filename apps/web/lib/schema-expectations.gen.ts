@@ -11,6 +11,6 @@ export const REQUIRED_COLUMNS: Readonly<Record<string, readonly string[]>> = {
   schedules: ['facebook_account_ids', 'fanvue_account_ids', 'pinterest_account_ids', 'pinterest_board_id', 'publish_mode', 'rumble_account_ids', 'telegram_account_ids', 'threads_account_ids', 'threespeak_account_ids'],
   social_accounts: ['needs_reconnect'],
   user_api_keys: ['approval_mode'],
-  user_profiles: ['trial_ends_at'],
+  user_profiles: ['access_until', 'subscription_status', 'trial_ends_at'],
   user_prompts: ['verified'],
 };
