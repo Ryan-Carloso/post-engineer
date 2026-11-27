@@ -1,6 +1,6 @@
 import type { SocialProvider } from '@/lib/providers/registry';
 
-export const SHARE_POST_STATUSES = ['ready', 'publishing', 'published', 'failed'] as const;
+export const SHARE_POST_STATUSES = ['ready', 'publishing', 'published', 'failed', 'expired'] as const;
 export type SharePostStatus = (typeof SHARE_POST_STATUSES)[number];
 
 export function isSharePostStatus(value: unknown): value is SharePostStatus {

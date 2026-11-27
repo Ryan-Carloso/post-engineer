@@ -8,6 +8,7 @@ import { personaScopeOf } from '@/lib/post-detail';
 import { resolveSlotUuid } from '@/lib/schedule-slot-id';
 import { loadOwnedSlot } from '../route';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
+import { ERROR_CODES, errorMessage } from '@/lib/error-codes';
 import { assertAccessActive } from '@/lib/access';
 import { createSupabaseVideoUploadStore } from '@/lib/videos/signed-upload';
 import { SCHEDULED_UPLOAD_EXPIRY_MS } from '@/lib/videos/upload-expiry';

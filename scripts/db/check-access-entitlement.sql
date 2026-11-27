@@ -1,4 +1,4 @@
--- Behaviour check for 089_access-entitlement.sql.
+-- Behaviour check for 091_access-entitlement.sql.
 -- Run as a superuser after the migration chain, on a database whose
 -- anon/authenticated/service_role roles exist (same fixture as
 -- check-core-tables-rls.sql). Rolls the fixture back. Exits non-zero when an

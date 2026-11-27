@@ -1,4 +1,4 @@
--- 089 — publish entitlement, independent of how the account got there.
+-- 091 — publish entitlement, independent of how the account got there.
 --
 -- Before: publishing was gated only by user_profiles.trial_ends_at, so a
 -- paying customer who cancelled kept publishing forever, and a refunded or

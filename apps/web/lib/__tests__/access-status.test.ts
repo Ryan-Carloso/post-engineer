@@ -89,9 +89,9 @@ describe('SUBSCRIPTION_STATUSES', () => {
     expect(isSubscriptionStatus('refunded')).toBe(false);
   });
 
-  it('matches the CHECK constraint and the function guard in migration 089', () => {
+  it('matches the CHECK constraint and the function guard in migration 091', () => {
     const migration = readFileSync(
-      join(findRepoRoot(import.meta.url), 'supabase', 'migrations', '089_access-entitlement.sql'),
+      join(findRepoRoot(import.meta.url), 'supabase', 'migrations', '091_access-entitlement.sql'),
       'utf8',
     );
     const check = /subscription_status in \(([^)]*)\)/.exec(migration);
@@ -107,7 +107,7 @@ describe('SUBSCRIPTION_STATUSES', () => {
 
   it('keeps the dunning grace and the trial backfill in the migration', () => {
     const migration = readFileSync(
-      join(findRepoRoot(import.meta.url), 'supabase', 'migrations', '089_access-entitlement.sql'),
+      join(findRepoRoot(import.meta.url), 'supabase', 'migrations', '091_access-entitlement.sql'),
       'utf8',
     );
     expect(migration).toContain("v_dunning_grace constant interval := interval '3 days'");

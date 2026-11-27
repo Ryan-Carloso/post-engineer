@@ -10,7 +10,7 @@ const root = findRepoRoot(import.meta.url);
 const read = (...parts: string[]): string => readFileSync(join(root, ...parts), 'utf8');
 
 const migration = read('supabase', 'migrations', '080_share-links.sql');
-const latestShareWeekPosts = read('supabase', 'migrations', '088_expired-slots.sql');
+const latestShareWeekPosts = read('supabase', 'migrations', '090_expired-slots.sql');
 
 function functionBody(name: string, source = migration): string {
   const start = source.indexOf(`create or replace function public.${name}(`);
