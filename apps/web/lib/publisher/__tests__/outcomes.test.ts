@@ -4,6 +4,7 @@ import {
   classifyFailure,
   exhaustOutcome,
   failOutcome,
+  hasLiveOutcome,
   indexOutcomes,
   isDue,
   isTerminal,
@@ -196,6 +197,17 @@ describe('isTerminal, isDue and priorAttempts', () => {
     expect(priorAttempts(undefined, 2, true)).toBe(2);
     expect(priorAttempts(outcome({ attempts: 2 }), 5, false)).toBe(2);
     expect(priorAttempts(outcome({ attempts: null }), 4, false)).toBe(4);
+  });
+});
+
+describe('hasLiveOutcome', () => {
+  it('is false with no outcomes or only terminal ones, true while any account still has live work', () => {
+    expect(hasLiveOutcome([])).toBe(false);
+    expect(hasLiveOutcome([outcome({ status: 'published' })])).toBe(true);
+    expect(hasLiveOutcome([outcome({ status: 'retrying' })])).toBe(true);
+    expect(hasLiveOutcome([outcome({ status: 'failed', code: 'transient', attempts: 2 })])).toBe(false);
+    expect(hasLiveOutcome([outcome({ status: 'failed', requiresUser: true })])).toBe(false);
+    expect(hasLiveOutcome([outcome({ status: 'failed', code: 'publish_rejected' })])).toBe(false);
   });
 });
 

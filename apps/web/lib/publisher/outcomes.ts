@@ -86,6 +86,10 @@ export function isTerminal(outcome: AccountOutcome | undefined): boolean {
   return attemptsOf(outcome) >= MAX_PUBLISH_ATTEMPTS;
 }
 
+export function hasLiveOutcome(outcomes: AccountOutcome[]): boolean {
+  return outcomes.some((outcome) => outcome.status === 'published' || outcome.status === 'retrying');
+}
+
 export function priorAttempts(
   outcome: AccountOutcome | undefined,
   slotAttempts: number,

@@ -12,7 +12,7 @@ import {
   imageCleanup,
   resolveExistingMedia,
 } from '@/lib/publisher/existing-media';
-import { nextDelaySeconds } from '@/lib/publisher/outcomes';
+import { hasLiveOutcome, nextDelaySeconds } from '@/lib/publisher/outcomes';
 import { PublishPlanError, validatePublishPlan } from '@/lib/publisher/plan';
 import { publishSlotAccounts, type PublishFn } from '@/lib/publisher/publish-accounts';
 import { errorMessageOf, scrubErrorText } from '@/lib/publisher/scrub-error';
@@ -146,76 +146,87 @@ export async function publishSlot(deps: PublishSlotDeps, slot: PublishSlot): Pro
   if (resolved === null) return false;
   mediaCleanup = resolved.cleanup ?? mediaCleanup;
 
-  const result = await publishSlotAccounts({
-    slot,
-    media: resolved.media,
-    title,
-    description,
-    publish: deps.publish,
-    persistOutcomes: (outcomes, fields) => store.updateSlot(slot.id, { publish_outcomes: outcomes, ...fields }),
-    clock,
-    logId: deps.newLogId(),
-  });
-
-  for (const failure of result.providerFailures) {
-    deps.track('publish_provider_failed', providerFailedProperties(slot, failure));
-  }
-  for (const notice of result.newUserNotices) void deps.discord(userActionMessage(notice));
-
-  const outcomeFields = { publish_outcomes: result.outcomes, publish_attempts: result.maxAttempts };
-  if (result.anyRetrying) {
-    await store.updateSlot(slot.id, {
-      status: SLOT_PUBLISHING,
-      publish_not_before: soonestRetry(result.outcomes, clock()),
-      ...outcomeFields,
+  try {
+    const result = await publishSlotAccounts({
+      slot,
+      media: resolved.media,
+      title,
+      description,
+      publish: deps.publish,
+      persistOutcomes: (outcomes, fields) => store.updateSlot(slot.id, { publish_outcomes: outcomes, ...fields }),
+      clock,
+      logId: deps.newLogId(),
     });
-    deps.track(
-      'video_publish_failed',
-      publishFailedProperties(slot, result.failureReason, { retryable: true, attempts: result.maxAttempts }),
-    );
-    return false;
-  }
 
-  if (result.anyPublished) {
-    await store.updateSlot(slot.id, {
-      status: SLOT_PUBLISHED,
-      published_at: clock().toISOString(),
-      publish_not_before: null,
-      ...outcomeFields,
+    for (const failure of result.providerFailures) {
+      deps.track('publish_provider_failed', providerFailedProperties(slot, failure));
+    }
+    for (const notice of result.newUserNotices) void deps.discord(userActionMessage(notice));
+
+    const outcomeFields = { publish_outcomes: result.outcomes, publish_attempts: result.maxAttempts };
+    if (result.anyRetrying) {
+      await store.updateSlot(slot.id, {
+        status: SLOT_PUBLISHING,
+        publish_not_before: soonestRetry(result.outcomes, clock()),
+        ...outcomeFields,
+      });
+      deps.track(
+        'video_publish_failed',
+        publishFailedProperties(slot, result.failureReason, { retryable: true, attempts: result.maxAttempts }),
+      );
+      return false;
+    }
+
+    if (result.anyPublished) {
+      await store.updateSlot(slot.id, {
+        status: SLOT_PUBLISHED,
+        published_at: clock().toISOString(),
+        publish_not_before: null,
+        ...outcomeFields,
+      });
+      await cleanupExistingMedia(store, slot.id, mediaCleanup);
+      deps.track('video_published', { ...publishTrackingContext(slot), providers: result.publishedProviders });
+      void deps.discord(slotPublishedMessage(personaName, title, result.publishedProviders));
+      if (result.failedProviders.length > 0) {
+        deps.track(
+          'video_publish_partial_failure',
+          partialFailureProperties(slot, result.failedProviders, result.publishedProviders, result.firstError),
+        );
+        if (result.nonUserFailedProviders.length > 0) {
+          void deps.discord(partialPublishMessage(slot.id, result.nonUserFailedProviders));
+        }
+        void deps.mailPartial({
+          userId: slot.userId,
+          slotId: slot.id,
+          title,
+          persona: slot.schedule.personaName,
+          failures: failedOutcomes(result.outcomes),
+        });
+      }
+      return true;
+    }
+
+    const reason = scrubErrorText(result.failureReason, 200);
+    await failSlotPermanently(deps, slot, `publish failed after ${result.maxAttempts} attempts: ${reason}`, {
+      attempts: result.maxAttempts,
+      emitFailedEvent: false,
+      outcomes: result.outcomes,
     });
     await cleanupExistingMedia(store, slot.id, mediaCleanup);
-    deps.track('video_published', { ...publishTrackingContext(slot), providers: result.publishedProviders });
-    void deps.discord(slotPublishedMessage(personaName, title, result.publishedProviders));
-    if (result.failedProviders.length > 0) {
-      deps.track(
-        'video_publish_partial_failure',
-        partialFailureProperties(slot, result.failedProviders, result.publishedProviders, result.firstError),
-      );
-      if (result.nonUserFailedProviders.length > 0) {
-        void deps.discord(partialPublishMessage(slot.id, result.nonUserFailedProviders));
+    deps.track(
+      'video_publish_failed',
+      publishFailedProperties(slot, result.failureReason, { retryable: false, attempts: result.maxAttempts }),
+    );
+    void deps.discord(slotFailedMessage(personaName, title, reason));
+    return false;
+  } catch (error) {
+    if (!hasLiveOutcome(slot.outcomes)) {
+      try {
+        await cleanupExistingMedia(store, slot.id, mediaCleanup);
+      } catch (cleanupError) {
+        logger.error('[publisher] slot media cleanup failed after publish error', cleanupError, { slotId: slot.id });
       }
-      void deps.mailPartial({
-        userId: slot.userId,
-        slotId: slot.id,
-        title,
-        persona: slot.schedule.personaName,
-        failures: failedOutcomes(result.outcomes),
-      });
     }
-    return true;
+    throw error;
   }
-
-  const reason = scrubErrorText(result.failureReason, 200);
-  await failSlotPermanently(deps, slot, `publish failed after ${result.maxAttempts} attempts: ${reason}`, {
-    attempts: result.maxAttempts,
-    emitFailedEvent: false,
-    outcomes: result.outcomes,
-  });
-  await cleanupExistingMedia(store, slot.id, mediaCleanup);
-  deps.track(
-    'video_publish_failed',
-    publishFailedProperties(slot, result.failureReason, { retryable: false, attempts: result.maxAttempts }),
-  );
-  void deps.discord(slotFailedMessage(personaName, title, reason));
-  return false;
 }

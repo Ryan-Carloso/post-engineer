@@ -1,5 +1,6 @@
 import { cleanupExistingMedia, expiredSlotCleanup } from '@/lib/publisher/existing-media';
 import { isConnectionFailure, type OutageLogger } from '@/lib/publisher/outage';
+import { hasLiveOutcome } from '@/lib/publisher/outcomes';
 import { errorMessageOf, scrubErrorText } from '@/lib/publisher/scrub-error';
 import type { PublisherStore } from '@/lib/publisher/store-types';
 import type { PublishSlot } from '@/lib/publisher/types';
@@ -45,12 +46,16 @@ async function publishClaimed(deps: RunDueDeps, slot: PublishSlot): Promise<'pub
     return (await deps.publishSlot(slot)) ? 'published' : 'done';
   } catch (error) {
     if (isConnectionFailure(error)) throw error;
-    deps.logger.error('[publisher] slot failed unexpectedly', error, { slotId: slot.id });
-    try {
-      await deps.failSlot(slot, `unexpected publish error: ${scrubErrorText(errorMessageOf(error), 200)}`);
-    } catch (failError) {
-      if (isConnectionFailure(failError)) throw failError;
-      deps.logger.error('[publisher] could not fail the slot', failError, { slotId: slot.id });
+    if (hasLiveOutcome(slot.outcomes)) {
+      deps.logger.error('[publisher] slot failed unexpectedly, leaving it publishing for resume', error, { slotId: slot.id });
+    } else {
+      deps.logger.error('[publisher] slot failed unexpectedly', error, { slotId: slot.id });
+      try {
+        await deps.failSlot(slot, `unexpected publish error: ${scrubErrorText(errorMessageOf(error), 200)}`);
+      } catch (failError) {
+        if (isConnectionFailure(failError)) throw failError;
+        deps.logger.error('[publisher] could not fail the slot', failError, { slotId: slot.id });
+      }
     }
     return 'failed';
   }

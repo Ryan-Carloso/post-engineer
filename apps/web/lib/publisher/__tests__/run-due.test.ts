@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('server-only', () => ({}));
 
 import { runPublishDue, type RunDueDeps } from '@/lib/publisher/run-due';
+import { blankOutcome } from '@/lib/publisher/outcomes';
 import type { ExpiredSlot } from '@/lib/publisher/store-types';
 import type { PublishSlot } from '@/lib/publisher/types';
 import { NOW, SLOT_ID, USER_ID, UPLOAD_ID, makeSlot, makeStore, readyUpload } from './helpers';
@@ -108,6 +109,25 @@ describe('runPublishDue', () => {
     expect(deps.failSlot).toHaveBeenCalledTimes(1);
     expect(deps.failSlot).toHaveBeenCalledWith(expect.objectContaining({ id: 'a' }), 'unexpected publish error: bad row token=[redacted]');
     expect(logger.error).toHaveBeenCalledWith('[publisher] slot failed unexpectedly', expect.any(Error), { slotId: 'a' });
+  });
+
+  it('does not fail a slot whose accounts already published when the publish throws', async () => {
+    const published = { ...blankOutcome('youtube', 'yt-1', `${UPLOAD_ID}.mp4`, 1), status: 'published' };
+    const { deps, logger } = build({}, [makeSlot({ id: 'a', outcomes: [published] })]);
+    vi.mocked(deps.publishSlot).mockRejectedValueOnce(new Error('bad row'));
+    const report = await runPublishDue(deps);
+    expect(report).toMatchObject({ claimed: 1, published: 0, failed: 1 });
+    expect(deps.failSlot).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledWith('[publisher] slot failed unexpectedly, leaving it publishing for resume', expect.any(Error), { slotId: 'a' });
+  });
+
+  it('does not fail a slot with a retry parked when the publish throws', async () => {
+    const retrying = blankOutcome('youtube', 'yt-1', `${UPLOAD_ID}.mp4`, 1);
+    const { deps } = build({}, [makeSlot({ id: 'a', outcomes: [retrying] })]);
+    vi.mocked(deps.publishSlot).mockRejectedValueOnce(new Error('bad row'));
+    const report = await runPublishDue(deps);
+    expect(report).toMatchObject({ claimed: 1, failed: 1 });
+    expect(deps.failSlot).not.toHaveBeenCalled();
   });
 
   it('logs and continues when failing the slot itself fails', async () => {

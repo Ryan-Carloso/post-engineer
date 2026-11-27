@@ -156,6 +156,69 @@ describe('publishSlot', () => {
     expect(events.at(-1)).toEqual(['video_publish_failed', expect.objectContaining({ retryable: true, attempts: 1 })]);
   });
 
+  it('keeps the claimed bytes and rethrows when the published write fails after a successful publish', async () => {
+    const { deps, store } = build(publishedOk());
+    const original = vi.mocked(store.updateSlot).getMockImplementation()!;
+    vi.mocked(store.updateSlot).mockImplementation(async (slotId, fields) => {
+      if (fields.status === 'published') throw new Error('db down');
+      return original(slotId, fields);
+    });
+    await expect(publishSlot(deps, makeSlot())).rejects.toThrow('db down');
+    expect(store.removeStorageObject).not.toHaveBeenCalled();
+  });
+
+  it('removes the claimed bytes and rethrows when the failed write fails after every provider failed', async () => {
+    const publish = vi.fn<PublishFn>(async () => rejected(400, 'publish_rejected', 'bad media'));
+    const { deps, store } = build(publish);
+    const original = vi.mocked(store.updateSlot).getMockImplementation()!;
+    vi.mocked(store.updateSlot).mockImplementation(async (slotId, fields) => {
+      if (fields.status === 'failed') throw new Error('db down');
+      return original(slotId, fields);
+    });
+    await expect(publishSlot(deps, makeSlot())).rejects.toThrow('db down');
+    expect(store.removeStorageObject).toHaveBeenCalledWith('videos', `${USER_ID}/${UPLOAD_ID}.mp4`);
+  });
+
+  it('still reports the original error when the cleanup after a failed write fails too', async () => {
+    const publish = vi.fn<PublishFn>(async () => rejected(400, 'publish_rejected', 'bad media'));
+    const { deps, store } = build(publish);
+    const original = vi.mocked(store.updateSlot).getMockImplementation()!;
+    vi.mocked(store.updateSlot).mockImplementation(async (slotId, fields) => {
+      if (fields.status === 'failed') throw new Error('db down');
+      return original(slotId, fields);
+    });
+    vi.mocked(store.removeStorageObject).mockRejectedValue(new Error('bucket down'));
+    await expect(publishSlot(deps, makeSlot())).rejects.toThrow('db down');
+    expect(logger.error).toHaveBeenCalledWith('[publisher] slot media cleanup failed after publish error', expect.any(Error), { slotId: SLOT_ID });
+  });
+
+  it('keeps the claimed bytes and rethrows when the retry parking write fails', async () => {
+    const publish = vi.fn<PublishFn>(async () => rejected(503, 'transient', 'upstream busy'));
+    const { deps, store } = build(publish);
+    const original = vi.mocked(store.updateSlot).getMockImplementation()!;
+    let calls = 0;
+    vi.mocked(store.updateSlot).mockImplementation(async (slotId, fields) => {
+      calls += 1;
+      if (calls === 4) throw new Error('db down');
+      return original(slotId, fields);
+    });
+    await expect(publishSlot(deps, makeSlot())).rejects.toThrow('db down');
+    expect(store.removeStorageObject).not.toHaveBeenCalled();
+  });
+
+  it('keeps the claimed bytes and rethrows when persisting outcomes fails mid-publish', async () => {
+    const { deps, store } = build(publishedOk());
+    const original = vi.mocked(store.updateSlot).getMockImplementation()!;
+    let calls = 0;
+    vi.mocked(store.updateSlot).mockImplementation(async (slotId, fields) => {
+      calls += 1;
+      if (calls === 2) throw new Error('db down');
+      return original(slotId, fields);
+    });
+    await expect(publishSlot(deps, makeSlot())).rejects.toThrow('db down');
+    expect(store.removeStorageObject).not.toHaveBeenCalled();
+  });
+
   it('picks the earliest retry time across accounts', async () => {
     const soon = { ...blankOutcome('youtube', 'yt-1', `${UPLOAD_ID}.mp4`, 1), retryAt: '2026-11-27T12:05:00.000Z' };
     const later = { ...blankOutcome('youtube', 'yt-2', `${UPLOAD_ID}.mp4`, 1), retryAt: '2026-11-27T12:20:00.000Z' };
