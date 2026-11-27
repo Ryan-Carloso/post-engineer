@@ -24,9 +24,7 @@ export const SaveToolConfigBodySchema = z.object({
   keys: ToolConfigKeysSchema,
 });
 
-const GetToolConfigResponseSchema = z.object({
-  success: z.literal(true),
-  configured: z.boolean(),
+const StoredToolConfigShape = {
   searchTool: ToolConfigSearchToolSchema.nullable(),
   stockSources: z.array(ToolConfigStockSourceSchema),
   keysPresent: z.object({
@@ -43,27 +41,18 @@ const GetToolConfigResponseSchema = z.object({
     pixabay: z.string().nullable(),
     coverr: z.string().nullable(),
   }),
+};
+
+const GetToolConfigResponseSchema = z.object({
+  success: z.literal(true),
+  configured: z.boolean(),
+  ...StoredToolConfigShape,
 });
 
 const SaveToolConfigResponseSchema = z.object({
   success: z.literal(true),
   configured: z.literal(true),
-  searchTool: ToolConfigSearchToolSchema.nullable(),
-  stockSources: z.array(ToolConfigStockSourceSchema),
-  keysPresent: z.object({
-    tavily: z.boolean(),
-    exa: z.boolean(),
-    pexels: z.boolean(),
-    pixabay: z.boolean(),
-    coverr: z.boolean(),
-  }),
-  keysLast4: z.object({
-    tavily: z.string().nullable(),
-    exa: z.string().nullable(),
-    pexels: z.string().nullable(),
-    pixabay: z.string().nullable(),
-    coverr: z.string().nullable(),
-  }),
+  ...StoredToolConfigShape,
 });
 
 export const getToolConfig = defineEndpoint({

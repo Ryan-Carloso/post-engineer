@@ -11,15 +11,15 @@ import { logger } from '@/lib/logger';
 import { parsePatchBody } from './patch-body';
 import { parsePersonaIdQuery } from '@/lib/contracts/personas';
 import { collectPersonaStoragePaths } from './delete-storage-paths';
-import { errorResponse } from './error-response';
 import { personaValidationError } from './validation-error';
 import { savePersonaBinding } from './create-binding';
 import { uploadFile } from './upload-photo';
-import { apiErrorResponse } from '@/lib/api-error';
+import { apiErrorResponse, routeErrorResponse } from '@/lib/api-error';
 import { ERROR_CODES } from '@/lib/error-codes';
 import { trackApiEvent } from '@/lib/analytics';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
+import { scopedPersonaIdQuery } from './persona-id-query';
 import { buildPersonaInsertRow } from './create-row';
 import { applyPersonaPatchFields } from './patch-updates';
 
@@ -29,7 +29,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   const limited = await applyRateLimit(request, RATE_LIMITS.personaWrite, auth.userId);
   if (limited) return limited;
   if (isScopedApiKey(auth)) {
-    return errorResponse(403, 'This API key is restricted to specific personas and cannot create new ones.', 'POST /api/persona');
+    return routeErrorResponse(403, 'This API key is restricted to specific personas and cannot create new ones.', 'POST /api/persona');
   }
   const user = { id: auth.userId };
   const supabase = auth.isApiKey === true || auth.isOAuth === true
@@ -54,7 +54,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
       ? await uploadFile(supabase, user.id, personaId, body.photo, body.photoExtension)
       : null;
   if (body.photo && !photoPath) {
-    return errorResponse(500, 'Failed to upload photo.', 'POST /api/persona');
+    return routeErrorResponse(500, 'Failed to upload photo.', 'POST /api/persona');
   }
 
   const { data: persona, error: insertError } = await createSupabaseServiceClient()
@@ -70,7 +70,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
 
   if (insertError || !persona) {
     await rollbackStoragePath(supabase, photoPath);
-    return errorResponse(500, 'Failed to create persona.', 'POST /api/persona', {
+    return routeErrorResponse(500, 'Failed to create persona.', 'POST /api/persona', {
       cause: insertError ? { code: insertError.code } : undefined,
     });
   }
@@ -83,7 +83,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     photoPath,
   );
   if (!binding.ok) {
-    return errorResponse(binding.status, binding.error, 'POST /api/persona', { code: binding.code });
+    return routeErrorResponse(binding.status, binding.error, 'POST /api/persona', { code: binding.code });
   }
 
   trackApiEvent('persona_created', { personaId: persona.id });
@@ -104,7 +104,7 @@ async function patchHandler(request: Request): Promise<NextResponse> {
   if (!parsedPersonaId.ok) return personaValidationError(parsedPersonaId.error, 'PATCH /api/persona', { field: 'personaId' });
   const personaId = parsedPersonaId.query.personaId;
   if (!isPersonaAllowed(auth.personaIds, personaId)) {
-    return errorResponse(403, 'This API key does not have access to this persona.', 'PATCH /api/persona');
+    return routeErrorResponse(403, 'This API key does not have access to this persona.', 'PATCH /api/persona');
   }
 
   const parsedPatch = await parsePatchBody(request);
@@ -117,7 +117,7 @@ async function patchHandler(request: Request): Promise<NextResponse> {
     .eq('id', personaId)
     .eq('user_id', user.id)
     .single();
-  if (selectError || !persona) return errorResponse(404, 'Persona not found.', 'PATCH /api/persona');
+  if (selectError || !persona) return routeErrorResponse(404, 'Persona not found.', 'PATCH /api/persona');
 
   const updates: Database['public']['Tables']['personas']['Update'] = {};
   const stalePaths: string[] = [];
@@ -131,7 +131,7 @@ async function patchHandler(request: Request): Promise<NextResponse> {
 
   if (patch.photo && patch.photoExtension) {
     const photoPath = await uploadFile(supabase, user.id, personaId, patch.photo, patch.photoExtension);
-    if (!photoPath) return errorResponse(500, 'Failed to upload photo.', 'PATCH /api/persona');
+    if (!photoPath) return routeErrorResponse(500, 'Failed to upload photo.', 'PATCH /api/persona');
     updates.photo_path = photoPath;
     updates.avatar_url = null;
     replacementPhotoPath = photoPath;
@@ -154,7 +154,7 @@ async function patchHandler(request: Request): Promise<NextResponse> {
     if (replacementPhotoPath && replacementPhotoPath !== persona.photo_path) {
       await rollbackStoragePath(supabase, replacementPhotoPath);
     }
-    return errorResponse(500, 'Failed to update persona.', 'PATCH /api/persona');
+    return routeErrorResponse(500, 'Failed to update persona.', 'PATCH /api/persona');
   }
 
   if (stalePaths.length > 0) {
@@ -178,22 +178,9 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
     ? createSupabaseServiceClient()
     : await createSupabaseServerClient();
 
-  const parsedPersonaId = parsePersonaIdQuery(request.url);
-  if (!parsedPersonaId.ok) {
-    return apiErrorResponse(400, parsedPersonaId.error, {
-      route: ROUTE,
-      code: ERROR_CODES.VALIDATION_FAILED,
-      field: 'personaId',
-    });
-  }
-  const personaId = parsedPersonaId.query.personaId;
-  if (!isPersonaAllowed(auth.personaIds, personaId)) {
-    return apiErrorResponse(403, 'This API key cannot access this persona.', {
-      route: ROUTE,
-      code: ERROR_CODES.PERSONA_SCOPE_DENIED,
-      field: 'personaId',
-    });
-  }
+  const requested = scopedPersonaIdQuery(request, auth.personaIds, ROUTE);
+  if ('error' in requested) return requested.error;
+  const personaId = requested.personaId;
 
   const { data: persona, error: selectError } = await supabase
     .from('personas')

@@ -9,20 +9,9 @@ import { extractFromDiff } from './extract.mjs';
 import { checkDenylist } from './denylist.mjs';
 import { reviewNames } from './llm.mjs';
 import { formatAnnotations } from './report.mjs';
+import { parseArgs } from '../cli/args.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-
-function parseArgs(argv) {
-  const args = {};
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    if (a.startsWith('--')) {
-      const key = a.slice(2).replace(/-([a-z])/g, (_, c) => c.toUpperCase());
-      args[key] = argv[i + 1] && !argv[i + 1].startsWith('--') ? argv[++i] : 'true';
-    }
-  }
-  return args;
-}
 
 function getDiff(args, repoRoot) {
   if (args.diffFile) return fs.readFileSync(args.diffFile, 'utf8');

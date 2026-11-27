@@ -17,13 +17,9 @@ import {
   createSupabaseVideoUploadStore,
   type VideoUploadRow,
 } from '@/lib/videos/signed-upload';
-import { SCHEDULED_UPLOAD_EXPIRY_MS } from '@/lib/videos/upload-expiry';
-import {
-  UPLOAD_SLOT_REFERENCE_INDEX,
-  assertUploadNotScheduled,
-  uploadAlreadyScheduledError,
-} from '@/lib/videos/upload-slot-reference';
+import { assertUploadNotScheduled } from '@/lib/videos/upload-slot-reference';
 import { scheduleAccountColumns } from './account-columns';
+import { discardStagedImage, rollbackSlotInsert, slotMediaColumns, stageSlotMedia } from './slot-media';
 import {
   SCHEDULE_PK_CONSTRAINT,
   violatedConstraint,
@@ -49,12 +45,10 @@ import {
   decodeImageMedia,
   parsePublishExistingBody,
   type ImageContentType,
-  type ScheduledMediaKind,
 } from './schema';
 import {
   ExistingMediaError,
   loadReadyVideoUpload,
-  storeScheduledImage,
 } from './media-resolve';
 import { replaySchedule, toSlotSummaries } from './replay';
 import { resolvePublishAtSlot } from './schedule-slot';
@@ -78,38 +72,9 @@ async function scheduleExistingMedia(ctx: PublishExistingContext): Promise<NextR
   const idem = resolveIdempotency(userId, input.idempotencyKey, ctx.request, PUBLISH_EXISTING_NAMESPACE);
   const scheduleId = idem.scheduleId;
 
-  let mediaKindValue: ScheduledMediaKind | null = null;
-  let mediaRef: string | null = null;
-  let mediaContentType: string | null = null;
-  let storedImagePath: string | null = null;
-  const uploadStore = createSupabaseVideoUploadStore();
-  try {
-    if (ctx.uploadRow !== null) {
-      mediaKindValue = 'upload';
-      mediaRef = ctx.uploadRow.id;
-      mediaContentType = ctx.uploadRow.declared_content_type ?? ctx.uploadRow.detected_content_type ?? 'video/mp4';
-      const extended = await uploadStore.updateUpload(ctx.uploadRow.id, 'ready', {
-        expires_at: new Date(Date.parse(slotAt) + SCHEDULED_UPLOAD_EXPIRY_MS).toISOString(),
-      });
-      if (!extended) {
-        return apiErrorResponse(409, formatErrorMessage(ERROR_CODES.VIDEO_UPLOAD_CONSUMED), {
-          route: ROUTE,
-          code: ERROR_CODES.VIDEO_UPLOAD_CONSUMED,
-          field: 'media.uploadId',
-        });
-      }
-    } else if (ctx.image !== null) {
-      mediaKindValue = 'image';
-      mediaContentType = ctx.image.contentType;
-      storedImagePath = await storeScheduledImage(supabase, userId, ctx.image.buffer, ctx.image.contentType);
-      mediaRef = storedImagePath;
-    }
-  } catch (error) {
-    if (error instanceof ExistingMediaError) {
-      return apiErrorResponse(error.status, error.message, { route: ROUTE, code: error.code });
-    }
-    throw error;
-  }
+  const staged = await stageSlotMedia(ctx, slotAt);
+  if ('error' in staged) return staged.error;
+  const media = staged.media;
 
   const { error: scheduleError } = await supabase.from('schedules').insert({
     id: scheduleId,
@@ -129,12 +94,7 @@ async function scheduleExistingMedia(ctx: PublishExistingContext): Promise<NextR
     publish_mode: 'scheduled',
   });
   if (scheduleError) {
-    if (storedImagePath !== null) {
-      await supabase.storage
-        .from('uploads')
-        .remove([storedImagePath])
-        .catch((error: unknown) => logger.error('[publish-existing] stored image cleanup failed', error, { scheduleId, userId }));
-    }
+    await discardStagedImage(supabase, media, scheduleId, userId);
     if (violatedConstraint(scheduleError) === SCHEDULE_PK_CONSTRAINT) {
       const replay = await replaySchedule(supabase, scheduleId, userId, ROUTE, reconnectWarning);
       if (replay !== null) return replay;
@@ -157,32 +117,14 @@ async function scheduleExistingMedia(ctx: PublishExistingContext): Promise<NextR
   }).map((row) => ({
     ...row,
     status: ctx.approvalMode === 'approval' ? 'awaiting_approval' : 'ready',
-    media_kind: mediaKindValue,
-    media_ref: mediaRef,
-    media_content_type: mediaContentType,
+    ...slotMediaColumns(media),
   }));
   const { data: inserted, error: slotsError } = await supabase
     .from('scheduled_posts')
     .insert(rows)
     .select('id, slot_at, title, status');
   if (slotsError || inserted === null) {
-    const uploadTaken = violatedConstraint(slotsError) === UPLOAD_SLOT_REFERENCE_INDEX;
-    if (!uploadTaken) logger.error('[publish-existing] slot insert failed', slotsError, { scheduleId, userId });
-    await supabase.from('schedules').delete().eq('id', scheduleId).eq('user_id', userId);
-    if (storedImagePath !== null) {
-      await supabase.storage
-        .from('uploads')
-        .remove([storedImagePath])
-        .catch((error: unknown) => logger.error('[publish-existing] stored image cleanup failed', error, { scheduleId, userId }));
-    }
-    if (uploadTaken) {
-      const taken = uploadAlreadyScheduledError();
-      return apiErrorResponse(taken.status, taken.message, { route: ROUTE, code: taken.code, field: 'media.uploadId' });
-    }
-    return apiErrorResponse(500, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR), {
-      route: ROUTE,
-      code: ERROR_CODES.INTERNAL_ERROR,
-    });
+    return rollbackSlotInsert(ctx, slotsError, media, scheduleId);
   }
   trackApiEvent('publish_existing_scheduled', {
     userId,

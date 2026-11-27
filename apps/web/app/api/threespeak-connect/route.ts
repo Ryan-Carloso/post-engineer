@@ -4,56 +4,20 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { encryptTokens } from '@/lib/token-crypto';
 import { ThreespeakError, loginToThreespeak } from '@/lib/threespeak';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
-import { apiErrorResponse } from '@/lib/api-error';
+import { routeErrorResponse } from '@/lib/api-error';
 import { ERROR_CODES, errorMessage } from '@/lib/error-codes';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
-
-function errorResponse(
-  status: number,
-  error: string,
-  route: string,
-  options?: { cause?: unknown; code?: string; logMessage?: string; metadata?: Record<string, unknown> },
-): NextResponse {
-  return apiErrorResponse(status, error, { route, ...options });
-}
+import { isFilled, readConnectFields } from '@/lib/connect-fields';
 
 async function readCredentials(request: Request): Promise<
   | { ok: true; username: string; postingKey: string }
   | { ok: false; error: string }
 > {
-  const contentType = request.headers.get('content-type') ?? '';
-  if (contentType.includes('application/json')) {
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
-      return { ok: false, error: 'Invalid JSON payload.' };
-    }
-    const username = (body as Record<string, unknown>).username;
-    const postingKey = (body as Record<string, unknown>).postingKey;
-    if (typeof username !== 'string' || !username.trim()) {
-      return { ok: false, error: 'Hive username is required.' };
-    }
-    if (typeof postingKey !== 'string' || !postingKey.trim()) {
-      return { ok: false, error: 'Hive posting key is required.' };
-    }
-    return { ok: true, username: username.trim(), postingKey };
-  }
-
-  let formData: FormData;
-  try {
-    formData = await request.formData();
-  } catch {
-    return { ok: false, error: 'Invalid multipart payload.' };
-  }
-  const username = formData.get('username');
-  const postingKey = formData.get('postingKey');
-  if (typeof username !== 'string' || !username.trim()) {
-    return { ok: false, error: 'Hive username is required.' };
-  }
-  if (typeof postingKey !== 'string' || !postingKey.trim()) {
-    return { ok: false, error: 'Hive posting key is required.' };
-  }
+  const read = await readConnectFields(request, ['username', 'postingKey']);
+  if (!read.ok) return read;
+  const { username, postingKey } = read.fields;
+  if (!isFilled(username)) return { ok: false, error: 'Hive username is required.' };
+  if (!isFilled(postingKey)) return { ok: false, error: 'Hive posting key is required.' };
   return { ok: true, username: username.trim(), postingKey };
 }
 
@@ -63,12 +27,12 @@ async function postHandler(request: Request): Promise<NextResponse> {
 
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) {
-    return errorResponse(401, 'Authentication required.', 'POST /api/threespeak-connect');
+    return routeErrorResponse(401, 'Authentication required.', 'POST /api/threespeak-connect');
   }
 
   const credentials = await readCredentials(request);
   if (!credentials.ok) {
-    return errorResponse(400, credentials.error, 'POST /api/threespeak-connect');
+    return routeErrorResponse(400, credentials.error, 'POST /api/threespeak-connect');
   }
   const { username, postingKey } = credentials;
 
@@ -101,7 +65,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
       .single();
 
     if (upsertError || !upserted) {
-      return errorResponse(500, 'Could not save the 3Speak account.', 'POST /api/threespeak-connect', {
+      return routeErrorResponse(500, 'Could not save the 3Speak account.', 'POST /api/threespeak-connect', {
         cause: upsertError,
         metadata: { userId: auth.userId },
       });
@@ -113,11 +77,11 @@ async function postHandler(request: Request): Promise<NextResponse> {
       (error instanceof ThreespeakError && error.code === 'invalid_credentials') ||
       (error instanceof Error && error.name === 'ThreespeakError' && /Invalid Hive/i.test(error.message));
     if (isInvalidCredentials) {
-      return errorResponse(422, errorMessage(ERROR_CODES.THREESPEAK_CREDENTIAL_REJECTED), 'POST /api/threespeak-connect', {
+      return routeErrorResponse(422, errorMessage(ERROR_CODES.THREESPEAK_CREDENTIAL_REJECTED), 'POST /api/threespeak-connect', {
         code: ERROR_CODES.THREESPEAK_CREDENTIAL_REJECTED,
       });
     }
-    return errorResponse(500, 'Could not connect the 3Speak account.', 'POST /api/threespeak-connect', {
+    return routeErrorResponse(500, 'Could not connect the 3Speak account.', 'POST /api/threespeak-connect', {
       cause: error,
       metadata: { userId: auth.userId },
       logMessage: '3Speak connection failed.',

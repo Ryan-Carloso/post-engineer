@@ -110,9 +110,12 @@ describe('contracts shared source', () => {
     const route = readFileSync(join(root, 'apps', 'web', 'app', 'api', 'persona', 'route.ts'), 'utf8');
     expect(route).toContain("from '@/lib/contracts/personas'");
     expect(route).toContain('parsePersonaIdQuery');
+    const scoped = readFileSync(join(root, 'apps', 'web', 'app', 'api', 'persona', 'persona-id-query.ts'), 'utf8');
+    expect(scoped).toContain("from '@/lib/contracts/personas'");
+    expect(scoped).toContain('parsePersonaIdQuery(request.url)');
     const preview = readFileSync(join(root, 'apps', 'web', 'app', 'api', 'persona', 'delete-preview', 'route.ts'), 'utf8');
-    expect(preview).toContain("from '@/lib/contracts/personas'");
-    expect(preview).toContain('parsePersonaIdQuery');
+    expect(preview).toContain("from '../persona-id-query'");
+    expect(preview).toContain('scopedPersonaIdQuery(request');
   });
 
   it('pins the videos constants to the contract re-exports', () => {
