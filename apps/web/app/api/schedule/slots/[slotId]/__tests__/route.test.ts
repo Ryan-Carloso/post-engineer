@@ -15,8 +15,8 @@ vi.mock('@/lib/supabase/server', () => ({
 vi.mock('@/lib/supabase/service', () => ({
   createSupabaseServiceClient: vi.fn(),
 }));
-vi.mock('@/lib/trial', () => ({
-  assertTrialActive: vi.fn(async () => null),
+vi.mock('@/lib/access', () => ({
+  assertAccessActive: vi.fn(async () => null),
 }));
 vi.mock('@/lib/rate-limit', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/rate-limit')>();
@@ -25,7 +25,7 @@ vi.mock('@/lib/rate-limit', async (importOriginal) => {
 
 import { DELETE, GET, PATCH } from '../route';
 import { DeleteSlotResponseSchema, GetSlotResponseSchema, UpdateSlotResponseSchema } from '@/lib/contracts/schedule';
-import { assertTrialActive } from '@/lib/trial';
+import { assertAccessActive } from '@/lib/access';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -371,7 +371,7 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
     });
     mockAuth();
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
-    vi.mocked(assertTrialActive).mockResolvedValueOnce(NextResponse.json({ success: false, error: 'Trial expired' }, { status: 402 }));
+    vi.mocked(assertAccessActive).mockResolvedValueOnce(NextResponse.json({ success: false, error: 'Trial expired' }, { status: 402 }));
     const blocked = await patchSlot(SLOT_ID, { slotAt });
     expect(blocked.status).toBe(402);
     expect(client.calls.some((c) => c.op === 'update')).toBe(false);

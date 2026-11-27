@@ -11,7 +11,7 @@ import { validateScheduleWindow } from '@/lib/schedule-window';
 import { hasExplicitOffset } from '@/lib/timezone';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
-import { assertTrialActive } from '@/lib/trial';
+import { assertAccessActive } from '@/lib/access';
 
 interface SlotRow {
   id: string;
@@ -230,8 +230,8 @@ async function patchHandler(
     });
   }
   if (rawSlotAt !== undefined) {
-    const trialBlocked = await assertTrialActive(auth.userId, { route: 'PATCH /api/schedule/slots' });
-    if (trialBlocked) return trialBlocked;
+    const blocked = await assertAccessActive(auth.userId, { route: 'PATCH /api/schedule/slots' });
+    if (blocked) return blocked;
   }
   const patch: { title?: string; slot_at?: string } = {};
   let title: string | undefined;

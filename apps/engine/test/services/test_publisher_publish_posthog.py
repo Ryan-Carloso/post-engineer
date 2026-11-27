@@ -33,7 +33,7 @@ class _FakeStore:
     def ready_due_slots(self, now):
         return []
 
-    def trial_ends_at_by_user(self, user_ids):
+    def access_until_by_user(self, user_ids):
         return {uid: "2099-01-01T00:00:00+00:00" for uid in user_ids}
 
     def claim_ready_slot(self, slot_id: str, now_utc=None) -> bool:

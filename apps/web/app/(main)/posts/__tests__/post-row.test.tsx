@@ -25,10 +25,10 @@ const ACCOUNTS = [
   { id: 'ig1', provider: 'instagram' as const, label: '@vivalave' },
 ];
 
-function renderRow(slot: Partial<ScheduledSlot> = {}, timeOnly = false, accounts = ACCOUNTS, accountActive = true) {
+function renderRow(slot: Partial<ScheduledSlot> = {}, timeOnly = false, accounts = ACCOUNTS, hasAccess = true) {
   cleanup();
   return render(
-    <PostRow slot={{ ...SLOT, ...slot }} personaName="Viva Leve" accounts={accounts} locale="en" timeOnly={timeOnly} accountActive={accountActive} />,
+    <PostRow slot={{ ...SLOT, ...slot }} personaName="Viva Leve" accounts={accounts} locale="en" timeOnly={timeOnly} hasAccess={hasAccess} />,
   );
 }
 

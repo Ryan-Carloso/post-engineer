@@ -38,7 +38,7 @@ from app.services.publisher.publish_events import (
 from app.services.owner_alert import notify_owner_async, notify_publish_failed, notify_publish_partial
 from app.services.publisher.store import ScheduleStore
 from app.services.publisher.support import notify_safe, slot_user_id
-from app.services.publisher.trial_gate import partition_slots, trial_states
+from app.services.publisher.access_gate import access_states, partition_slots
 
 
 def _failed_outcomes(
@@ -99,7 +99,7 @@ class BatchPublisher:
             uid = slot_user_id(slot)
             if uid is not None:
                 owners.append(uid)
-        states = trial_states(self.store, owners, now)
+        states = access_states(self.store, owners, now)
         due_active, due_inactive, due_unknown = partition_slots(due, states)
         res_active, res_inactive, res_unknown = partition_slots(resumable, states)
         published = 0

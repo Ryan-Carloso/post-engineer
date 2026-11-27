@@ -18,7 +18,8 @@
     "typecheck": "node scripts/sync-contracts.mjs && pnpm exec nx run-many -t typecheck",
     "graph": "pnpm exec nx graph",
     "typecheck:global": "pnpm exec nx run-many -t typecheck",
-    "security:audit": "node .github/scripts/audit/verify-accepted.mjs"
+    "security:audit": "node .github/scripts/audit/verify-accepted.mjs",
+    "access": "node apps/web/scripts/stripe-access.mjs"
   },
   "devDependencies": {
     "husky": "^9.1.7",

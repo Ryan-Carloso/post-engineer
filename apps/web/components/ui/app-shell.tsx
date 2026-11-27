@@ -10,7 +10,7 @@ import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/s
 import { SUPPORT_EMAIL } from '@/components/ui/pricing-contact';
 import VersionBadge from '@/components/ui/version-badge';
 import AppLogo from '@/components/ui/app-logo';
-import { TrialNotice } from '@/components/trial-notice';
+import { AccessNotice } from '@/components/access-notice';
 import {
   AccountsIcon,
   BoltIcon,
@@ -49,7 +49,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <main className="min-w-0 flex-1 overflow-y-auto bg-surface">
         <MobileHeader />
         <div className="w-full px-4 pt-4 pb-20 sm:px-6 md:px-8 md:pt-8 md:pb-10 lg:px-10">
-          <TrialNotice />
+          <AccessNotice />
           {children}
         </div>
       </main>

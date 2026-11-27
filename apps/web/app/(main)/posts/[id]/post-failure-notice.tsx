@@ -37,7 +37,7 @@ export function PostFailureNotice({
               <summary className="cursor-pointer text-xs font-semibold text-destructive underline-offset-4 hover:underline">
                 {t('posts.cardDetails')}
               </summary>
-              <p className="mt-2 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap text-ink-soft">
+              <p className="mt-2 font-mono text-xs leading-relaxed wrap-break-word whitespace-pre-wrap text-ink-soft">
                 {error}
               </p>
             </details>

@@ -12,6 +12,7 @@ import { SCHEDULED_MEDIA_KINDS } from '@/app/api/media/publish-existing/schema';
 import { PROMPT_VISIBILITIES } from '@/lib/contracts/prompts';
 import { PROMPT_VERSION_SOURCES } from '@/lib/contracts/experiments';
 import { TOOL_CONFIG_SEARCH_TOOLS, TOOL_CONFIG_STOCK_SOURCES } from '@/lib/tool-config';
+import { SUBSCRIPTION_STATUSES } from '@/lib/access-status';
 
 interface SnapshotTable {
   constraints: Record<string, string>;
@@ -73,6 +74,7 @@ const EXPECTED: Record<string, readonly string[]> = {
   user_tool_configs_stock_sources_check: TOOL_CONFIG_STOCK_SOURCES,
   user_prompts_visibility_check: PROMPT_VISIBILITIES,
   prompt_versions_source_check: PROMPT_VERSION_SOURCES,
+  user_profiles_subscription_status_check: SUBSCRIPTION_STATUSES,
 };
 
 describe('database enum checks match the code', () => {

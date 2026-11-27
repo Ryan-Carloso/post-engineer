@@ -125,17 +125,20 @@ describe('definer-function-grants', () => {
     const { definers, triggers } = finalSchema();
     expect([...definers].sort()).toEqual(
       [
+        'apply_subscription_access',
         'claim_owner_alert',
         'claim_publish_ledger',
         'create_share_link',
         'delete_slot_if_not_last',
         'find_post_metrics_daily_due',
         'find_post_metrics_due',
+        'link_stripe_customer',
         'mark_publish_unknown',
         'record_publish_ledger',
         'register_mcp_refresh_token',
         'release_owner_alert',
         'reset_post_metrics_windows',
+        'revoke_access',
         'rotate_mcp_refresh_token',
         'share_week_posts',
         'touch_publish_ledger',

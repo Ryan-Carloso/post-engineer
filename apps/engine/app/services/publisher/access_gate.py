@@ -11,7 +11,7 @@ from app.services.publisher.support import slot_user_id
 CHUNK_SIZE = 100
 
 
-def parse_trial_ends_at(value: Any) -> datetime | None:
+def parse_access_until(value: Any) -> datetime | None:
     if isinstance(value, datetime):
         return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
     if not isinstance(value, str) or not value:
@@ -23,18 +23,18 @@ def parse_trial_ends_at(value: Any) -> datetime | None:
     return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
 
 
-def trial_states(store: Any, user_ids: list[str], now: datetime) -> dict[str, bool | None]:
+def access_states(store: Any, user_ids: list[str], now: datetime) -> dict[str, bool | None]:
     states: dict[str, bool | None] = {}
     unique = [uid for uid in dict.fromkeys(user_ids) if uid]
-    if not callable(getattr(store, "trial_ends_at_by_user", None)):
+    if not callable(getattr(store, "access_until_by_user", None)):
         return {uid: None for uid in unique}
     for start in range(0, len(unique), CHUNK_SIZE):
         chunk = unique[start : start + CHUNK_SIZE]
         try:
-            rows = store.trial_ends_at_by_user(chunk)
+            rows = store.access_until_by_user(chunk)
         except Exception as exc:
             logger.warning(
-                f"publisher: trial lookup failed for {len(chunk)} user(s): "
+                f"publisher: access lookup failed for {len(chunk)} user(s): "
                 f"{scrub_error_text(str(exc), max_chars=200)}"
             )
             for uid in chunk:
@@ -45,8 +45,8 @@ def trial_states(store: Any, user_ids: list[str], now: datetime) -> dict[str, bo
                 states[uid] = None
             continue
         for uid in chunk:
-            ends_at = parse_trial_ends_at(rows.get(uid))
-            states[uid] = None if ends_at is None else ends_at > now
+            until = parse_access_until(rows.get(uid))
+            states[uid] = None if until is None else until > now
     return states
 
 

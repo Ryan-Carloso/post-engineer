@@ -17,6 +17,7 @@ describe('error-codes', () => {
       'SCHEDULE_OUT_OF_RANGE',
       'VALIDATION_FAILED',
       'TRIAL_EXPIRED',
+      'SUBSCRIPTION_INACTIVE',
       'INTERNAL_ERROR',
     ] as const;
     for (const code of required) {

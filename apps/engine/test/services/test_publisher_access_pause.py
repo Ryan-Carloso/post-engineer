@@ -43,11 +43,11 @@ def _publisher(store):
     return publisher
 
 
-def _store(due=None, resumable=None, trial=None):
+def _store(due=None, resumable=None, access=None):
     store = MagicMock()
     store.ready_due_slots.return_value = due or []
     store.resumable_publishing_slots.return_value = resumable or []
-    store.trial_ends_at_by_user.return_value = trial or {}
+    store.access_until_by_user.return_value = access or {}
     store.claim_ready_slot.return_value = True
     store.claim_resumable_slot.return_value = True
     store.expire_ready_slot.return_value = True
@@ -55,9 +55,9 @@ def _store(due=None, resumable=None, trial=None):
     return store
 
 
-class TrialPauseTests(unittest.TestCase):
-    def test_active_owner_publishes(self):
-        store = _store(due=[_slot()], trial={"user-1": FUTURE})
+class AccessPauseTests(unittest.TestCase):
+    def test_trial_still_running_publishes(self):
+        store = _store(due=[_slot()], access={"user-1": FUTURE})
         store.get_video_upload.return_value = {"storage_path": "user-1/x.mp4", "status": "ready", "user_id": "user-1"}
         publisher = _publisher(store)
         with patch.object(BatchPublisher, "_publish_one", return_value=1) as publish_one:
@@ -65,8 +65,25 @@ class TrialPauseTests(unittest.TestCase):
         publish_one.assert_called_once()
         store.expire_ready_slot.assert_not_called()
 
-    def test_inactive_due_ready_expires_exactly_once(self):
-        store = _store(due=[_slot()], trial={"user-1": PAST})
+    def test_paid_period_still_running_publishes(self):
+        paid_through = (NOW + timedelta(days=200)).isoformat()
+        store = _store(due=[_slot()], access={"user-1": paid_through})
+        publisher = _publisher(store)
+        with patch.object(BatchPublisher, "_publish_one", return_value=1) as publish_one:
+            self.assertEqual(publisher.run(NOW), 1)
+        publish_one.assert_called_once()
+        store.expire_ready_slot.assert_not_called()
+
+    def test_past_due_grace_window_still_publishes(self):
+        grace = (NOW + timedelta(days=2)).isoformat()
+        store = _store(due=[_slot()], access={"user-1": grace})
+        publisher = _publisher(store)
+        with patch.object(BatchPublisher, "_publish_one", return_value=1) as publish_one:
+            self.assertEqual(publisher.run(NOW), 1)
+        publish_one.assert_called_once()
+
+    def test_trial_ended_expires_exactly_once(self):
+        store = _store(due=[_slot()], access={"user-1": PAST})
         publisher = _publisher(store)
         with patch("app.services.publisher.publish.notify_owner_async") as notify_owner, patch(
             "app.services.publisher.publish.track_event"
@@ -78,35 +95,51 @@ class TrialPauseTests(unittest.TestCase):
         notify_owner.assert_not_called()
         self.assertFalse(any(call.args and call.args[0] == "video_publish_failed" for call in track.call_args_list))
 
+    def test_cancelled_subscription_expires_a_due_slot(self):
+        store = _store(due=[_slot()], access={"user-1": NOW.isoformat()})
+        publisher = _publisher(store)
+        with patch.object(BatchPublisher, "_publish_one", return_value=1) as publish_one:
+            self.assertEqual(publisher.run(NOW), 0)
+        publish_one.assert_not_called()
+        store.expire_ready_slot.assert_called_once_with("slot-1")
+
+    def test_refunded_subscription_expires_a_due_slot(self):
+        store = _store(due=[_slot()], access={"user-1": (NOW - timedelta(hours=3)).isoformat()})
+        publisher = _publisher(store)
+        with patch.object(BatchPublisher, "_publish_one", return_value=1) as publish_one:
+            self.assertEqual(publisher.run(NOW), 0)
+        publish_one.assert_not_called()
+        store.expire_ready_slot.assert_called_once_with("slot-1")
+
     def test_expire_is_terminal_only_when_claim_wins(self):
-        store = _store(due=[_slot()], trial={"user-1": PAST})
+        store = _store(due=[_slot()], access={"user-1": PAST})
         store.expire_ready_slot.return_value = False
         publisher = _publisher(store)
         self.assertEqual(publisher.run(NOW), 0)
         store.remove_storage_object.assert_not_called()
 
     def test_inactive_future_ready_is_not_in_due_list(self):
-        store = _store(due=[], trial={"user-1": PAST})
+        store = _store(due=[], access={"user-1": PAST})
         publisher = _publisher(store)
         self.assertEqual(publisher.run(NOW), 0)
         store.expire_ready_slot.assert_not_called()
 
     def test_resumable_skipped_while_paused_and_resumes_after_reactivation(self):
         slot = _slot(status="publishing")
-        store = _store(resumable=[slot], trial={"user-1": PAST})
+        store = _store(resumable=[slot], access={"user-1": PAST})
         publisher = _publisher(store)
         with patch.object(BatchPublisher, "_publish_one", return_value=1) as publish_one:
             self.assertEqual(publisher.run(NOW), 0)
             publish_one.assert_not_called()
-            store.trial_ends_at_by_user.return_value = {"user-1": FUTURE}
+            store.access_until_by_user.return_value = {"user-1": FUTURE}
             self.assertEqual(publisher.run(NOW), 1)
             publish_one.assert_called_once()
 
-    def test_trial_error_skips_only_affected_user(self):
+    def test_lookup_error_skips_only_affected_user(self):
         good = _slot("slot-good", "user-good")
         bad = _slot("slot-bad", "user-bad")
 
-        store = _store(due=[good, bad], trial={"user-good": FUTURE})
+        store = _store(due=[good, bad], access={"user-good": FUTURE})
         publisher = _publisher(store)
         with patch.object(BatchPublisher, "_publish_one", return_value=1) as publish_one:
             publisher.run(NOW)
@@ -114,10 +147,10 @@ class TrialPauseTests(unittest.TestCase):
         self.assertEqual(publish_one.call_args.args[0]["id"], "slot-good")
         store.expire_ready_slot.assert_not_called()
 
-    def test_trial_lookup_error_for_one_chunk_skips_that_user_without_expire(self):
+    def test_lookup_error_for_one_chunk_skips_that_user_without_expire(self):
         slot = _slot()
         store = _store(due=[slot])
-        store.trial_ends_at_by_user.side_effect = RuntimeError("db down")
+        store.access_until_by_user.side_effect = RuntimeError("db down")
         publisher = _publisher(store)
         with patch.object(BatchPublisher, "_publish_one", return_value=1) as publish_one:
             self.assertEqual(publisher.run(NOW), 0)
@@ -125,20 +158,20 @@ class TrialPauseTests(unittest.TestCase):
         store.expire_ready_slot.assert_not_called()
 
     def test_expire_cleans_up_image_media(self):
-        store = _store(due=[_slot(media_kind="image")], trial={"user-1": PAST})
+        store = _store(due=[_slot(media_kind="image")], access={"user-1": PAST})
         publisher = _publisher(store)
         publisher.run(NOW)
         store.remove_storage_object.assert_called_once_with("uploads", "scheduled-media/user-1/a.jpg")
 
     def test_expire_cleans_up_upload_media(self):
-        store = _store(due=[_slot(media_kind="upload")], trial={"user-1": PAST})
+        store = _store(due=[_slot(media_kind="upload")], access={"user-1": PAST})
         store.get_video_upload.return_value = {"storage_path": "user-1/direct-uploads/x.mp4", "status": "ready"}
         publisher = _publisher(store)
         publisher.run(NOW)
         store.remove_storage_object.assert_called_once_with("videos", "user-1/direct-uploads/x.mp4")
 
     def test_expire_does_not_notify_or_emit_failure_event(self):
-        store = _store(due=[_slot()], trial={"user-1": PAST})
+        store = _store(due=[_slot()], access={"user-1": PAST})
         publisher = _publisher(store)
         with patch("app.services.publisher.publish.notify_owner_async") as notify_owner, patch(
             "app.services.publisher.publish.track_event"

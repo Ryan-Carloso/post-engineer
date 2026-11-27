@@ -45,12 +45,12 @@ export function AccountEmptyState() {
   );
 }
 
-export function DayListRow({ slot, joins, accountActive = true }: { slot: ScheduledSlot; joins: PostJoins; accountActive?: boolean }) {
+export function DayListRow({ slot, joins, hasAccess = true }: { slot: ScheduledSlot; joins: PostJoins; hasAccess?: boolean }) {
   const { t, locale } = useI18n();
   const schedule = joins.scheduleById.get(slot.scheduleId);
   const personaId = schedule?.personaId ?? null;
   const personaName = personaId === null ? t('posts.noPersona') : joins.personaNameById.get(personaId) ?? t('posts.personaFallback');
-  const displayStatus = slotDisplayStatus(slot.status, accountActive);
+  const displayStatus = slotDisplayStatus(slot.status, hasAccess);
   const isHistory = slot.status === 'published' || slot.status === 'failed' || slot.status === 'expired';
   const shownAt = isHistory && slot.status !== 'expired' && slot.publishedAt ? slot.publishedAt : slot.slotAt;
   const group = calendarGroupOf(displayStatus);

@@ -21,8 +21,8 @@ export const STATUS_KEY: Record<string, TranslationKey> = {
 
 export type DisplayStatus = 'ready' | 'publishing' | 'published' | 'failed' | 'expired' | 'paused';
 
-export function slotDisplayStatus(status: string, accountActive: boolean): string {
-  if (!accountActive && (status === 'ready' || status === 'publishing')) return 'paused';
+export function slotDisplayStatus(status: string, hasAccess: boolean): string {
+  if (!hasAccess && (status === 'ready' || status === 'publishing')) return 'paused';
   return status;
 }
 

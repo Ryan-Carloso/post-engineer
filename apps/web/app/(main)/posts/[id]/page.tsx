@@ -26,7 +26,7 @@ import { useI18n } from '@/lib/i18n/provider';
 import { useCopyText } from '@/lib/use-copy-text';
 import { Button } from '@/components/ui/button';
 import { STATUS_KEY, STATUS_STYLE, slotDisplayStatus } from '../status';
-import { useTrialStatusQuery } from '@/lib/trial-query';
+import { useAccessQuery } from '@/lib/access-query';
 import { PostFailureNotice } from './post-failure-notice';
 
 export default function PostDetailPage() {
@@ -35,8 +35,8 @@ export default function PostDetailPage() {
   const id = typeof params.id === 'string' ? params.id : '';
 
   const postQuery = usePostDetailQuery(id);
-  const trialQuery = useTrialStatusQuery();
-  const accountActive = trialQuery.data?.active ?? true;
+  const accessQuery = useAccessQuery();
+  const hasAccess = accessQuery.data?.active ?? true;
   const accountOptions = usePostAccountCards();
 
   const post: PostDetail | null = postQuery.data ?? null;
@@ -69,8 +69,8 @@ export default function PostDetailPage() {
     <div className="mx-auto max-w-3xl">
       <DetailHeader
         title={personaName}
-        statusLabel={t(STATUS_KEY[slotDisplayStatus(slot?.status ?? 'ready', accountActive)] ?? 'posts.statusReady')}
-        statusStyle={STATUS_STYLE[slotDisplayStatus(slot?.status ?? 'ready', accountActive)] ?? STATUS_STYLE.ready}
+        statusLabel={t(STATUS_KEY[slotDisplayStatus(slot?.status ?? 'ready', hasAccess)] ?? 'posts.statusReady')}
+        statusStyle={STATUS_STYLE[slotDisplayStatus(slot?.status ?? 'ready', hasAccess)] ?? STATUS_STYLE.ready}
       />
       {slot && slotDetail && (
         <SlotDetail

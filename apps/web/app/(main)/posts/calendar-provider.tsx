@@ -231,7 +231,7 @@ export function PostsCalendar({
                 disabled={muted}
                 aria-pressed={view === 'month'}
                 className={cn(
-                  'h-9 rounded-md px-2 text-[13px] font-semibold transition-colors sm:px-3 sm:text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+                  'h-9 rounded-md px-2 text-[13px] font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:px-3 sm:text-sm',
                   view === 'month' ? 'bg-brand text-white hover:bg-brand-hover' : 'text-primary hover:bg-sunken',
                 )}
               >
@@ -243,7 +243,7 @@ export function PostsCalendar({
                 disabled={muted}
                 aria-pressed={view === 'week'}
                 className={cn(
-                  'h-9 rounded-md px-2 text-[13px] font-semibold transition-colors sm:px-3 sm:text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+                  'h-9 rounded-md px-2 text-[13px] font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:px-3 sm:text-sm',
                   view === 'week' ? 'bg-brand text-white hover:bg-brand-hover' : 'text-primary hover:bg-sunken',
                 )}
               >

@@ -38,7 +38,7 @@ export function CalendarLoadErrorEmptyState({
       >
         <TriangleAlert className="size-6" strokeWidth={2.25} aria-hidden />
       </span>
-      <p className="text-sm font-semibold leading-snug text-primary">{t(messageKey)}</p>
+      <p className="text-sm leading-snug font-semibold text-primary">{t(messageKey)}</p>
       <Button
         type="button"
         variant="default"

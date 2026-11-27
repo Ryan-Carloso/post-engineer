@@ -28,17 +28,17 @@ export function PostRow({
   accounts,
   locale,
   timeOnly = false,
-  accountActive = true,
+  hasAccess = true,
 }: {
   slot: ScheduledSlot;
   personaName: string;
   accounts: AccountOption[];
   locale: Locale;
   timeOnly?: boolean;
-  accountActive?: boolean;
+  hasAccess?: boolean;
 }) {
   const { t } = useI18n();
-  const displayStatus = slotDisplayStatus(slot.status, accountActive);
+  const displayStatus = slotDisplayStatus(slot.status, hasAccess);
   const isHistory = slot.status === 'published' || slot.status === 'failed' || slot.status === 'expired';
   const shownAt = isHistory && slot.status !== 'expired' && slot.publishedAt ? slot.publishedAt : slot.slotAt;
   const when = timeOnly

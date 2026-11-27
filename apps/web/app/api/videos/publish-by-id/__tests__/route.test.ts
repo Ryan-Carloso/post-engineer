@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextResponse } from 'next/server';
 import { UploadContentResponseSchema } from '@/lib/contracts/media';
 
-vi.mock('@/lib/trial', () => ({ assertTrialActive: vi.fn(async () => null) }));
+vi.mock('@/lib/access', () => ({ assertAccessActive: vi.fn(async () => null) }));
 vi.mock('@/lib/request-auth', () => ({ requireSupabaseSession: vi.fn() }));
 vi.mock('@/lib/rate-limit', () => ({
   applyRateLimit: vi.fn(async () => null),
@@ -69,7 +69,7 @@ import { applyRateLimit } from '@/lib/rate-limit';
 import { publishUploadedVideo } from '@/lib/videos/publish-uploaded';
 import { VideoUploadError } from '@/lib/videos/signed-upload';
 import { assertUploadNotScheduled } from '@/lib/videos/upload-slot-reference';
-import { assertTrialActive } from '@/lib/trial';
+import { assertAccessActive } from '@/lib/access';
 
 const UPLOAD_ID = '11111111-1111-4111-8111-111111111111';
 
@@ -188,14 +188,14 @@ describe('POST /api/videos/publish-by-id', () => {
   });
 
   it('answers 402 and publishes nothing once the free trial has ended', async () => {
-    vi.mocked(assertTrialActive).mockResolvedValueOnce(
+    vi.mocked(assertAccessActive).mockResolvedValueOnce(
       NextResponse.json({ success: false, code: 'TRIAL_EXPIRED' }, { status: 402 }) as never,
     );
     const response = await POST(
       jsonRequest({ uploadId: UPLOAD_ID, provider: 'instagram', accountIds: ['ig-1'], caption: 'hi' }),
     );
     expect(response.status).toBe(402);
-    expect(vi.mocked(assertTrialActive)).toHaveBeenCalledWith('user-uuid-1', expect.objectContaining({ route: expect.any(String) }));
+    expect(vi.mocked(assertAccessActive)).toHaveBeenCalledWith('user-uuid-1', expect.objectContaining({ route: expect.any(String) }));
     expect(vi.mocked(publishUploadedVideo)).not.toHaveBeenCalled();
   });
 });

@@ -180,7 +180,7 @@ class ScheduleStore:
         )
         return bool(rows)
 
-    def trial_ends_at_by_user(self, user_ids: list[str]) -> dict[str, Any]:
+    def access_until_by_user(self, user_ids: list[str]) -> dict[str, Any]:
         result: dict[str, Any] = {}
         for start in range(0, len(user_ids), 100):
             chunk = user_ids[start : start + 100]
@@ -191,12 +191,12 @@ class ScheduleStore:
                 "user_profiles",
                 params={
                     "id": f"in.({','.join(chunk)})",
-                    "select": "id,trial_ends_at",
+                    "select": "id,access_until",
                 },
             )
             for row in rows if isinstance(rows, list) else []:
                 if isinstance(row, dict) and isinstance(row.get("id"), str):
-                    result[str(row["id"])] = row.get("trial_ends_at")
+                    result[str(row["id"])] = row.get("access_until")
         return result
 
     def expire_ready_slot(self, slot_id: str) -> bool:

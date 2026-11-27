@@ -5,7 +5,7 @@ const RECIPE_LINES = [
 ];
 
 export const ROUTING_LIFECYCLE =
-  'Where each job lives: publish_video uploads media (create_upload, complete_upload) and publishes it now or schedules it (publish_existing); schedules changes slots (cancel, retitle, delete a slot) and lists them; posts reads a post\'s status, links and publish results, scheduled or published; insights measures published posts; experiments compares prompts. The free trial lasts 7 days: after it ends, publish_video and schedules creation fail with TRIAL_EXPIRED and the message names the contact link; reading stays allowed.';
+  'Where each job lives: publish_video uploads media (create_upload, complete_upload) and publishes it now or schedules it (publish_existing); schedules changes slots (cancel, retitle, delete a slot) and lists them; posts reads a post\'s status, links and publish results, scheduled or published; insights measures published posts; experiments compares prompts. Publishing needs an active account: after the 7-day free trial ends, or while the subscription is inactive, publish_video and schedules creation fail with TRIAL_EXPIRED or SUBSCRIPTION_INACTIVE and the message names the contact link; reading stays allowed.';
 
 export const POINTER_PERSONA_ACCOUNTS =
   'To rebind the accounts a persona publishes to, use accounts (action: set_persona_publishing); personas (action: get) only shows them.';
