@@ -23,7 +23,7 @@ import { attemptsOf, type AccountOutcome, type PublishSlot } from '@/lib/publish
 
 export type PublishFn = (input: PublishContentInput) => Promise<PublishContentResult>;
 
-export type PersistOutcomes = (outcomes: AccountOutcome[], fields: Record<string, unknown>) => Promise<void>;
+type PersistOutcomes = (outcomes: AccountOutcome[], fields: Record<string, unknown>) => Promise<void>;
 
 export interface SlotMedia {
   name: string;

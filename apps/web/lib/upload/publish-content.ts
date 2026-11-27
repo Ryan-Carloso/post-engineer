@@ -24,7 +24,7 @@ export interface PublishContentInput {
   startTime: number;
 }
 
-export interface PublishContentCompleted {
+interface PublishContentCompleted {
   ok: true;
   response: PublishHandlerResponse;
 }

@@ -1,7 +1,7 @@
 import { logger } from '@/lib/logger';
 import { scrubSecretValues } from '@/lib/publisher/scrub-error';
 
-export const DISCORD_WEBHOOK_ENV = 'DISCORD_WEBHOOK_URL';
+const DISCORD_WEBHOOK_ENV = 'DISCORD_WEBHOOK_URL';
 export const DISCORD_MAX_CONTENT = 2000;
 const DISCORD_TIMEOUT_MS = 5_000;
 const MIN_REDACTED_VARIANT_LENGTH = 8;

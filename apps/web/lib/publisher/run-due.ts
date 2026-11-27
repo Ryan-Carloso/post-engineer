@@ -4,7 +4,7 @@ import { errorMessageOf, scrubErrorText } from '@/lib/publisher/scrub-error';
 import type { PublisherStore } from '@/lib/publisher/store-types';
 import type { PublishSlot } from '@/lib/publisher/types';
 
-export interface RunDueLogger extends OutageLogger {
+interface RunDueLogger extends OutageLogger {
   warn(message: string, metadata?: Record<string, unknown>): unknown;
 }
 

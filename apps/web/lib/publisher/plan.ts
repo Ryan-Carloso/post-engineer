@@ -8,11 +8,11 @@ import { THREADS_TEXT_MAX_CHARS } from '@/lib/threads';
 import { deriveTagsFromTitle, truncateChars } from '@/lib/publisher/text';
 import type { PublishSchedule } from '@/lib/publisher/types';
 
-export const YOUTUBE_TITLE_MAX_CHARS = 100;
-export const INSTAGRAM_CAPTION_MAX_CHARS = 2200;
-export const LINKEDIN_CAPTION_MAX_CHARS = 3000;
-export const FANVUE_TITLE_MAX_CHARS = 100;
-export const FANVUE_DESCRIPTION_MAX_CHARS = 800;
+const YOUTUBE_TITLE_MAX_CHARS = 100;
+const INSTAGRAM_CAPTION_MAX_CHARS = 2200;
+const LINKEDIN_CAPTION_MAX_CHARS = 3000;
+const FANVUE_TITLE_MAX_CHARS = 100;
+const FANVUE_DESCRIPTION_MAX_CHARS = 800;
 
 export class PublishPlanError extends Error {
   constructor(message: string) {
@@ -28,7 +28,7 @@ export class AccountNotBoundError extends PublishPlanError {
   }
 }
 
-export type PlanField = [name: string, value: string];
+type PlanField = [name: string, value: string];
 
 export interface ProviderPlan {
   provider: SocialProvider;

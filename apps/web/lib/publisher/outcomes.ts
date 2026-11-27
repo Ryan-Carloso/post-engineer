@@ -2,7 +2,6 @@ import { PROVIDER_LABELS } from '@/lib/account-options';
 import { isSocialProvider } from '@/lib/contracts/providers';
 import {
   ATTEMPT_LEASE_SECONDS,
-  MAX_IN_PROGRESS_WAIT_SECONDS,
   MAX_PUBLISH_ATTEMPTS,
   PUBLISH_IN_PROGRESS_DELAY_SECONDS,
   PUBLISH_RETRY_DELAY_SECONDS,
@@ -118,7 +117,7 @@ export function failOutcome(outcome: AccountOutcome, message: string, errorCode:
   outcome.error = scrubErrorText(message, 200);
   if (errorCode === 'publish_in_progress') {
     const waited = (outcome.inProgressWaitSeconds ?? 0) + PUBLISH_IN_PROGRESS_DELAY_SECONDS;
-    if (waited >= MAX_IN_PROGRESS_WAIT_SECONDS) {
+    if (waited >= ATTEMPT_LEASE_SECONDS) {
       outcome.requiresUser = true;
       outcome.status = 'failed';
       outcome.code = 'publish_unknown';
