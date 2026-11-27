@@ -27,14 +27,14 @@ participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
 - Before opening a PR, run the relevant gates and keep them green:
 
   ```bash
-  pnpm test        # web (Vitest) + engine (pytest)
-  pnpm lint        # ESLint + ruff
-  pnpm typecheck   # TypeScript strict + Python compile check
+  pnpm test        # web (Vitest) + MCP
+  pnpm lint        # ESLint + the CI script checks
+  pnpm typecheck   # TypeScript strict
   ```
 
-- Per-app commands: `pnpm dev:web` (Next.js on :3434), `pnpm dev:engine`
-  (FastAPI on :8080). See [apps/web/README.md](apps/web/README.md) and
-  [apps/engine/README.md](apps/engine/README.md).
+- Per-app commands: `pnpm dev:web` (Next.js on :3434). See
+  [apps/web/README.md](apps/web/README.md) and
+  [apps/mcp/README.md](apps/mcp/README.md).
 
 ## Code conventions
 
@@ -46,12 +46,8 @@ participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
 - Server actions must use the `"use server"` directive; keep OAuth, fetching,
   and state management out of presentational components under
   `apps/web/components/ui/`.
-- Python: follow the engine rules in [apps/engine/AGENTS.md](apps/engine/AGENTS.md)
-  — video-generation behavior is controlled by `config.toml`, never overridden
-  inside tests.
 - Never log or print secrets, tokens, or API keys. Never commit real
-  credentials — the three env files (`apps/web/.env`, `apps/engine/.env`,
-  `apps/engine/config.toml`) are gitignored by design.
+  credentials — the env file (`apps/web/.env`) is gitignored by design.
 
 ## Reporting issues
 

@@ -65,14 +65,14 @@ def test_unconditional_skip_and_focus_fail():
     ]
     for form in forms:
         head = "def test_ok():\n    assert 1 == 1\n" + form
-        findings = analyze("apps/engine/test/test_sample.py", "M", "def test_ok():\n    assert 1 == 1\n", head)
+        findings = analyze(".github/scripts/tests/test_sample.py", "M", "def test_ok():\n    assert 1 == 1\n", head)
         assert fails(findings), form
 
 
 def test_conditional_skip_warns_and_does_not_fail():
     head = "def test_ok():\n    assert 1 == 1\n" + glue("@pytest.mark.", "skipif(True, reason='missing tool')\n")
     findings = analyze(
-        "apps/engine/test/test_sample.py",
+        ".github/scripts/tests/test_sample.py",
         "M",
         "def test_ok():\n    assert 1 == 1\n",
         head,
@@ -84,7 +84,7 @@ def test_conditional_skip_warns_and_does_not_fail():
 def test_importorskip_is_not_an_unconditional_skip():
     head = "def test_ok():\n    pytest." + "importorskip('moviepy')\n    assert 1 == 1\n"
     findings = analyze(
-        "apps/engine/test/test_sample.py",
+        ".github/scripts/tests/test_sample.py",
         "M",
         "def test_ok():\n    assert 1 == 1\n",
         head,
@@ -99,7 +99,7 @@ def test_property_added_tests_do_not_fail():
         value = rng.randrange(5)
         name = f"test_added_{index}_{rng.randrange(10000)}"
         head = base + f"def {name}():\n    assert {value} == {value}\n"
-        findings = analyze("apps/engine/test/test_sample.py", "M", base, head)
+        findings = analyze(".github/scripts/tests/test_sample.py", "M", base, head)
         assert fails(findings) == [], index
 
 
@@ -108,21 +108,21 @@ def test_property_injected_skip_always_fails():
     skip_line = glue("    pytest.", "skip('hidden')\n")
     for index in range(10):
         head = base + f"def test_extra_{index}():\n" + skip_line
-        findings = analyze("apps/engine/test/test_sample.py", "M", base, head)
+        findings = analyze(".github/scripts/tests/test_sample.py", "M", base, head)
         assert any(finding.code == "test-skipped" for finding in fails(findings))
 
 
 def test_deleted_test_names_fail_and_a_rename_does_not():
     base = "def test_a():\n    assert 1 == 1\n\ndef test_b():\n    assert 2 == 2\n"
     deleted = analyze(
-        "apps/engine/test/test_sample.py",
+        ".github/scripts/tests/test_sample.py",
         "M",
         base,
         "def test_a():\n    assert 1 == 1\n",
     )
     assert any(finding.code == "tests-deleted" for finding in fails(deleted))
     renamed = analyze(
-        "apps/engine/test/test_sample.py",
+        ".github/scripts/tests/test_sample.py",
         "M",
         base,
         "def test_a():\n    assert 1 == 1\n\ndef test_c():\n    assert 2 == 2\n",
@@ -132,7 +132,7 @@ def test_deleted_test_names_fail_and_a_rename_does_not():
 
 def test_removed_assertion_fails_when_the_test_remains():
     findings = analyze(
-        "apps/engine/test/test_sample.py",
+        ".github/scripts/tests/test_sample.py",
         "M",
         "def test_a():\n    assert 1 == 1\n    assert 2 == 2\n",
         "def test_a():\n    assert 1 == 1\n",
@@ -152,21 +152,21 @@ def test_precise_null_check_is_not_treated_as_weakened():
 
 def test_plain_pytest_comparison_weakened_to_truthiness_fails():
     status = analyze(
-        "apps/engine/test/test_sample.py",
+        ".github/scripts/tests/test_sample.py",
         "M",
         "def test_a():\n    assert response['status'] == 200\n",
         "def test_a():\n    assert response\n",
     )
     assert any(finding.code == "assertion-weakened" for finding in fails(status))
     urls = analyze(
-        "apps/engine/test/test_sample.py",
+        ".github/scripts/tests/test_sample.py",
         "M",
         "def test_a():\n    assert session.urls == []\n",
         "def test_a():\n    assert session.urls\n",
     )
     assert any(finding.code == "assertion-weakened" for finding in fails(urls))
     compared = analyze(
-        "apps/engine/test/test_sample.py",
+        ".github/scripts/tests/test_sample.py",
         "M",
         "def test_a():\n    assert n > 0\n",
         "def test_a():\n    assert n == 1\n",
@@ -177,7 +177,7 @@ def test_plain_pytest_comparison_weakened_to_truthiness_fails():
 def test_method_named_fit_is_not_a_focused_test():
     base = "def test_ok():\n    assert 1 == 1\n"
     method = analyze(
-        "apps/engine/test/test_sample.py",
+        ".github/scripts/tests/test_sample.py",
         "M",
         base,
         base + "    image = ImageOps.fit(image, size)\n",
@@ -213,7 +213,7 @@ def test_truthiness_swap_fails_and_toBe_does_not():
 def test_coverage_ignore_on_an_added_line_fails():
     head = "def test_ok():\n    assert 1 == 1\n" + glue("x = 1  ", "pragma: ", "no cover\n")
     findings = analyze(
-        "apps/engine/test/test_sample.py",
+        ".github/scripts/tests/test_sample.py",
         "M",
         "def test_ok():\n    assert 1 == 1\n",
         head,
@@ -222,15 +222,15 @@ def test_coverage_ignore_on_an_added_line_fails():
 
 
 def test_deleted_test_file_fails_while_product_code_remains_and_warns_when_it_is_gone():
-    path = "apps/engine/test/services/test_voice.py"
-    base = "def test_a():\n    assert 1 == 1\n"
-    present = analyze(path, "D", base, exists=lambda item: item == "apps/engine/app/services/voice.py")
+    path = "apps/web/lib/__tests__/voice.test.ts"
+    base = "it('works', () => {\n  expect(1).toBe(1)\n})\n"
+    present = analyze(path, "D", base, exists=lambda item: item == "apps/web/lib/voice.ts")
     assert any(finding.code == "tests-deleted-file" for finding in fails(present))
     gone = analyze(path, "D", base, exists=lambda _item: False)
     assert fails(gone) == []
     assert any(finding.code == "tests-deleted-unmapped" for finding in gone)
-    asgi = analyze("apps/engine/test/test_asgi_health.py", "D", base, exists=lambda _item: False)
-    assert any(finding.code == "tests-deleted-unmapped" for finding in asgi)
+    orphan = analyze("apps/web/lib/__tests__/orphan.test.ts", "D", base, exists=lambda _item: False)
+    assert any(finding.code == "tests-deleted-unmapped" for finding in orphan)
 
 
 def test_deleting_the_grader_fails_and_editing_it_warns():
@@ -242,20 +242,6 @@ def test_deleting_the_grader_fails_and_editing_it_warns():
 
 
 def test_loosened_coverage_floors_fail():
-    under = analyze(
-        "apps/engine/pyproject.toml",
-        "M",
-        "fail_under = 60\n",
-        "fail_under = 50\n",
-    )
-    assert any(finding.code == "coverage-threshold" for finding in fails(under))
-    stricter = analyze(
-        "apps/engine/pyproject.toml",
-        "M",
-        "fail_under = 60\n",
-        "fail_under = 70\n",
-    )
-    assert fails(stricter) == []
     threshold = analyze(
         "codecov.yml",
         "M",
@@ -293,16 +279,11 @@ def test_unsafe_workflow_lines_fail_and_comments_do_not():
 
 
 def test_mappings_match_files_in_the_tree():
-    notify = "apps/engine/app/services/notify.py"
-    assert "apps/engine/test/services/test_notify.py" in scope.test_candidates(notify)
-    assert (ROOT / "apps/engine/test/services/test_notify.py").is_file()
     whatsapp = "apps/web/lib/whatsapp.ts"
     mapped = "apps/web/lib/__tests__/whatsapp.test.ts"
     assert mapped in scope.test_candidates(whatsapp)
     assert (ROOT / mapped).is_file()
-    assert "apps/engine/app/services/notify.py" in scope.production_candidates(
-        "apps/engine/test/services/test_notify.py"
-    )
+    assert whatsapp in scope.production_candidates(mapped)
 
 
 def test_product_file_without_a_mapped_test_warns():
@@ -337,7 +318,7 @@ def test_parse_rename_and_payload_hides_file_bodies():
     assert rows[0] == ("R", "new/test_a.py", "old/test_a.py")
     secret = "sk-" + ("a" * 24)
     change = honesty.FileChange(
-        "apps/engine/test/test_sample.py",
+        ".github/scripts/tests/test_sample.py",
         "M",
         "def test_ok():\n    assert 1 == 1\n",
         "def test_ok():\n    assert 1 == 1\n" + glue("    pytest.", "skip('") + secret + "')\n",

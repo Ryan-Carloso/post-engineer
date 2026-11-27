@@ -21,9 +21,10 @@ describe('Rumble across the shared surfaces', () => {
     ).toEqual({ views: null, likes: null, comments: null, saves: null });
   });
 
-  it('pins the title ceiling to the engine publisher', () => {
-    const publisher = readFileSync(join(repoRoot, 'apps/engine/app/services/publish_rumble.py'), 'utf8');
-    expect(publisher).toContain(`RUMBLE_TITLE_MAX_LENGTH: int = ${RUMBLE_TITLE_MAX_LENGTH}`);
+  it('pins the title ceiling to the publisher plan', () => {
+    expect(RUMBLE_TITLE_MAX_LENGTH).toBe(100);
+    const plan = readFileSync(join(repoRoot, 'apps/web/lib/publisher/plan.ts'), 'utf8');
+    expect(plan).toContain('truncateChars(ctx.title, RUMBLE_TITLE_MAX_LENGTH)');
   });
 
   it('links the https permalink and drops a failed publish or a non-https link', () => {

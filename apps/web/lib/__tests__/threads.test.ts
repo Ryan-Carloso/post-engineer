@@ -197,11 +197,12 @@ describe('getThreadsInsights', () => {
   });
 });
 
-describe('literals shared with the engine and the schema', () => {
-  it('pins the 500-character limit in the engine', () => {
+describe('literals shared with the publisher and the schema', () => {
+  it('pins the 500-character limit in the publisher plan', () => {
+    expect(THREADS_TEXT_MAX_CHARS).toBe(500);
     const root = findRepoRoot(import.meta.url);
-    const publisher = readFileSync(join(root, 'apps/engine/app/services/upload_publisher.py'), 'utf8');
-    expect(publisher).toContain(`THREADS_CAPTION_MAX_LENGTH: int = ${THREADS_TEXT_MAX_CHARS}`);
+    const plan = readFileSync(join(root, 'apps/web/lib/publisher/plan.ts'), 'utf8');
+    expect(plan).toContain('truncateChars(ctx.copy, THREADS_TEXT_MAX_CHARS)');
   });
 
   it('adds the account column and the metrics provider in the migration', () => {

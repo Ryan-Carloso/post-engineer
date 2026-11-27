@@ -26,7 +26,7 @@ What actually happened. Include error messages if any.
 
 ## Environment
 
-- Component: `apps/web` / `apps/engine`
+- Component: `apps/web` / `apps/mcp`
 - Browser (if UI): e.g. Chrome 126
 - Node / pnpm versions (if relevant):
 - Python / uv versions (if relevant):

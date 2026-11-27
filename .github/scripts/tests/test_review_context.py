@@ -77,13 +77,13 @@ class _Router:
                 {},
             )
         if "/pulls/223/files" in path:
-            return ([{"filename": "apps/engine/app/services/task_publish.py"}], {})
+            return ([{"filename": "apps/web/app/api/schedule/route.ts"}], {})
         raise AssertionError(path)
 
 
 def test_stacked_pr_against_main_is_a_mismatch(context, tmp_path: Path, capsys) -> None:
     files = tmp_path / "files.txt"
-    files.write_text("apps/engine/app/services/task_publish.py\n", encoding="utf-8")
+    files.write_text("apps/web/app/api/schedule/route.ts\n", encoding="utf-8")
     rc = context.main(
         ["--repo", "acme/post-engineer", "--pr", "224", "--files", str(files)],
         fetch=_Router(),

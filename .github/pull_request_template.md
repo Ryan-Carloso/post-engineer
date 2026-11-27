@@ -8,7 +8,7 @@ Link the issue(s): closes #
 
 ## How it was tested
 
-- [ ] `pnpm test` green (web + engine)
+- [ ] `pnpm test` green (web + MCP)
 - [ ] `pnpm lint` green
 - [ ] `pnpm typecheck` green
 - [ ] New/updated tests cover the change (TDD)

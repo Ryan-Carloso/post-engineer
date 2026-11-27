@@ -26,8 +26,7 @@ name: opencode-review
 #   Identical model ids are deduped.
 #   glm-4.5-flash was dropped from the chain — its review quality was too
 #   poor. The OpenRouter free tier uses the special router id (no hardcoded
-#   model list to rot — same convention as the engine's
-#   _PROVIDER_DEFAULT_MODELS); one OPENROUTER_API_KEY secret serves both
+#   model list to rot); one OPENROUTER_API_KEY secret serves both
 #   tiers (free models cost $0 even on a paid key).
 #   Paid OpenRouter needs OPENROUTER_API_KEY; paid OpenCode Zen needs
 #   OPENCODE_ZEN_API_KEY. Free opencode/*-free models need no secret.

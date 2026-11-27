@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-const SOURCE_ROOTS = ['app', 'lib', 'components', join('..', 'engine', 'app')];
-const SKIP_DIRS = new Set(['node_modules', '.next', 'dist', '__pycache__', '.nx', '__tests__']);
+const SOURCE_ROOTS = ['app', 'lib', 'components'];
+const SKIP_DIRS = new Set(['node_modules', '.next', 'dist', '.nx', '__tests__']);
 
 function collectSourceFiles(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
@@ -13,7 +13,7 @@ function collectSourceFiles(dir: string, out: string[] = []): string[] {
       collectSourceFiles(full, out);
       continue;
     }
-    if (/\.(ts|tsx|py)$/.test(entry)) out.push(full);
+    if (/\.(ts|tsx)$/.test(entry)) out.push(full);
   }
   return out;
 }
@@ -23,7 +23,6 @@ const SOURCE_FILES = SOURCE_ROOTS.flatMap((root) => collectSourceFiles(root));
 describe('the persona face mix is fully removed', () => {
   it('finds the source files it is scanning (a wrong root would pass vacuously)', () => {
     expect(SOURCE_FILES.length).toBeGreaterThan(100);
-    expect(SOURCE_FILES.some((file) => file.endsWith('.py'))).toBe(true);
     expect(SOURCE_FILES.some((file) => file.endsWith('.ts'))).toBe(true);
   });
 

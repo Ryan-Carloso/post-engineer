@@ -5,32 +5,24 @@ what to check and where the contract lives. Grep, don't guess.
 
 Write the entire review in English.
 
-## 1. Telemetry, logs and alerts (engine, web, mcp)
+## 1. Telemetry, logs and alerts (web, mcp)
 
 Trigger: any added/changed call to `track_event`, `track_ai_request`,
 `posthog.capture`, `logger.*`, Discord alert helpers, or `safe_reason`.
 
-- Every **free-text** property (bodies, error messages, model output,
-  exception text, upstream responses) sent to PostHog must go through
-  `scrub_error_text()` (or at least `scrub_secret_values()`) from
-  `apps/engine/app/services/analytics.py`. `track_event` itself only redacts
-  by **key name** (`_SECRET_KEY_PATTERN`) — a key like `response_body`,
-  `error`, `message`, `detail` is NOT redacted. Unscrubbed free text =
-  CRITICAL.
-- Read the module docstring of `analytics.py`: properties are ids, counts,
-  and enums, never raw request bodies. Any new exception to that rule must
-  be recorded in the "Deliberate exception" block, like the `ai_request`
-  `response_preview` (already scrubbed with `scrub_secret_values`). Missing
-  = MAJOR.
-- `upload_publisher.PublishError.response_body` is documented as
-  remote-controlled text that may echo sensitive data — it must never reach
-  Discord, task `error`, PR comments, or analytics unscrubbed.
-- Error strings that reach Discord / the task `error` field must not contain
-  absolute local paths (basename only) or upstream bodies.
-- `distinct_id` comes from `properties["user_id"]`; check the value is the
-  real owner, not a placeholder.
+- Every **free-text** property (bodies, error messages, exception text,
+  upstream responses) sent to PostHog must go through `scrubErrorText()`
+  (`apps/web/lib/publisher/scrub-error.ts`). `trackApiEvent` redacts by
+  **key name** only — a key like `response_body`, `error`, `message`,
+  `detail` is NOT redacted. Unscrubbed free text = CRITICAL.
+- Properties are ids, counts and enums, never raw request bodies. Raw
+  provider bodies never reach Discord, the stored `error`, the owner email
+  or analytics unscrubbed.
+- Error strings that reach Discord, the stored reason or the email must not
+  contain absolute local paths or upstream bodies.
+- `distinct_id` is the real owner (`userId`), never a placeholder.
 - Telemetry must never raise into the main path (wrapped, or uses
-  `track_event` which swallows).
+  `trackApiEvent`, which swallows).
 
 ## 2. Edge cases on collections and aggregates
 
@@ -45,28 +37,29 @@ reductions, "all failed / all succeeded" logic.
 - Partial success: is the outcome visible to the user, and do retries /
   idempotency checks still let the failed part be retried?
 
-## 3. Idempotency, retries, restarts (engine)
+## 3. Idempotency, retries, restarts (publish scheduler)
 
-Trigger: `apps/engine/app/services/task*.py`, `orphan_requeue*`, `state`.
+Trigger: `apps/web/lib/publisher/**`, `apps/web/lib/scheduler*.ts`,
+`claim_next_publish_slot`, or the publish ledger.
 
-- Idempotency markers (`publish_results`, status flags): does the change
-  alter when they are written? Could a retry now be skipped forever, or
-  double-post?
-- Orphan/boot triage calls the same functions with persisted params —
-  check those call sites too (`grep -rn publish_videos apps/engine`).
-- `persist_state_update` vs `update_task`: FAILED and result writes must be
-  the resilient one.
+- Does every publish path go through the SQL slot claim? A slot claimed by a
+  second worker must not publish twice.
+- Idempotency markers (`publish_outcomes`, the publish ledger, status
+  flags): does the change alter when they are written? Could a retry now be
+  skipped forever, or double-post?
+- A resumed `publishing` slot (lease expired, or no lease) must skip the
+  accounts the ledger already published.
+- Terminal writes (failed / published) and the media cleanup happen exactly
+  once, on every branch.
 
 ## 4. Cross-file contracts
 
 Trigger: any change to a function's return shape, a persisted state key, an
 API response field, an event name/properties, or a DB column.
 
-- Grep every consumer in `apps/engine`, `apps/web`, `apps/mcp`.
+- Grep every consumer in `apps/web` and `apps/mcp`.
   New/removed keys (e.g. a `status` field, entries without `videoUrl`) must
   be handled by readers or flagged.
-- Engine responses are wrapped in `BaseResponse {status, message, body}`;
-  web proxies read `body`, never `data`.
 - Docstrings that describe behaviour (Raises:, Returns:) must match the new
   behaviour.
 
@@ -95,8 +88,6 @@ Trigger: any changed test file.
 - The risky path has a test: the security property (scrubbing), the
   empty-input path, the all-failed path, telemetry failure not breaking the
   main path.
-- Web tests mocking an engine upstream must mock the real envelope
-  `{status, message, body}`.
 
 ## 7. Web / TypeScript
 

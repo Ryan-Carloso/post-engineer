@@ -27,8 +27,8 @@ describe('DEFAULT_POSTHOG_HOST', () => {
   });
 });
 
-describe('DEFAULT_POSTHOG_HOST cross-app sync', () => {
-  it('keeps web and engine pointing at the same PostHog host', async () => {
+describe('DEFAULT_POSTHOG_HOST source pin', () => {
+  it('is the literal declared in lib/posthog-config.ts', async () => {
     const { readFileSync } = await import('node:fs');
     const { join } = await import('node:path');
     const repoRoot = findRepoRoot(import.meta.url);
@@ -37,21 +37,11 @@ describe('DEFAULT_POSTHOG_HOST cross-app sync', () => {
       join(repoRoot, 'apps', 'web', 'lib', 'posthog-config.ts'),
       'utf8',
     );
-    const engineSrc = readFileSync(
-      join(repoRoot, 'apps', 'engine', 'app', 'services', 'analytics.py'),
-      'utf8',
-    );
-
     const webHost = webSrc.match(
       /export const DEFAULT_POSTHOG_HOST = '([^']+)'/,
     )?.[1];
-    const engineHost = engineSrc.match(
-      /^DEFAULT_POSTHOG_HOST = "([^"]+)"/m,
-    )?.[1];
 
     expect(webHost).toBeDefined();
-    expect(engineHost).toBeDefined();
-    expect(engineHost).toBe(webHost);
     expect(DEFAULT_POSTHOG_HOST).toBe(webHost);
   });
 });

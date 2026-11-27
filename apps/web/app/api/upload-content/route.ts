@@ -5,7 +5,6 @@ import { logger } from '@/lib/logger';
 import { ValidationError } from '@/lib/errors';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
-import { secretsMatch } from '@/lib/secrets';
 import { buildUploadErrorResponse } from '@/lib/upload/handlers';
 import { publishContent } from '@/lib/upload/publish-content';
 import { SOCIAL_PROVIDERS, isSocialProvider } from '@/lib/providers/registry';
@@ -15,25 +14,18 @@ import { UPLOAD_CONTENT_MAX_BODY_BYTES } from '@/lib/upload/upload-content-limit
 
 type UploadAuth =
   | { kind: 'session'; userId: string; isApiKey?: boolean; approvalMode?: ApprovalMode }
-  | { kind: 'service' }
   | { kind: 'denied'; error: NextResponse };
 
 async function authenticateUpload(request: NextRequest): Promise<UploadAuth> {
   const session = await requireSupabaseSession(request);
-  if (session.auth)
+  if (session.auth) {
     return {
       kind: 'session',
       userId: session.auth.userId,
       isApiKey: session.auth.isApiKey,
       approvalMode: session.auth.approvalMode,
     };
-
-  const apiSecret = process.env.MONEYPRINT_API_SECRET;
-  const authorization = request.headers.get('authorization');
-  const bearer = authorization?.startsWith('Bearer ')
-    ? authorization.slice('Bearer '.length).trim()
-    : null;
-  if (apiSecret && bearer && secretsMatch(bearer, apiSecret)) return { kind: 'service' };
+  }
 
   return {
     kind: 'denied',
@@ -50,7 +42,7 @@ async function postHandler(request: NextRequest) {
   try {
     const upload = await authenticateUpload(request);
     if (upload.kind === 'denied') return upload.error;
-    if (upload.kind === 'session' && upload.isApiKey === true && upload.approvalMode === 'approval') {
+    if (upload.isApiKey === true && upload.approvalMode === 'approval') {
       return NextResponse.json(
         { success: false, error: 'Approval-mode API keys cannot publish directly.' },
         { status: 403 },
@@ -61,20 +53,7 @@ async function postHandler(request: NextRequest) {
     if (!bounded.ok) return boundedFormDataFailureResponse(bounded);
     const formData = bounded.formData;
 
-    const formUserId = formData.get('userId');
-    const userId =
-      upload.kind === 'session'
-        ? upload.userId
-        : typeof formUserId === 'string' && formUserId.length > 0
-          ? formUserId
-          : null;
-    if (userId === null) {
-      return NextResponse.json(
-        { success: false, error: 'Authentication required.' },
-        { status: 401 },
-      );
-    }
-
+    const userId = upload.userId;
     const provider = formData.get('provider');
 
     if (!isSocialProvider(provider)) {
@@ -92,10 +71,8 @@ async function postHandler(request: NextRequest) {
           : RATE_LIMITS.instagramPost;
     const limited = await applyRateLimit(request, rateProfile, userId);
     if (limited) return limited;
-    if (upload.kind === 'session') {
-      const blocked = await assertAccessActive(userId, { route: 'POST /api/upload-content' });
-      if (blocked) return blocked;
-    }
+    const blocked = await assertAccessActive(userId, { route: 'POST /api/upload-content' });
+    if (blocked) return blocked;
 
     logger.info('[upload-content] request recebido', {
       logId,

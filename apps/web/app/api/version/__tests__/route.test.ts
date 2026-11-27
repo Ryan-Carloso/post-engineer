@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { GET } from '../route';
-import { logger } from '@/lib/logger';
 import { isPostHogServerConfigured } from '@/lib/posthog-server';
 
 vi.mock('@/lib/rate-limit', async (importOriginal) => ({
@@ -22,23 +21,14 @@ vi.mock('@/lib/posthog-server', () => ({
   isPostHogServerConfigured: vi.fn(() => false),
 }));
 
-const ENGINE_URL = 'https://engine.example.com';
-
-function mockFetchOnce(response: { ok: boolean; status: number; json: () => Promise<unknown> }) {
-  const fetchMock = vi.fn(async () => response);
-  vi.stubGlobal('fetch', fetchMock);
-  return fetchMock;
-}
-
 describe('GET /api/version', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.stubEnv('MONEYPRINT_API_URL', ENGINE_URL);
-    vi.stubEnv('VERSION', '');
-    vi.stubEnv('PR_NUMBER', '');
-    vi.stubEnv('BUILD', '');
-    vi.stubEnv('COMMIT', '');
-    vi.stubEnv('BUILT_AT', '');
+    vi.stubEnv('VERSION', '1.30.5');
+    vi.stubEnv('PR_NUMBER', '820');
+    vi.stubEnv('BUILD', '820');
+    vi.stubEnv('COMMIT', 'abc1234');
+    vi.stubEnv('BUILT_AT', '2026-11-27T12:00:00.000Z');
     vi.stubEnv('NODE_ENV', 'test');
     vi.stubEnv('SCHEDULER_ENABLED', '');
     vi.mocked(isPostHogServerConfigured).mockReturnValue(false);
@@ -46,185 +36,46 @@ describe('GET /api/version', () => {
 
   afterEach(() => {
     vi.unstubAllEnvs();
-    vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
-  it('proxies the engine /version payload and adds posthogConfigured', async () => {
-    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
-    const fetchMock = mockFetchOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({ version: '1.28.152', pr: 152, build: 152, commit: '8f31abc' }),
-    });
+  it('reports the web build metadata and telemetry flags', async () => {
     const res = await GET();
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
-      version: '1.28.152',
-      pr: 152,
-      build: 152,
-      commit: '8f31abc',
-      builtAt: null,
+      version: '1.30.5',
+      pr: 820,
+      build: 820,
+      commit: 'abc1234',
+      builtAt: '2026-11-27T12:00:00.000Z',
       posthogConfigured: false,
-      web: {
-        version: 'dev',
-        pr: null,
-        commit: null,
-        builtAt: null,
-        schedulerEnabled: false,
-      },
+      schedulerEnabled: false,
     });
-    expect(fetchMock).toHaveBeenCalledWith(
-      `${ENGINE_URL}/version`,
-      expect.objectContaining({ cache: 'no-store', signal: expect.any(AbortSignal) }),
-    );
-    expect(clearTimeoutSpy).toHaveBeenCalled();
   });
 
-  it('includes web.schedulerEnabled from isSchedulerEnabled', async () => {
+  it('reports schedulerEnabled from isSchedulerEnabled', async () => {
     vi.stubEnv('SCHEDULER_ENABLED', 'true');
-    mockFetchOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({ version: '1.28.152', pr: 152, build: 152, commit: 'abc' }),
-    });
     const json = await (await GET()).json();
-    expect(json.web.schedulerEnabled).toBe(true);
+    expect(json.schedulerEnabled).toBe(true);
   });
 
   it('reports posthogConfigured true when server telemetry is configured', async () => {
     vi.mocked(isPostHogServerConfigured).mockReturnValue(true);
-    mockFetchOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({ version: '1.8.0', build: 502, commit: 'abc123' }),
-    });
-    const res = await GET();
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json).toMatchObject({
-      version: '1.8.0',
-      pr: null,
-      build: 502,
-      commit: 'abc123',
-      posthogConfigured: true,
-      web: expect.objectContaining({
-        schedulerEnabled: false,
-        version: expect.any(String),
-      }),
-    });
+    const json = await (await GET()).json();
+    expect(json.posthogConfigured).toBe(true);
   });
 
-  it('passes through a payload without a PR number (build-only engine)', async () => {
-    mockFetchOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({ version: '1.8.0', build: 502, commit: 'abc123' }),
-    });
-    const res = await GET();
-    expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({
-      version: '1.8.0',
-      pr: null,
-      build: 502,
-      commit: 'abc123',
-      builtAt: null,
-      posthogConfigured: false,
-      web: expect.objectContaining({ schedulerEnabled: expect.any(Boolean) }),
-    });
-  });
-
-  it('strips trailing slashes from the engine base URL', async () => {
-    vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.example.com///');
-    const fetchMock = mockFetchOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({ version: '1.8.0', build: 502, commit: 'abc123' }),
-    });
-    const res = await GET();
-    expect(res.status).toBe(200);
-    expect(fetchMock).toHaveBeenCalledWith(
-      'https://engine.example.com/version',
-      expect.anything(),
-    );
-  });
-
-  it('aborts the engine request when the timeout elapses', async () => {
-    vi.useFakeTimers();
-    try {
-      let signal: AbortSignal | undefined;
-      const fetchMock = vi.fn(async (_url: string, init?: { signal?: AbortSignal }) => {
-        signal = init?.signal;
-        await new Promise<void>((resolve) => {
-          signal?.addEventListener('abort', () => resolve(), { once: true });
-        });
-        throw new Error('aborted');
-      });
-      vi.stubGlobal('fetch', fetchMock);
-      const pending = GET();
-      await vi.advanceTimersByTimeAsync(6000);
-      expect(signal?.aborted).toBe(true);
-      const res = await pending;
-      expect(res.status).toBe(502);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('returns 502 with engine_unreachable when the engine is down', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => {
-        throw new Error('fetch failed');
-      }),
-    );
-    const res = await GET();
-    expect(res.status).toBe(502);
-    const body = await res.json();
-    expect(body.success).toBe(false);
-    expect(body.code).toBe('engine_unreachable');
-    expect(body.error).toBe('Engine version unavailable');
-  });
-
-  it('returns 502 when the engine answers non-ok', async () => {
-    mockFetchOnce({ ok: false, status: 500, json: async () => ({}) });
-    const res = await GET();
-    expect(res.status).toBe(502);
-    const body = await res.json();
-    expect(body.code).toBe('engine_unreachable');
-    expect(body.error).toBe('Engine version unavailable');
-    expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
-      expect.stringContaining('[GET /api/version] 502 Engine version unavailable'),
-      undefined,
-      expect.objectContaining({ engineStatus: 500 }),
-    );
-  });
-
-  it('returns 502 when the engine payload is malformed', async () => {
-    mockFetchOnce({ ok: true, status: 200, json: async () => ({ nope: true }) });
-    const res = await GET();
-    expect(res.status).toBe(502);
-    const body = await res.json();
-    expect(body.code).toBe('engine_unreachable');
-    expect(body.error).toBe('Engine version unavailable');
-    expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
-      expect.stringContaining('Engine /version returned an unexpected payload'),
-      undefined,
-      expect.anything(),
-    );
-  });
-
-  it('throws when MONEYPRINT_API_URL is not configured', async () => {
-    vi.stubEnv('MONEYPRINT_API_URL', '');
-    await expect(GET()).rejects.toThrow('MONEYPRINT_API_URL is not defined');
+  it('falls back to the dev label when no build metadata is set', async () => {
+    vi.stubEnv('VERSION', '');
+    vi.stubEnv('PR_NUMBER', '');
+    vi.stubEnv('BUILD', '');
+    vi.stubEnv('COMMIT', '');
+    vi.stubEnv('BUILT_AT', '');
+    const json = await (await GET()).json();
+    expect(json).toMatchObject({ version: 'dev', pr: null, build: null, commit: null, builtAt: null });
   });
 
   it('requires no authentication', async () => {
-    mockFetchOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({ version: '1.8.0', build: 502, commit: 'abc123' }),
-    });
     const res = await GET();
     expect(res.status).toBe(200);
   });

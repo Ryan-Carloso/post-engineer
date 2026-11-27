@@ -63,7 +63,7 @@ describe('notifyPublishFailed', () => {
     resetOwnerMailWarningForTests();
   });
 
-  it('claims the engine-format dedup key and mails the owner with the persona, the scrubbed reason and the failed account', async () => {
+  it('claims the legacy dedup key and mails the owner with the persona, the scrubbed reason and the failed account', async () => {
     const { deps, rpc, fetchMock } = build();
     await notifyPublishFailed(FAILED, deps);
 

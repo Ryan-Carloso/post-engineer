@@ -1,44 +1,29 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { findRepoRoot } from '@/test/repo-root';
 import { PROVIDER_LABELS } from '@/lib/account-options';
+import { SOCIAL_PROVIDERS } from '@/lib/contracts/providers';
+import { classifyFailure, userNotice } from '@/lib/publisher/outcomes';
+import { classifyUploadAccountError } from '@/lib/upload/account-error';
 import { USER_ACCOUNT_ERROR_CODES } from '@/lib/upload/account-error-codes';
 import { TRANSIENT_HTTP_STATUSES } from '@/lib/upload/account-error';
 
-const root = findRepoRoot(import.meta.url);
-const read = (path: string): string => readFileSync(join(root, path), 'utf8');
-
-function block(source: string, start: string, end: string): string {
-  const from = source.indexOf(start);
-  expect(from).toBeGreaterThanOrEqual(0);
-  const to = source.indexOf(end, from + start.length);
-  expect(to).toBeGreaterThan(from);
-  return source.slice(from + start.length, to);
-}
-
-describe('publish code sync (web ↔ engine)', () => {
-  const outcomes = read('apps/engine/app/services/publisher/account_outcomes.py');
-
-  it('engine USER_CODES match the web user-account codes', () => {
-    const body = block(outcomes, 'USER_CODES = frozenset({', '})');
-    const codes = [...body.matchAll(/"([a-z_]+)"/g)].map((match) => match[1]);
-    expect(codes.sort()).toEqual([...USER_ACCOUNT_ERROR_CODES].sort());
+describe('publish code sync (scheduler ↔ upload route)', () => {
+  it('treats every user-account code as requiring the owner to reconnect', () => {
+    for (const code of USER_ACCOUNT_ERROR_CODES) {
+      expect(classifyFailure(code)).toEqual({ code, requiresUser: true });
+    }
   });
 
-  it('engine provider labels match PROVIDER_LABELS', () => {
-    const body = block(read('apps/engine/app/providers.py'), 'PROVIDER_LABELS: dict[str, str] = {', '}');
-    const labels = Object.fromEntries(
-      [...body.matchAll(/"([a-z0-9]+)":\s*"([^"]+)"/g)].map((match) => [match[1], match[2]]),
-    );
-    expect(labels).toEqual(PROVIDER_LABELS);
+  it('names every provider in the reconnect notice with its shared label', () => {
+    for (const provider of SOCIAL_PROVIDERS) {
+      expect(userNotice(provider, 'token_expired')).toContain(PROVIDER_LABELS[provider]);
+    }
   });
 
-  it('engine RETRYABLE_STATUS_CODES match the web transient statuses', () => {
-    const publisher = read('apps/engine/app/services/upload_publisher.py');
-    const body = block(publisher, 'RETRYABLE_STATUS_CODES: frozenset[int] = frozenset({', '})');
-    const statuses = [...body.matchAll(/\d+/g)].map((match) => Number(match[0]));
-    expect(statuses.sort()).toEqual([...TRANSIENT_HTTP_STATUSES].sort());
-    expect(statuses.length).toBeGreaterThan(0);
+  it('maps every retryable upload status to a transient failure the scheduler retries', () => {
+    for (const status of TRANSIENT_HTTP_STATUSES) {
+      const classified = classifyUploadAccountError({ status });
+      expect(classified.errorCode).toBe('transient');
+      expect(classifyFailure(classified.errorCode)).toEqual({ code: 'transient', requiresUser: false });
+    }
   });
 });

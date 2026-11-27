@@ -9,7 +9,7 @@ Guards the design decisions of the OpenCode review workflow:
 - runtime model chain via select-review-models.py and model-preferences.json
   (free models first, paid fallbacks last); glm-4.5-flash was dropped
 - OpenRouter free tier uses the special router id (no hardcoded model list
-  to rot — same convention as the engine's _PROVIDER_DEFAULT_MODELS), one
+  to rot), one
   OPENROUTER_API_KEY serving both tiers
 - the job always runs (free OpenCode models need no secret); each paid tier
   is skipped when its key is missing (secret gating via step outputs)

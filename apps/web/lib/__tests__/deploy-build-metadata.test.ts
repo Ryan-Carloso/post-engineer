@@ -15,15 +15,6 @@ function read(...relativePath: string[]): string {
 }
 
 describe('deployment build metadata contract', () => {
-  it('passes every metadata var to the engine container', () => {
-    const compose = read('apps', 'engine', 'docker-compose.yml');
-    for (const name of BUILD_METADATA_VARS) {
-      expect(compose, `engine compose must forward ${name}`).toContain(
-        `${name}: \${${name}:-}`,
-      );
-    }
-  });
-
   it('passes every metadata var to the web image as a build arg', () => {
     const compose = read('apps', 'web', 'docker-compose.yml');
     for (const name of BUILD_METADATA_VARS) {
@@ -53,22 +44,10 @@ describe('deployment build metadata contract', () => {
 
   it('bakes builtAt after COMMIT/BUILD so the layer is not cached across deploys', () => {
     const webDocker = read('apps', 'web', 'Dockerfile');
-    const engineDocker = read('apps', 'engine', 'Dockerfile');
     const webCommit = webDocker.indexOf('ARG COMMIT=""');
     const webDate = webDocker.indexOf('date -u +"%Y-%m-%dT%H:%M:%SZ"');
     expect(webCommit).toBeGreaterThan(-1);
     expect(webDate).toBeGreaterThan(webCommit);
-    const engineCommit = engineDocker.indexOf('ARG COMMIT=""');
-    const engineDate = engineDocker.indexOf('date -u +"%Y-%m-%dT%H:%M:%SZ"');
-    expect(engineCommit).toBeGreaterThan(-1);
-    expect(engineDate).toBeGreaterThan(engineCommit);
-  });
-
-  it('reads PR_NUMBER on the engine side too', () => {
-    const asgi = read('apps', 'engine', 'app', 'asgi.py');
-    for (const name of BUILD_METADATA_VARS) {
-      expect(asgi, `engine asgi.py must read ${name}`).toContain(`"${name}"`);
-    }
   });
 
   it('requires REQUIRED_MCP_VERSION at runtime in the web container', () => {
