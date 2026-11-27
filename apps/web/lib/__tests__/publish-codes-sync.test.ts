@@ -7,6 +7,11 @@ import { USER_ACCOUNT_ERROR_CODES } from '@/lib/upload/account-error-codes';
 import { TRANSIENT_HTTP_STATUSES } from '@/lib/upload/account-error';
 
 describe('publish code sync (scheduler ↔ upload route)', () => {
+  it('pins the two code sets that must stay disjoint', () => {
+    expect(USER_ACCOUNT_ERROR_CODES.length).toBe(4);
+    expect(TRANSIENT_HTTP_STATUSES.size).toBeGreaterThan(0);
+  });
+
   it('treats every user-account code as requiring the owner to reconnect', () => {
     for (const code of USER_ACCOUNT_ERROR_CODES) {
       expect(classifyFailure(code)).toEqual({ code, requiresUser: true });

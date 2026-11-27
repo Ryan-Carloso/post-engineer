@@ -24,6 +24,7 @@ describe('the persona face mix is fully removed', () => {
   it('finds the source files it is scanning (a wrong root would pass vacuously)', () => {
     expect(SOURCE_FILES.length).toBeGreaterThan(100);
     expect(SOURCE_FILES.some((file) => file.endsWith('.ts'))).toBe(true);
+    expect(SOURCE_FILES.some((file) => file.endsWith('.tsx'))).toBe(true);
   });
 
   for (const file of SOURCE_FILES) {

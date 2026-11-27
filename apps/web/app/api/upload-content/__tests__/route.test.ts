@@ -38,6 +38,7 @@ vi.mock('@/lib/rate-limit', () => ({
   RATE_LIMITS: {
     youtubeUpload: { name: 'youtube-upload', limit: 5, windowMs: 60_000 },
     instagramPost: { name: 'instagram-post', limit: 10, windowMs: 60_000 },
+    pinterestUpload: { name: 'pinterest-upload', limit: 10, windowMs: 60_000 },
   },
   applyRateLimit: (...args: unknown[]) => mockApplyRateLimit(...args),
 }));
@@ -192,6 +193,115 @@ describe('POST /api/upload-content', () => {
     }));
 
     expect(res.status).toBe(401);
+    expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
+  });
+
+  it('ignores a form userId and publishes for the session user', async () => {
+    const res = await POST(await makeRequest({ userId: 'someone-else' }));
+
+    expect(res.status).toBe(200);
+    expect(mockHandleYoutubeUpload.mock.calls[0]?.[1]).toBe(USER_ID);
+    expect(mockRequireSupabaseSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('applies the access gate for an API-key caller', async () => {
+    mockRequireSupabaseSession.mockResolvedValue({
+      auth: { userId: 'key-user', accessToken: 'pe_live_abc123', isApiKey: true },
+      error: null,
+    });
+
+    const res = await POST(await makeRequest());
+
+    expect(res.status).toBe(200);
+    expect(mockAssertTrialActive).toHaveBeenCalledWith('key-user', {
+      route: 'POST /api/upload-content',
+    });
+    expect(mockHandleYoutubeUpload).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects an approval-mode API key before reading the body', async () => {
+    mockRequireSupabaseSession.mockResolvedValue({
+      auth: { userId: 'key-user', accessToken: 'pe_live_abc123', isApiKey: true, approvalMode: 'approval' },
+      error: null,
+    });
+    const formData = vi.spyOn(Request.prototype, 'formData');
+
+    const res = await POST(await makeRequest());
+
+    expect(res.status).toBe(403);
+    expect(formData).not.toHaveBeenCalled();
+    expect(mockApplyRateLimit).not.toHaveBeenCalled();
+    formData.mockRestore();
+  });
+
+  it('rate limits with the youtube profile and the caller id', async () => {
+    const req = await makeRequest();
+
+    await POST(req);
+
+    expect(mockApplyRateLimit).toHaveBeenCalledWith(req, RATE_LIMITS.youtubeUpload, USER_ID);
+    expect(mockHandleYoutubeUpload).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the pinterest upload profile for pinterest', async () => {
+    const req = await makeRequest({ provider: 'pinterest' });
+
+    await POST(req);
+
+    expect(mockApplyRateLimit).toHaveBeenCalledWith(req, RATE_LIMITS.pinterestUpload, USER_ID);
+    expect(mockApplyRateLimit).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses the removed engine secret before reading the body', async () => {
+    mockRequireSupabaseSession.mockResolvedValue({
+      auth: null,
+      error: NextResponse.json({ success: false }, { status: 401 }),
+    });
+    const formData = vi.spyOn(Request.prototype, 'formData');
+
+    const res = await POST(await makeRequest({
+      authorization: `Bearer ${API_SECRET}`,
+      userId: 'engine-owner',
+    }));
+
+    expect(res.status).toBe(401);
+    expect(formData).not.toHaveBeenCalled();
+    expect(mockRequireSupabaseSession).toHaveBeenCalled();
+    formData.mockRestore();
+  });
+
+  it('does not run the access gate for a denied caller', async () => {
+    mockRequireSupabaseSession.mockResolvedValue({
+      auth: null,
+      error: NextResponse.json({ success: false }, { status: 401 }),
+    });
+
+    await POST(await makeRequest());
+
+    expect(mockAssertTrialActive).not.toHaveBeenCalled();
+    expect(mockApplyRateLimit).not.toHaveBeenCalled();
+  });
+
+  it('logs nothing when authentication fails', async () => {
+    mockRequireSupabaseSession.mockResolvedValue({
+      auth: null,
+      error: NextResponse.json({ success: false }, { status: 401 }),
+    });
+
+    await POST(await makeRequest());
+
+    expect(vi.mocked(logger.info)).not.toHaveBeenCalled();
+    expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
+  });
+
+  it('rejects an empty provider without calling a handler', async () => {
+    mockBuildUploadErrorResponse.mockReturnValue(
+      NextResponse.json({ success: false }, { status: 400 }),
+    );
+
+    const res = await POST(await makeRequest({ provider: '' }));
+
+    expect(res.status).toBe(400);
     expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
   });
 

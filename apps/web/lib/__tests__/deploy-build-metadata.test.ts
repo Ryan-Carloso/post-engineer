@@ -50,6 +50,19 @@ describe('deployment build metadata contract', () => {
     expect(webDate).toBeGreaterThan(webCommit);
   });
 
+  it('inlines BUILT_AT from the build clock in next.config.ts', () => {
+    const nextConfig = read('apps', 'web', 'next.config.ts');
+    expect(nextConfig).toContain('BUILT_AT: readBuiltAt()');
+    const dockerfile = read('apps', 'web', 'Dockerfile');
+    expect(dockerfile).toContain('date -u +"%Y-%m-%dT%H:%M:%SZ" > apps/web/.built-at');
+    expect(nextConfig).toContain("process.env.BUILT_AT");
+  });
+
+  it('records the build timestamp in the image instead of the deploy env', () => {
+    const compose = read('apps', 'web', 'docker-compose.yml');
+    expect(compose).not.toContain('BUILT_AT:');
+  });
+
   it('requires REQUIRED_MCP_VERSION at runtime in the web container', () => {
     const compose = read('apps', 'web', 'docker-compose.yml');
     const environment = compose.slice(compose.indexOf('    environment:'));

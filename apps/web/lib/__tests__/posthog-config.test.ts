@@ -43,6 +43,8 @@ describe('DEFAULT_POSTHOG_HOST source pin', () => {
 
     expect(webHost).toBeDefined();
     expect(DEFAULT_POSTHOG_HOST).toBe(webHost);
+    expect(webSrc.match(/export const DEFAULT_POSTHOG_HOST = '([^']+)'/g)).toHaveLength(1);
+    expect(DEFAULT_POSTHOG_HOST).toMatch(/^https:\/\//);
   });
 });
 

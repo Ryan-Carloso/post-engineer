@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { GET } from '../route';
+import { applyRateLimit } from '@/lib/rate-limit';
 import { isPostHogServerConfigured } from '@/lib/posthog-server';
 
 vi.mock('@/lib/rate-limit', async (importOriginal) => ({
@@ -41,27 +42,29 @@ describe('GET /api/version', () => {
 
   it('reports the web build metadata and telemetry flags', async () => {
     const res = await GET();
+    const json = await res.json();
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({
-      version: '1.30.5',
-      pr: 820,
-      build: 820,
-      commit: 'abc1234',
-      builtAt: '2026-11-27T12:00:00.000Z',
-      posthogConfigured: false,
-      schedulerEnabled: false,
-    });
+    expect(json.version).toBe('1.30.5');
+    expect(json.pr).toBe(820);
+    expect(json.build).toBe(820);
+    expect(json.commit).toBe('abc1234');
+    expect(json.builtAt).toBe('2026-11-27T12:00:00.000Z');
+    expect(json.posthogConfigured).toBe(false);
+    expect(json.schedulerEnabled).toBe(false);
   });
 
   it('reports schedulerEnabled from isSchedulerEnabled', async () => {
     vi.stubEnv('SCHEDULER_ENABLED', 'true');
     const json = await (await GET()).json();
     expect(json.schedulerEnabled).toBe(true);
+    expect(typeof json.schedulerEnabled).toBe('boolean');
   });
 
   it('reports posthogConfigured true when server telemetry is configured', async () => {
     vi.mocked(isPostHogServerConfigured).mockReturnValue(true);
-    const json = await (await GET()).json();
+    const res = await GET();
+    const json = await res.json();
+    expect(res.status).toBe(200);
     expect(json.posthogConfigured).toBe(true);
   });
 
@@ -73,10 +76,58 @@ describe('GET /api/version', () => {
     vi.stubEnv('BUILT_AT', '');
     const json = await (await GET()).json();
     expect(json).toMatchObject({ version: 'dev', pr: null, build: null, commit: null, builtAt: null });
+    expect(json.version).toBe('dev');
   });
 
   it('requires no authentication', async () => {
     const res = await GET();
     expect(res.status).toBe(200);
+  });
+
+  it('returns a null pr when PR_NUMBER is not numeric', async () => {
+    vi.stubEnv('PR_NUMBER', 'abc');
+    vi.stubEnv('BUILD', 'abc');
+    const json = await (await GET()).json();
+    expect(json.pr).toBeNull();
+    expect(json.build).toBeNull();
+    expect(json.version).toBe('1.30.5');
+  });
+
+  it('derives build from the PR number when BUILD is unset', async () => {
+    vi.stubEnv('BUILD', '');
+    const json = await (await GET()).json();
+    expect(json.build).toBe(820);
+    expect(json.build).toBe(json.pr);
+  });
+
+  it('trims surrounding whitespace from VERSION and COMMIT', async () => {
+    vi.stubEnv('VERSION', ' 1.30.5 ');
+    vi.stubEnv('COMMIT', ' abc1234 ');
+    const json = await (await GET()).json();
+    expect(json.version).toBe('1.30.5');
+    expect(json.commit).toBe('abc1234');
+    expect(json.version.trim()).toBe(json.version);
+  });
+
+  it('turns the scheduler on in production by default', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('SCHEDULER_ENABLED', '');
+    const json = await (await GET()).json();
+    expect(json.schedulerEnabled).toBe(true);
+    expect(typeof json.schedulerEnabled).toBe('boolean');
+  });
+
+  it('turns the scheduler off when SCHEDULER_ENABLED=false in production', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('SCHEDULER_ENABLED', 'false');
+    const json = await (await GET()).json();
+    expect(json.schedulerEnabled).toBe(false);
+    expect(json.schedulerEnabled).not.toBe(true);
+  });
+
+  it('applies the version-probe rate limit before answering', async () => {
+    const res = await GET();
+    expect(res.status).toBe(200);
+    expect(applyRateLimit).toHaveBeenCalledWith(undefined, expect.objectContaining({ name: expect.any(String) }));
   });
 });
