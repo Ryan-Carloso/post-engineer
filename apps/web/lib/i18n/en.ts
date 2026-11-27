@@ -45,7 +45,6 @@ export const enDictionary: Dictionary = {
     unknownCaption: 'No caption',
     personaFallback: 'Removed persona',
     noPersona: 'No persona',
-    refresh: 'Refresh',
     detailsTitle: 'Post details',
     postIdLabel: 'Post ID',
     copyPostId: 'Copy post ID',

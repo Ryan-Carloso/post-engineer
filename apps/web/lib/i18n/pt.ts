@@ -44,7 +44,6 @@ export const ptDictionary = {
     unknownCaption: 'Sem legenda',
     personaFallback: 'Persona removida',
     noPersona: 'Sem persona',
-    refresh: 'Atualizar',
     detailsTitle: 'Detalhes do post',
     postIdLabel: 'ID do post',
     copyPostId: 'Copiar ID do post',
