@@ -302,6 +302,13 @@ def main() -> int:
     }
     referenced_ids = set(re.findall(r"steps\.([A-Za-z0-9_-]+)\.", text))
     check(
+        "an attempt without a Verdict line fails in both passes",
+        text.count("grep -qE '^Verdict: (APPROVE|REQUEST_CHANGES)'") == 2
+        and "review-raw.md; then" in text
+        and "pass2-raw.md; then" in text,
+        "narration with no verdict must not be posted as a review",
+    )
+    check(
         "every referenced step id exists",
         referenced_ids <= step_ids,
         f"missing ids: {sorted(referenced_ids - step_ids)}",

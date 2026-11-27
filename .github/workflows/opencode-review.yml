@@ -367,7 +367,11 @@ jobs:
               echo "OpenCode fell back to the default agent for $model; discarding this attempt." >&2
               return 1
             fi
-            [ "$rc" -eq 0 ] && [ -s review-raw.md ]
+            [ "$rc" -eq 0 ] && [ -s review-raw.md ] || return 1
+            if ! grep -qE '^Verdict: (APPROVE|REQUEST_CHANGES)' review-raw.md; then
+              echo "$model wrote no Verdict line; discarding this attempt." >&2
+              return 1
+            fi
           }
           IFS=',' read -r -a attempts <<< "$REVIEW_MODELS"
           if [ "${#attempts[@]}" -eq 0 ]; then
@@ -511,6 +515,10 @@ jobs:
           if [ "$rc" -ne 0 ] || [ ! -s pass2-raw.md ]; then
             echo "Pass 2 produced no output (exit $rc)." >&2
             tail -c 2000 pass2-stderr.txt >&2 || true
+            exit 1
+          fi
+          if ! grep -qE '^Verdict: (APPROVE|REQUEST_CHANGES)' pass2-raw.md; then
+            echo "Pass 2 wrote no Verdict line; keeping pass 1." >&2
             exit 1
           fi
           set +e
