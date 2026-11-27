@@ -17,7 +17,7 @@ export async function postLinkedInFirstComment(input: {
     'LINKEDIN_COMMENT_FAILED',
     `${LINKEDIN_API}/rest/socialActions/${encodeURIComponent(input.postUrn)}/comments`,
     jsonBody(
-      { actor: input.actorUrn, message: { text: input.text } },
+      { actor: input.actorUrn, object: input.postUrn, message: { text: input.text } },
       {
         Authorization: `Bearer ${input.accessToken}`,
         'Linkedin-Version': LINKEDIN_API_VERSION,

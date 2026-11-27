@@ -47,6 +47,7 @@ export const PublishVideoDirectShape = {
     .describe('Pinterest only: the board to publish the pin to (the id from accounts (action: list_boards)). Required for pinterest.'),
   firstComment: z
     .string()
+    .trim()
     .max(FIRST_COMMENT_MAX_LENGTH, `firstComment must be at most ${FIRST_COMMENT_MAX_LENGTH} characters`)
     .optional()
     .describe(FIRST_COMMENT_DESCRIPTION),

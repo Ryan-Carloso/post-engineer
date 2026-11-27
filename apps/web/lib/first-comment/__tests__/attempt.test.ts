@@ -95,8 +95,11 @@ describe('attemptFirstComment', () => {
 
 describe('classifyFirstCommentError', () => {
   it.each([
-    ['youtube', new FirstCommentError('x', 403)],
+    ['youtube', new FirstCommentError('x', 403, { reason: 'insufficientPermissions' })],
+    ['youtube', new FirstCommentError('x', 401)],
     ['instagram', new FirstCommentError('x', 401)],
+    ['instagram', new FirstCommentError('x', 400, { providerCode: 190 })],
+    ['linkedin', new FirstCommentError('x', 403)],
     ['instagram', new FirstCommentError('x', 400, { providerCode: 10 })],
     ['facebook', new FirstCommentError('x', 400, { providerCode: 200 })],
     ['threads', new FirstCommentError('x', 400, { reason: 'PERMISSION_DENIED' })],
@@ -107,6 +110,8 @@ describe('classifyFirstCommentError', () => {
   it.each([
     ['linkedin', new FirstCommentError('x', 500)],
     ['facebook', new FirstCommentError('x', 400, { providerCode: 100 })],
+    ['youtube', new FirstCommentError('x', 403, { reason: 'forbidden' })],
+    ['youtube', new FirstCommentError('x', 403)],
     ['bluesky', new TypeError('fetch failed')],
   ] as const)('%s: any other failure is a plain comment failure', (provider, error) => {
     expect(classifyFirstCommentError(provider, error)).toBe('FIRST_COMMENT_FAILED');

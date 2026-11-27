@@ -51,6 +51,7 @@ export const UpdateSlotTitleShape = {
     .describe('The new title text for the slot. Only a slot that is still ready (not yet publishing) can be edited; published or mid-flight slots are rejected.'),
   firstComment: z
     .string()
+    .trim()
     .max(FIRST_COMMENT_MAX_LENGTH, `firstComment must be at most ${FIRST_COMMENT_MAX_LENGTH} characters`)
     .optional()
     .describe('The new first comment of a ready slot, posted on the post right after it publishes. An empty string removes it. Pass title, firstComment or both.'),

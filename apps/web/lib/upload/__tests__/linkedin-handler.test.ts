@@ -298,7 +298,7 @@ describe('handleLinkedinUpload first comment', () => {
     expect(commentCalls()).toEqual([
       {
         url: 'https://api.linkedin.com/rest/socialActions/urn%3Ali%3Ashare%3A789/comments',
-        body: { actor: `urn:li:person:${MEMBER_ID}`, message: { text: 'Link in bio' } },
+        body: { actor: `urn:li:person:${MEMBER_ID}`, object: 'urn:li:share:789', message: { text: 'Link in bio' } },
       },
     ]);
   });
@@ -326,6 +326,6 @@ describe('handleLinkedinUpload first comment', () => {
   it('comments as the organization when the account is one', async () => {
     mockOrgTokens();
     await handleLinkedinUpload(formData({ linkedinAccountIds: [ORG_URN], firstComment: 'Link in bio' }), USER_ID);
-    expect(commentCalls()[0].body).toEqual({ actor: ORG_URN, message: { text: 'Link in bio' } });
+    expect(commentCalls()[0].body).toEqual({ actor: ORG_URN, object: 'urn:li:share:789', message: { text: 'Link in bio' } });
   });
 });

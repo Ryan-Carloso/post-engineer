@@ -400,6 +400,12 @@ describe('publish_existing first comment', () => {
     expect(over.success === false && over.error.issues[0]?.message).toContain('at most 1000');
   });
 
+  it('measures the trimmed comment like the server and sends it trimmed', () => {
+    const padded = PublishExistingSchema.safeParse(args({ firstComment: ` ${'x'.repeat(1000)} ` }));
+    expect(padded.success).toBe(true);
+    expect(padded.success === true && padded.data.firstComment).toBe('x'.repeat(1000));
+  });
+
   const BASE: PublishExistingInput = {
     media: { kind: 'upload', uploadId: '33333333-3333-4333-8333-333333333333' },
     accounts: { youtube: ['UC1'], instagram: ['ig-1'] },

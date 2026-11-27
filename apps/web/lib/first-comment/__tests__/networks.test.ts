@@ -151,7 +151,7 @@ describe('postLinkedInFirstComment', () => {
     expect(id).toBe('urn:li:comment:(urn:li:share:7000,7001)');
     const { url, init } = lastCall();
     expect(url).toBe('https://api.linkedin.com/rest/socialActions/urn%3Ali%3Ashare%3A7000/comments');
-    expect(JSON.parse(String(init.body))).toEqual({ actor: 'urn:li:person:abc', message: { text: 'Hello' } });
+    expect(JSON.parse(String(init.body))).toEqual({ actor: 'urn:li:person:abc', object: 'urn:li:share:7000', message: { text: 'Hello' } });
     const headers = init.headers as Record<string, string>;
     expect(headers.Authorization).toBe('Bearer li-tok');
     expect(headers['X-Restli-Protocol-Version']).toBe('2.0.0');
