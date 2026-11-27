@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { emptyPersonaDefaultAccounts, type PersonaDefaultAccounts } from '@/lib/persona-publishing-accounts';
 import {
   TITLE_MAX_LENGTH,
   buildSubmission,
+  browserTimezone,
   createDraft,
   defaultPublishAt,
   mediaKindOf,
@@ -179,5 +180,167 @@ describe('post-composer compose', () => {
     expect(bounds.min).toBe('2026-12-01T03:00');
     expect(bounds.max).toBe('2026-12-31T00:00');
     expect(defaultPublishAt(NOW, 'UTC')).toBe('2026-12-02T00:00');
+  });
+
+  it('rejects a description over the limit', () => {
+    const result = build({ description: 'x'.repeat(5001) });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.issues).toContainEqual(
+        expect.objectContaining({ field: 'description', key: 'composer.validationDescriptionLong' }),
+      );
+      expect(result.issues[0].vars).toEqual({ count: 5000 });
+    }
+  });
+
+  it('rejects an invalid timezone', () => {
+    const result = build({ timezone: 'Not/AZone' });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.issues).toContainEqual({ field: 'schedule', key: 'composer.validationTimezone' });
+    }
+  });
+
+  it('rejects a publish time it cannot parse', () => {
+    const result = build({ publishAt: 'not-a-date' });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.issues).toContainEqual(
+        expect.objectContaining({ field: 'schedule', key: 'composer.validationSchedule' }),
+      );
+    }
+  });
+
+  it('returns empty bounds for a timezone it cannot convert', () => {
+    expect(defaultPublishAt(NOW, 'Bogus/Zone')).toBe('');
+    expect(publishAtBounds(NOW, 'Bogus/Zone')).toEqual({ min: '', max: '' });
+  });
+
+  it('falls back to UTC when the browser timezone is missing or unreadable', () => {
+    const original = Intl.DateTimeFormat;
+    vi.stubGlobal(
+      'Intl',
+      Object.assign(Object.create(Intl), {
+        DateTimeFormat: class {
+          static supportedValuesOf(): string[] {
+            return [];
+          }
+          resolvedOptions(): { timeZone?: string } {
+            return { timeZone: '' };
+          }
+        },
+      }),
+    );
+    try {
+      expect(browserTimezone()).toBe('UTC');
+    } finally {
+      vi.stubGlobal('Intl', original);
+    }
+    vi.stubGlobal(
+      'Intl',
+      Object.assign(Object.create(Intl), {
+        DateTimeFormat: class {
+          static supportedValuesOf(): string[] {
+            return [];
+          }
+          resolvedOptions(): { timeZone?: string } {
+            return {};
+          }
+        },
+      }),
+    );
+    try {
+      expect(browserTimezone()).toBe('UTC');
+    } finally {
+      vi.stubGlobal('Intl', original);
+    }
+    vi.stubGlobal(
+      'Intl',
+      Object.assign(Object.create(Intl), {
+        DateTimeFormat: class {
+          resolvedOptions(): { timeZone?: string } {
+            throw new Error('no intl');
+          }
+        },
+      }),
+    );
+    try {
+      expect(browserTimezone()).toBe('UTC');
+    } finally {
+      vi.stubGlobal('Intl', original);
+    }
+  });
+
+  it('builds the full plan for an image post without youtube', () => {
+    const result = build({
+      mediaKind: 'image',
+      accounts: { instagram: ['ig-1'] },
+      mode: 'asap',
+      caption: '  A caption  ',
+      firstComment: '  First!  ',
+      tags: 'vlog',
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.plan.caption).toBe('A caption');
+    expect(result.plan.firstComment).toBe('First!');
+    expect(result.plan.privacyStatus).toBeUndefined();
+    expect(result.plan.pinterestBoardId).toBeNull();
+    expect(result.plan.personaId).toBeNull();
+    expect(result.plan.schedule).toBeNull();
+  });
+
+  it('keeps caption and first comment null when blank', () => {
+    const result = build({ mode: 'asap', caption: '   ', firstComment: '' });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.plan.caption).toBeNull();
+    expect(result.plan.firstComment).toBeNull();
+  });
+
+  it('resolves no content type for a file without an extension', () => {
+    expect(resolveMediaContentType({ type: '', name: 'clip' })).toBeNull();
+    expect(resolveMediaContentType({ type: 'application/octet-stream', name: 'clip.mp4' })).toBe('video/mp4');
+  });
+});
+
+describe('post-composer compose timezones', () => {
+  it('prepends UTC when the platform list omits it', async () => {
+    vi.resetModules();
+    const original = Intl;
+    vi.stubGlobal(
+      'Intl',
+      Object.assign(Object.create(Intl), {
+        supportedValuesOf: () => ['Europe/Lisbon'],
+      }),
+    );
+    try {
+      const mod = await import('../compose');
+      expect(mod.TIMEZONES[0]).toBe('UTC');
+      expect(mod.TIMEZONES).toContain('Europe/Lisbon');
+    } finally {
+      vi.stubGlobal('Intl', original);
+      vi.resetModules();
+    }
+  });
+
+  it('falls back to UTC only when the platform list is unavailable', async () => {
+    vi.resetModules();
+    const original = Intl;
+    vi.stubGlobal(
+      'Intl',
+      Object.assign(Object.create(Intl), {
+        supportedValuesOf: () => {
+          throw new Error('no zones');
+        },
+      }),
+    );
+    try {
+      const mod = await import('../compose');
+      expect(mod.TIMEZONES).toEqual(['UTC']);
+    } finally {
+      vi.stubGlobal('Intl', original);
+      vi.resetModules();
+    }
   });
 });
