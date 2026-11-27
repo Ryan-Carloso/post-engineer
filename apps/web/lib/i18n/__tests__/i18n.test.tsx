@@ -50,6 +50,20 @@ describe('i18n dictionaries', () => {
     expect(enDictionary).not.toHaveProperty('fillSchedule');
   });
 
+  it('sends metrics readers to the networks destination by its nav name in both locales', () => {
+    for (const dictionary of [ptDictionary, enDictionary]) {
+      const destination = dictionary.nav.accounts;
+      for (const copy of [
+        dictionary.metrics.reconnectBody,
+        dictionary.metrics.reconnectAction,
+        dictionary.metrics.coverageYoutubeHint,
+      ]) {
+        expect(copy).toContain(destination);
+        expect(copy).not.toMatch(/\b(Accounts|Contas)\b/);
+      }
+    }
+  });
+
   it('carries the prompts tab copy in both locales', () => {
     expect(ptDictionary.nav.prompts).toBe('Prompts');
     expect(enDictionary.nav.prompts).toBe('Prompts');

@@ -213,7 +213,7 @@ const MobileNavigation = () => {
           <ul className="mt-4 grid grid-cols-2 gap-2">
             {moreLinks.map((link) => {
               const Icon = link.icon;
-              const isActive = onRoute(link.href, pathname);
+              const isActive = isNavActive(link.href, pathname);
               return (
                 <li key={link.href} className="min-w-0">
                   <Link

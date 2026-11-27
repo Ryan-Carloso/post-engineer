@@ -247,6 +247,31 @@ describe('MetricsPage', () => {
     expect(screen.queryByText('metrics.windowCaption')).not.toBeInTheDocument();
   });
 
+  it('switching back to performance drops the view param and leaves a bare /metrics URL', () => {
+    navigation.search = new URLSearchParams('view=experiments');
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})));
+    renderPage();
+    activateTab('metrics.tabPerformance');
+    expect(navigation.replace).toHaveBeenCalledWith('/metrics', { scroll: false });
+  });
+
+  it('switching tabs keeps the other query params', () => {
+    navigation.search = new URLSearchParams('view=experiments&ref=nav');
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})));
+    renderPage();
+    activateTab('metrics.tabPerformance');
+    expect(navigation.replace).toHaveBeenCalledWith('/metrics?ref=nav', { scroll: false });
+  });
+
+  it('does not fetch the metrics while the experiments tab is open', async () => {
+    navigation.search = new URLSearchParams('view=experiments');
+    const fetchMock = vi.fn(() => new Promise<Response>(() => {}));
+    vi.stubGlobal('fetch', fetchMock);
+    renderPage();
+    expect(await screen.findByText('experiments.empty')).toBeInTheDocument();
+    expect(fetchMock.mock.calls.map((call: unknown[]) => String(call[0])).filter((url) => url.includes('/api/metrics'))).toEqual([]);
+  });
+
   it('renders total tiles and the per-video rows sorted by views, highest first', async () => {
     const rows = [
       row(),

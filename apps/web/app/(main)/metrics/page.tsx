@@ -75,7 +75,6 @@ function MetricsPageContent(): React.ReactElement {
   const pathname = usePathname();
   const mode: MetricsMode = searchParams.get(METRICS_MODE_PARAM) === 'experiments' ? 'experiments' : 'performance';
   const changeMode = (next: string): void => {
-    if (next !== 'performance' && next !== 'experiments') return;
     const params = new URLSearchParams(searchParams.toString());
     if (next === 'experiments') params.set(METRICS_MODE_PARAM, 'experiments');
     else params.delete(METRICS_MODE_PARAM);

@@ -539,6 +539,17 @@ describe('mobile header profile area', () => {
     expect(activeLink.className).not.toContain('bg-surface');
   });
 
+  it('on the /persona editor the More sheet marks Personas as current', async () => {
+    vi.mocked(usePathname).mockReturnValue('/persona');
+    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
+    fireEvent.click(screen.getByRole('button', { name: 'nav.more' }));
+    const sheet = await screen.findByRole('dialog', { name: 'nav.moreTitle' });
+    const personasLink = within(sheet).getByText('nav.persona').closest('a') as HTMLElement;
+    expect(personasLink).toHaveAttribute('href', '/personas');
+    expect(personasLink).toHaveAttribute('aria-current', 'page');
+    expect(personasLink.className).toContain('bg-brand-soft');
+  });
+
   it('sidebar user block links to /account', () => {
     mockSessionUser({
       id: 'user-1',

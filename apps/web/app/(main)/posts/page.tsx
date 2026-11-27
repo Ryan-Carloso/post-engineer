@@ -28,7 +28,7 @@ import {
 } from './calendar-days';
 import { AccountEmptyState, DayEmptyState, DayListRow, NewPostButton } from './day-section';
 import { CALENDAR_LAYOUT_CLASS, CalendarLoadingSkeleton } from './loading-skeleton';
-import { PostFiltersBar, SlotCard, usePostFilters, usePostJoins } from './post-joins';
+import { PostFiltersBar, SlotCard, useJoinsCoverSlots, usePostFilters, usePostJoins } from './post-joins';
 import { ApprovalQueue } from './approval-queue';
 import { PageHeader } from '@/components/ui/page-header';
 import { OnboardingWizard, OnboardingWizardButton } from './onboarding-wizard';
@@ -86,6 +86,7 @@ export default function PostsPage() {
     }
     prevActiveRef.current = active;
   }, [accessQuery.data?.active, rangeRefetch]);
+  useJoinsCoverSlots(rangeQuery.data?.slots, joins);
   const passes = filters.passes;
   const slotsByDay = useMemo(
     () => bucketByDay((rangeQuery.data?.slots ?? []).filter(passes)),

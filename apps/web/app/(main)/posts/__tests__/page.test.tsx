@@ -525,6 +525,56 @@ describe('PostsPage', () => {
     expect(accountsRefetch).toHaveBeenCalledTimes(1);
   });
 
+  it('refetches the schedule joins when the calendar returns a slot of a schedule it does not know yet', () => {
+    const schedulesRefetch = vi.fn();
+    const personasRefetch = vi.fn();
+    vi.mocked(useScheduleRangeQuery).mockReturnValue({
+      data: { slots: [UPCOMING_SLOT, { ...UPCOMING_SLOT, id: 'u2', scheduleId: 's-new', title: 'New schedule topic' }], truncated: false },
+      isLoading: false,
+      isFetching: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as never);
+    vi.mocked(useSchedulesQuery).mockReturnValue({ data: [SCHEDULE], isLoading: false, isError: false, refetch: schedulesRefetch } as never);
+    vi.mocked(usePersonaListQuery).mockReturnValue({
+      data: [{ id: 'p1', name: 'Viva Leve' }],
+      isLoading: false,
+      isError: false,
+      refetch: personasRefetch,
+    } as never);
+
+    render(<PostsPage />);
+
+    expect(schedulesRefetch).toHaveBeenCalledTimes(1);
+    expect(personasRefetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not refetch the schedule joins while every calendar slot belongs to a known schedule', () => {
+    const schedulesRefetch = vi.fn();
+    vi.mocked(useSchedulesQuery).mockReturnValue({ data: [SCHEDULE], isLoading: false, isError: false, refetch: schedulesRefetch } as never);
+
+    render(<PostsPage />);
+
+    expect(dayPanelCardText('Upcoming topic')).toBeDefined();
+    expect(schedulesRefetch).not.toHaveBeenCalled();
+  });
+
+  it('does not refetch the schedule joins for an unknown schedule while the joins are still loading', () => {
+    const schedulesRefetch = vi.fn();
+    vi.mocked(useScheduleRangeQuery).mockReturnValue({
+      data: { slots: [{ ...UPCOMING_SLOT, scheduleId: 's-new' }], truncated: false },
+      isLoading: false,
+      isFetching: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as never);
+    vi.mocked(useSchedulesQuery).mockReturnValue({ data: undefined, isLoading: true, isError: false, refetch: schedulesRefetch } as never);
+
+    render(<PostsPage />);
+
+    expect(schedulesRefetch).not.toHaveBeenCalled();
+  });
+
   it('moves "today" past midnight without a reload', async () => {
     const user = userEvent.setup();
     const { rerender } = render(<PostsPage />);
