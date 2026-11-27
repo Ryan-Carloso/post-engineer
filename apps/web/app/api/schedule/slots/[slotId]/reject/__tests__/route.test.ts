@@ -18,12 +18,16 @@ vi.mock('@/lib/rate-limit', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/rate-limit')>();
   return { ...actual, applyRateLimit: vi.fn().mockResolvedValue(null) };
 });
+vi.mock('../../../../cancel-media-cleanup', () => ({
+  removeCancelledMediaImages: vi.fn().mockResolvedValue(undefined),
+}));
 
 import { POST } from '../route';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
+import { removeCancelledMediaImages } from '../../../../cancel-media-cleanup';
 
 const USER_ID = 'user-1';
 const SLOT_ID = '872827cb-6345-45b8-8153-60924092a648';
@@ -119,7 +123,14 @@ describe('POST /api/schedule/slots/[slotId]/reject', () => {
 
   it('rejects an awaiting_approval slot with a guarded update to cancelled and clears its media', async () => {
     const { serviceClient } = mockOwnedClients({
-      slot: { id: 'slot-1', schedule_id: 's1', status: 'awaiting_approval', title: 'T' },
+      slot: {
+        id: 'slot-1',
+        schedule_id: 's1',
+        status: 'awaiting_approval',
+        title: 'T',
+        media_kind: 'image',
+        media_ref: 'scheduled-media/user-1/abc.png',
+      },
       schedule: { id: 's1', user_id: USER_ID },
     });
     mockSession();
@@ -138,6 +149,35 @@ describe('POST /api/schedule/slots/[slotId]/reject', () => {
     const inCall = serviceClient.calls.find((c) => c.op === 'in');
     expect(inCall?.args).toEqual(['status', ['awaiting_approval']]);
     expect(vi.mocked(applyRateLimit)).toHaveBeenCalledWith(expect.any(Request), RATE_LIMITS.slotApprove, USER_ID);
+    expect(vi.mocked(removeCancelledMediaImages)).toHaveBeenCalledWith(
+      expect.anything(),
+      [{ id: 'slot-1', status: 'awaiting_approval', mediaKind: 'image', mediaRef: 'scheduled-media/user-1/abc.png' }],
+      USER_ID,
+    );
+  });
+
+  it('hands an upload slot to the media cleanup too, which skips non-image media', async () => {
+    mockOwnedClients({
+      slot: {
+        id: 'slot-1',
+        schedule_id: 's1',
+        status: 'awaiting_approval',
+        title: 'T',
+        media_kind: 'upload',
+        media_ref: 'upload-1',
+      },
+      schedule: { id: 's1', user_id: USER_ID },
+    });
+    mockSession();
+
+    const response = await postReject(SLOT_ID);
+
+    expect(response.status).toBe(200);
+    expect(vi.mocked(removeCancelledMediaImages)).toHaveBeenCalledWith(
+      expect.anything(),
+      [{ id: 'slot-1', status: 'awaiting_approval', mediaKind: 'upload', mediaRef: 'upload-1' }],
+      USER_ID,
+    );
   });
 
   it('returns 409 for a slot that is not awaiting approval', async () => {

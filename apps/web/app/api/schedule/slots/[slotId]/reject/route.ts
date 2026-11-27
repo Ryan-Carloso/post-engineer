@@ -7,6 +7,7 @@ import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { personaScopeOf } from '@/lib/post-detail';
 import { resolveSlotUuid } from '@/lib/schedule-slot-id';
 import { loadOwnedSlot } from '../route';
+import { removeCancelledMediaImages } from '../../../cancel-media-cleanup';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 import { ERROR_CODES } from '@/lib/error-codes';
 
@@ -65,6 +66,9 @@ async function postHandler(
       cause: updateError,
     });
   }
+  await removeCancelledMediaImages(createSupabaseServiceClient(), [
+    { id: slot.id, status: slot.status, mediaKind: slot.media_kind, mediaRef: slot.media_ref },
+  ], auth.userId);
   return NextResponse.json({ success: true, status: 'cancelled' });
 }
 
