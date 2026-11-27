@@ -29,26 +29,12 @@ afterEach(() => {
 });
 
 describe('postTelegramFirstComment', () => {
-  it('replies in the linked discussion group of a channel', async () => {
-    fetchMock
-      .mockResolvedValueOnce(ok({ id: -1001, type: 'channel', title: 'News', linked_chat_id: -1002 }))
-      .mockResolvedValueOnce(ok({ message_id: 77, chat: { id: -1002 } }));
-    const outcome = await postTelegramFirstComment({ botToken: BOT, chatId: '-1001', messageId: 55, text: 'Hello' });
-    expect(outcome).toBe('posted');
-    expect(urlOf(0)).toContain('/getChat');
-    expect(urlOf(1)).toContain('/sendMessage');
-    expect(bodyOf(1)).toEqual({
-      chat_id: -1002,
-      text: 'Hello',
-      reply_parameters: { chat_id: '-1001', message_id: 55 },
-    });
-  });
-
-  it('skips a channel that has no linked discussion group', async () => {
-    fetchMock.mockResolvedValueOnce(ok({ id: -1001, type: 'channel', title: 'News' }));
+  it('skips a channel, even one with a linked discussion group, without sending anything', async () => {
+    fetchMock.mockResolvedValueOnce(ok({ id: -1001, type: 'channel', title: 'News', linked_chat_id: -1002 }));
     const outcome = await postTelegramFirstComment({ botToken: BOT, chatId: '-1001', messageId: 55, text: 'Hello' });
     expect(outcome).toBe('unsupported_chat');
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(urlOf(0)).toContain('/getChat');
   });
 
   it('replies to the post in the same chat for a group', async () => {

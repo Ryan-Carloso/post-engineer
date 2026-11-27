@@ -149,14 +149,14 @@ describe('handleTelegramUpload first comment', () => {
     return fd;
   }
 
-  it('comments on the channel post with the stored bot token', async () => {
+  it('comments on the group post with the stored bot token', async () => {
     vi.mocked(postTelegramFirstComment).mockResolvedValue('posted');
     const result = await handleTelegramUpload(withComment('Link in bio'), 'user-1');
     expect(postTelegramFirstComment).toHaveBeenCalledWith({ botToken: TOKEN, chatId: '-1001', messageId: 9, text: 'Link in bio' });
     expect(result.results[0].warnings).toBeUndefined();
   });
 
-  it('skips a channel with no linked discussion group and says so', async () => {
+  it('skips a channel and says so', async () => {
     vi.mocked(postTelegramFirstComment).mockResolvedValue('unsupported_chat');
     const result = await handleTelegramUpload(withComment('Link in bio'), 'user-1');
     expect(result.success).toBe(true);

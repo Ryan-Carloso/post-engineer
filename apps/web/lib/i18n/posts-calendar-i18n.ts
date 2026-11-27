@@ -63,7 +63,7 @@ export const postsCalendarStrings = {
       commentWarningReconnect:
         '{provider} publicou o post, mas o primeiro comentário precisa de uma permissão nova. Reconecte a conta do {provider} e tente de novo.',
       commentWarningUnsupportedChat:
-        '{provider} publicou o post, mas este chat não tem grupo de discussão vinculado, então o primeiro comentário foi ignorado.',
+        '{provider} publicou o post, mas o bot não consegue comentar em post de canal, então o primeiro comentário foi ignorado. Em grupos, ele responde ao post.',
       commentWarningTooLong:
         '{provider} publicou o post, mas o primeiro comentário passa do limite de caracteres da rede e foi ignorado.',
     },
@@ -131,7 +131,7 @@ export const postsCalendarStrings = {
       commentWarningReconnect:
         '{provider} published the post, but the first comment needs a new permission. Reconnect the {provider} account and try again.',
       commentWarningUnsupportedChat:
-        '{provider} published the post, but this chat has no linked discussion group, so the first comment was skipped.',
+        '{provider} published the post, but a bot cannot comment on a channel post, so the first comment was skipped. In groups it replies to the post.',
       commentWarningTooLong:
         '{provider} published the post, but the first comment is over the network character limit and was skipped.',
     },

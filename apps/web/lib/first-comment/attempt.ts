@@ -33,7 +33,7 @@ export async function attemptFirstComment(
   try {
     const outcome = await run(text);
     if (outcome === 'unsupported_chat') {
-      logger.warn('upload-content: first comment skipped, the chat has no linked discussion group', { provider, accountId });
+      logger.warn('upload-content: first comment skipped, a bot cannot comment on a Telegram channel post', { provider, accountId });
       return { warnings: ['FIRST_COMMENT_UNSUPPORTED_CHAT'] };
     }
     return {};

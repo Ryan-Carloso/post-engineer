@@ -3,7 +3,7 @@ import { MAX_UPLOAD_VIDEO_GB } from './limits.js';
 import { FIRST_COMMENT_MAX_LENGTH } from './contracts/first-comment.js';
 import { COMMENT_PROVIDERS, SOCIAL_PROVIDERS } from './contracts/providers.js';
 
-export const FIRST_COMMENT_DESCRIPTION = `Optional: a comment the publisher posts on the new post right after it goes live, up to ${FIRST_COMMENT_MAX_LENGTH} characters. Posted on ${COMMENT_PROVIDERS.join(', ')}; the other networks skip it. A failed comment never fails the post: the account result carries a warnings code (FIRST_COMMENT_FAILED, FIRST_COMMENT_RECONNECT_REQUIRED when the account was connected before the comment permission existed and must be reconnected, FIRST_COMMENT_UNSUPPORTED_CHAT for a Telegram channel with no linked discussion group, FIRST_COMMENT_TOO_LONG over the network limit). It cannot be pinned.`;
+export const FIRST_COMMENT_DESCRIPTION = `Optional: a comment the publisher posts on the new post right after it goes live, up to ${FIRST_COMMENT_MAX_LENGTH} characters. Posted on ${COMMENT_PROVIDERS.join(', ')}; the other networks skip it. A failed comment never fails the post: the account result carries a warnings code (FIRST_COMMENT_FAILED, FIRST_COMMENT_RECONNECT_REQUIRED when the account was connected before the comment permission existed and must be reconnected, FIRST_COMMENT_UNSUPPORTED_CHAT for a Telegram channel, where a bot cannot comment; groups get a reply, FIRST_COMMENT_TOO_LONG over the network limit). It cannot be pinned.`;
 
 export const PublishVideoDirectShape = {
   provider: z
