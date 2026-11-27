@@ -14,7 +14,6 @@ import { AccessNotice } from '@/components/access-notice';
 import { APPROVAL_QUEUE_LIMIT, useApprovalQueue } from '@/lib/approval-queue';
 import {
   AccountsIcon,
-  BoltIcon,
   CalendarIcon,
   ChartIcon,
   KeyIcon,
@@ -23,8 +22,8 @@ import {
 
 interface NavItem {
   href: string;
-  labelKey: 'nav.accounts' | 'nav.persona' | 'nav.posts' | 'nav.metrics' | 'nav.experiments' | 'nav.prompts';
-  hintKey: 'nav.accountsHint' | 'nav.personaHint' | 'nav.postsHint' | 'nav.metricsHint' | 'nav.experimentsHint' | 'nav.promptsHint';
+  labelKey: 'nav.accounts' | 'nav.persona' | 'nav.posts' | 'nav.metrics' | 'nav.prompts';
+  hintKey: 'nav.accountsHint' | 'nav.personaHint' | 'nav.postsHint' | 'nav.metricsHint' | 'nav.promptsHint';
   icon: () => React.JSX.Element;
 }
 
@@ -37,7 +36,7 @@ function isNavActive(href: string, pathname: string): boolean {
   return onRoute(href, pathname);
 }
 
-const MORE_ROUTES = ['/metrics', '/experiments'];
+const MORE_ROUTES = ['/personas', '/persona'];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
@@ -65,7 +64,6 @@ const MainSidebar = () => {
     { href: '/accounts', labelKey: 'nav.accounts', hintKey: 'nav.accountsHint', icon: AccountsIcon },
     { href: '/personas', labelKey: 'nav.persona', hintKey: 'nav.personaHint', icon: SparklesIcon },
     { href: '/metrics', labelKey: 'nav.metrics', hintKey: 'nav.metricsHint', icon: ChartIcon },
-    { href: '/experiments', labelKey: 'nav.experiments', hintKey: 'nav.experimentsHint', icon: BoltIcon },
     { href: '/recipes', labelKey: 'nav.prompts', hintKey: 'nav.promptsHint', icon: KeyIcon },
   ];
 
@@ -165,13 +163,12 @@ const MobileNavigation = () => {
     icon: () => React.JSX.Element;
   }> = [
     { href: '/posts', labelKey: 'nav.posts', icon: CalendarIcon },
-    { href: '/personas', labelKey: 'nav.persona', icon: SparklesIcon },
+    { href: '/metrics', labelKey: 'nav.metrics', icon: ChartIcon },
     { href: '/accounts', labelKey: 'nav.accounts', icon: AccountsIcon },
     { href: '/recipes', labelKey: 'nav.prompts', shortLabelKey: 'nav.promptsShort', icon: KeyIcon },
   ];
   const moreLinks: Array<{ href: string; labelKey: NavItem['labelKey']; icon: () => React.JSX.Element }> = [
-    { href: '/metrics', labelKey: 'nav.metrics', icon: ChartIcon },
-    { href: '/experiments', labelKey: 'nav.experiments', icon: BoltIcon },
+    { href: '/personas', labelKey: 'nav.persona', icon: SparklesIcon },
   ];
   const moreActive = MORE_ROUTES.some((route) => onRoute(route, pathname));
 

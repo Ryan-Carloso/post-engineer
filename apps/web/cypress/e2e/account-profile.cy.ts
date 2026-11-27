@@ -87,21 +87,17 @@ describe('Account area — mobile header (390px)', () => {
     cy.contains('h1', 'Perfil').should('be.visible');
   });
 
-  it('opens Metrics from the More sheet', () => {
+  it('opens Personas from the More sheet', () => {
     visitHomeAsReturningUser();
-    cy.intercept('GET', '/api/metrics**', {
-      statusCode: 200,
-      body: { success: true, rows: [], coverage: [], coverageTruncated: false, asOf: null },
-    });
     cy.intercept('GET', '/api/persona/list', { statusCode: 200, body: { authenticated: true, personas: [] } });
 
     cy.get('nav.fixed.bottom-0').contains('button', 'Mais').click();
     cy.get('[role=dialog]').within(() => {
       cy.contains('a', 'Perfil').should('not.exist');
-      cy.contains('a', 'Métricas').click();
+      cy.contains('a', 'Personas').click();
     });
-    cy.url().should('include', '/metrics');
-    cy.contains('h1', 'Métricas').should('be.visible');
+    cy.url().should('include', '/personas');
+    cy.contains('h1', 'Personas').should('be.visible');
   });
 
   it('has four bottom tab links starting at /posts plus More', () => {
@@ -152,17 +148,16 @@ describe('Account area — desktop sidebar footer', () => {
     interceptShellData();
   });
 
-  it('sidebar has seven tabs starting at /posts and has no API Keys tab', () => {
+  it('sidebar has five tabs starting at /posts and has no API Keys tab', () => {
     visitHomeAsReturningUser();
 
     cy.get('aside nav')
       .first()
       .find('a')
-      .should('have.length', 7)
+      .should('have.length', 5)
       .first()
       .should('have.attr', 'href', '/posts');
     cy.get('aside nav').first().find('a[href="/metrics"]').should('have.length', 1);
-    cy.get('aside nav').first().find('a[href="/experiments"]').should('have.length', 1);
     cy.get('aside nav').first().contains('a', 'API Keys').should('not.exist');
   });
 

@@ -76,6 +76,7 @@ const nextConfig: NextConfig = {
     return [
       { source: '/api-keys', destination: '/recipes', permanent: true },
       { source: '/posts/history', destination: '/posts', permanent: true },
+      { source: '/experiments', destination: '/metrics?view=experiments', permanent: true },
     ];
   },
   async headers() {

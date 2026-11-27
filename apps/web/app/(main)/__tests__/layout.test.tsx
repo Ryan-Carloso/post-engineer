@@ -171,21 +171,14 @@ describe('app/(main)/layout — MainLayout', () => {
     }
   });
 
-  it('renders the sidebar tabs in order: Posts, Accounts, Personas, Metrics, Experiments, API Key & MCP', () => {
+  it('renders the sidebar tabs in order: Posts, Accounts, Personas, Metrics, API Key & MCP', () => {
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
     const sidebar = screen.getByTestId('nav-brand').closest('aside');
     const nav = within(sidebar as HTMLElement).getByRole('navigation');
     const titles = within(nav)
       .getAllByRole('link')
       .map((link) => link.getAttribute('title'));
-    expect(titles).toEqual(['nav.posts', 'nav.accounts', 'nav.persona', 'nav.metrics', 'nav.experiments', 'nav.prompts']);
-  });
-
-  it('experiments tab links to /experiments', () => {
-    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
-    const sidebar = screen.getByTestId('nav-brand').closest('aside');
-    const nav = within(sidebar as HTMLElement).getByRole('navigation');
-    expect(within(nav).getByTitle('nav.experiments').closest('a')).toHaveAttribute('href', '/experiments');
+    expect(titles).toEqual(['nav.posts', 'nav.accounts', 'nav.persona', 'nav.metrics', 'nav.prompts']);
   });
 
   it('support link uses the shared support email, not a hardcoded copy', () => {
@@ -386,12 +379,12 @@ describe('app/(main)/layout — MainLayout', () => {
       expect(postsLink?.getAttribute('href')).toBe('/posts');
     });
 
-    it('renders tab links in order: Posts, Personas, Accounts, API Key', () => {
+    it('renders tab links in order: Posts, Metrics, Accounts, API Key', () => {
       render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
       const labels = within(getMobileNav())
         .getAllByRole('link')
         .map((link) => link.textContent);
-      expect(labels).toEqual(['nav.posts', 'nav.persona', 'nav.accounts', 'nav.promptsShort']);
+      expect(labels).toEqual(['nav.posts', 'nav.metrics', 'nav.accounts', 'nav.promptsShort']);
     });
 
     it('has no Billing tab in the mobile nav (moved to the profile area)', () => {
@@ -424,12 +417,12 @@ describe('app/(main)/layout — MainLayout', () => {
       expect(postsLink).toHaveAttribute('aria-current', 'page');
     });
 
-    it('on /experiments highlights Experiments in the sidebar and More in the bottom bar', () => {
-      vi.mocked(usePathname).mockReturnValue('/experiments');
+    it('on /personas highlights Personas in the sidebar and More in the bottom bar', () => {
+      vi.mocked(usePathname).mockReturnValue('/personas');
       render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
       expect(within(getMobileNav()).getByRole('button', { name: 'nav.more' }).className).toContain('font-semibold');
       const sidebar = within(screen.getByTestId('nav-brand').closest('aside') as HTMLElement);
-      expect(sidebar.getByTitle('nav.experiments').className).toContain('bg-brand-soft');
+      expect(sidebar.getByTitle('nav.persona').className).toContain('bg-brand-soft');
       expect(sidebar.getByTitle('nav.metrics').className).not.toContain('bg-brand-soft');
     });
 
@@ -507,12 +500,11 @@ describe('mobile header profile area', () => {
     expect(within(link).getByText('H')).toBeInTheDocument();
   });
 
-  it('More opens a sheet linking Metrics and Experiments (not the profile, no billing)', async () => {
+  it('More opens a sheet linking Personas (not the profile, no billing)', async () => {
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
     fireEvent.click(screen.getByRole('button', { name: 'nav.more' }));
     const sheet = await screen.findByRole('dialog', { name: 'nav.moreTitle' });
-    expect(within(sheet).getByText('nav.metrics').closest('a')).toHaveAttribute('href', '/metrics');
-    expect(within(sheet).getByText('nav.experiments').closest('a')).toHaveAttribute('href', '/experiments');
+    expect(within(sheet).getByText('nav.persona').closest('a')).toHaveAttribute('href', '/personas');
     expect(within(sheet).queryByText('nav.profile')).toBeNull();
     expect(within(sheet).queryByText('nav.billing')).toBeNull();
   });
@@ -524,7 +516,7 @@ describe('mobile header profile area', () => {
     const list = sheet.querySelector('ul');
     expect(list?.className).toContain('grid-cols-2');
     expect(list?.className).not.toContain('grid-cols-3');
-    for (const labelKey of ['nav.metrics', 'nav.experiments']) {
+    for (const labelKey of ['nav.persona']) {
       const label = within(sheet).getByText(labelKey);
       expect(label.className).toContain('truncate');
       expect(label.className).toContain('min-w-0');
@@ -537,20 +529,14 @@ describe('mobile header profile area', () => {
   });
 
   it('More sheet marks the current link with the active style and aria-current', async () => {
-    vi.mocked(usePathname).mockReturnValue('/metrics');
+    vi.mocked(usePathname).mockReturnValue('/personas');
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
     fireEvent.click(screen.getByRole('button', { name: 'nav.more' }));
     const sheet = await screen.findByRole('dialog', { name: 'nav.moreTitle' });
-    const activeLink = within(sheet).getByText('nav.metrics').closest('a') as HTMLElement;
+    const activeLink = within(sheet).getByText('nav.persona').closest('a') as HTMLElement;
     expect(activeLink).toHaveAttribute('aria-current', 'page');
     expect(activeLink.className).toContain('bg-brand-soft');
     expect(activeLink.className).not.toContain('bg-surface');
-    for (const labelKey of ['nav.experiments']) {
-      const link = within(sheet).getByText(labelKey).closest('a') as HTMLElement;
-      expect(link).not.toHaveAttribute('aria-current');
-      expect(link.className).toContain('bg-surface');
-      expect(link.className).not.toContain('bg-brand-soft');
-    }
   });
 
   it('sidebar user block links to /account', () => {

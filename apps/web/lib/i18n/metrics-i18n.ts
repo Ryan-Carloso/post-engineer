@@ -7,6 +7,8 @@ export const metricsStrings = {
     metrics: {
       title: 'Metrics',
       subtitle: 'First 24 hours live vs first 7 and 28 days. Not activity in the last 24 hours.',
+      tabPerformance: 'Performance',
+      tabExperiments: 'Experiments',
       window24h: '24h',
       window7d: '7d',
       window28d: '28d',
@@ -61,6 +63,8 @@ export const metricsStrings = {
     metrics: {
       title: 'Métricas',
       subtitle: 'Primeiras 24h no ar vs primeiros 7 e 28 dias. Não é o que rolou nas últimas 24h.',
+      tabPerformance: 'Desempenho',
+      tabExperiments: 'Experimentos',
       window24h: '24h',
       window7d: '7d',
       window28d: '28d',

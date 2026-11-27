@@ -58,10 +58,11 @@ describe('experiments page (prompt comparison)', () => {
 
   it('shows each prompt of the account with its lift and label', () => {
     cy.intercept('GET', '/api/experiments?window=7d', { statusCode: 200, body: COMPARISON }).as('getComparison');
-    cy.visit('/experiments');
+    cy.visit('/metrics?view=experiments');
     cy.wait('@getComparison');
 
-    cy.contains('h1', 'Experimentos').should('be.visible');
+    cy.contains('h1', 'Métricas').should('be.visible');
+    cy.contains('[role="tab"]', 'Experimentos').should('have.attr', 'data-state', 'active');
     cy.contains('Calm hook').should('be.visible');
     cy.contains('Story first').should('be.visible');
     cy.contains('Oficial').should('be.visible');
@@ -74,7 +75,7 @@ describe('experiments page (prompt comparison)', () => {
   it('switches the window to 28d', () => {
     cy.intercept('GET', '/api/experiments?window=7d', { statusCode: 200, body: COMPARISON }).as('getComparison');
     cy.intercept('GET', '/api/experiments?window=28d', { statusCode: 200, body: { ...COMPARISON, window: '28d' } }).as('get28d');
-    cy.visit('/experiments');
+    cy.visit('/metrics?view=experiments');
     cy.wait('@getComparison');
 
     cy.contains('[role="tab"]', '28d').click();
@@ -84,7 +85,7 @@ describe('experiments page (prompt comparison)', () => {
 
   it('shows the empty state when no video names a prompt', () => {
     cy.intercept('GET', '/api/experiments?window=7d', { statusCode: 200, body: { ...COMPARISON, accounts: [] } }).as('getComparison');
-    cy.visit('/experiments');
+    cy.visit('/metrics?view=experiments');
     cy.wait('@getComparison');
 
     cy.contains('Nenhum experimento ainda').should('be.visible');
@@ -92,7 +93,7 @@ describe('experiments page (prompt comparison)', () => {
 
   it('shows the error state with a retry when the read fails', () => {
     cy.intercept('GET', '/api/experiments?window=7d', { statusCode: 500, body: { success: false, error: 'down' } }).as('getComparison');
-    cy.visit('/experiments');
+    cy.visit('/metrics?view=experiments');
     cy.wait('@getComparison');
 
     cy.contains('Não foi possível carregar os experimentos').should('be.visible');
