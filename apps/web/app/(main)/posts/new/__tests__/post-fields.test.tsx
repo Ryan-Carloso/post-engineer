@@ -87,16 +87,16 @@ describe('PostFields', () => {
   });
 
   it('shows the caption for a non-title provider and hides it for youtube only', () => {
-    const first = renderFields({ providers: ['instagram'] });
+    const first = renderFields({ providers: ['instagram'], draft: { mode: 'asap' } });
     expect(screen.getByLabelText('composer.captionLabel')).toBeInTheDocument();
     expect(screen.getByText('composer.captionHint')).toBeInTheDocument();
     first.unmount();
-    renderFields({ providers: ['youtube'] });
+    renderFields({ providers: ['youtube'], draft: { mode: 'asap' } });
     expect(screen.queryByLabelText('composer.captionLabel')).not.toBeInTheDocument();
   });
 
   it('calls onChange for the caption', () => {
-    const { onChange } = renderFields({ providers: ['instagram'] });
+    const { onChange } = renderFields({ providers: ['instagram'], draft: { mode: 'asap' } });
     fireEvent.change(screen.getByLabelText('composer.captionLabel'), {
       target: { value: 'A caption' },
     });
@@ -104,7 +104,7 @@ describe('PostFields', () => {
   });
 
   it('shows the youtube tags and privacy fields with all privacy options', () => {
-    renderFields({ providers: ['youtube'] });
+    renderFields({ providers: ['youtube'], draft: { mode: 'asap' } });
     expect(screen.getByLabelText('composer.tagsLabel')).toBeInTheDocument();
     expect(screen.getByText('composer.tagsHint')).toBeInTheDocument();
     expect(screen.getByLabelText('composer.privacyLabel')).toBeInTheDocument();
@@ -114,13 +114,13 @@ describe('PostFields', () => {
   });
 
   it('hides the youtube fields for a non-youtube provider', () => {
-    renderFields({ providers: ['instagram'] });
+    renderFields({ providers: ['instagram'], draft: { mode: 'asap' } });
     expect(screen.queryByLabelText('composer.tagsLabel')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('composer.privacyLabel')).not.toBeInTheDocument();
   });
 
   it('calls onChange for tags and privacy', () => {
-    const { onChange } = renderFields({ providers: ['youtube'] });
+    const { onChange } = renderFields({ providers: ['youtube'], draft: { mode: 'asap' } });
     fireEvent.change(screen.getByLabelText('composer.tagsLabel'), { target: { value: 'a, b' } });
     expect(onChange).toHaveBeenCalledWith({ tags: 'a, b' });
     fireEvent.change(screen.getByLabelText('composer.privacyLabel'), { target: { value: 'private' } });
@@ -128,8 +128,17 @@ describe('PostFields', () => {
   });
 
   it('shows the tags issue', () => {
-    renderFields({ providers: ['youtube'], issues: { tags: 'composer.validationTags' } });
+    renderFields({ providers: ['youtube'], draft: { mode: 'asap' }, issues: { tags: 'composer.validationTags' } });
     expect(screen.getByText('composer.validationTags')).toBeInTheDocument();
+  });
+
+  it('hides the caption, tags and privacy fields when scheduling', () => {
+    renderFields({ providers: ['instagram', 'youtube'], draft: { mode: 'scheduled' } });
+    expect(screen.queryByLabelText('composer.captionLabel')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('composer.tagsLabel')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('composer.privacyLabel')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('composer.titleLabel')).toBeInTheDocument();
+    expect(screen.getByLabelText('composer.descriptionLabel')).toBeInTheDocument();
   });
 
   it('shows the pinterest board select with the boards', () => {
@@ -190,7 +199,7 @@ describe('PostFields', () => {
   });
 
   it('disables every field while disabled', () => {
-    renderFields({ providers: ['youtube', 'instagram', 'pinterest'], boards: BOARDS, disabled: true });
+    renderFields({ providers: ['youtube', 'instagram', 'pinterest'], boards: BOARDS, draft: { mode: 'asap' }, disabled: true });
     expect(screen.getByLabelText('composer.titleLabel')).toBeDisabled();
     expect(screen.getByLabelText('composer.descriptionLabel')).toBeDisabled();
     expect(screen.getByLabelText('composer.captionLabel')).toBeDisabled();

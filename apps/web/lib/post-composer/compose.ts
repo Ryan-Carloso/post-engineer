@@ -317,9 +317,10 @@ export function buildSubmission(
       accounts,
       title,
       description,
-      caption: caption === '' ? null : caption,
-      tags: tags.length === 0 ? undefined : tags,
-      privacyStatus: providers.includes('youtube') ? draft.privacyStatus : undefined,
+      caption: draft.mode === 'asap' && caption !== '' ? caption : null,
+      tags: draft.mode === 'asap' && tags.length > 0 ? tags : undefined,
+      privacyStatus:
+        draft.mode === 'asap' && providers.includes('youtube') ? draft.privacyStatus : undefined,
       firstComment: draft.firstComment.trim() === '' ? null : draft.firstComment.trim(),
       personaId: draft.personaId,
       pinterestBoardId: pinterestCount > 0 ? boardId : null,

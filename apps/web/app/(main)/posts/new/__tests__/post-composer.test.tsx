@@ -84,11 +84,12 @@ const INSTAGRAM_ACCOUNT = {
   status: 'ok' as const,
 };
 
-function wrapper() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+function wrapper(client?: QueryClient) {
+  const queryClient =
+    client ?? new QueryClient({ defaultOptions: { queries: { retry: false } } });
   function Wrapper({ children }: { children: ReactNode }) {
     return (
-      <QueryClientProvider client={client}>
+      <QueryClientProvider client={queryClient}>
         <I18nProvider>{children}</I18nProvider>
       </QueryClientProvider>
     );
@@ -109,6 +110,9 @@ function fillText(): void {
   fireEvent.change(screen.getByLabelText('composer.descriptionLabel'), {
     target: { value: 'A short vlog.' },
   });
+}
+
+function fillTags(): void {
   fireEvent.change(screen.getByLabelText('composer.tagsLabel'), {
     target: { value: 'vlog, lisbon' },
   });
@@ -181,6 +185,7 @@ describe('PostComposer', () => {
     fireEvent.click(screen.getByRole('radio', { name: 'composer.modeAsap' }));
     pickAccount();
     fillText();
+    fillTags();
     fireEvent.click(screen.getByTestId('composer-submit'));
 
     await waitFor(() => expect(publishExisting).toHaveBeenCalledTimes(1));
@@ -217,11 +222,33 @@ describe('PostComposer', () => {
     const [plan] = vi.mocked(publishExisting).mock.calls[0];
     expect(plan.mode).toBe('scheduled');
     expect(plan.schedule).not.toBeNull();
+    expect(plan.caption).toBeNull();
+    expect(plan.tags).toBeUndefined();
+    expect(plan.privacyStatus).toBeUndefined();
     expect(await screen.findByText('composer.successScheduledTitle')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'composer.successViewPost' })).toHaveAttribute(
       'href',
       '/posts/slot-1',
     );
+  });
+
+  it('invalidates the schedules query after a successful schedule', async () => {
+    vi.mocked(publishExisting).mockResolvedValue({
+      mode: 'scheduled',
+      replayed: false,
+      scheduleId: 'schedule-1',
+      slots: [{ id: 'slot-1', slotAt: '2026-12-02T20:00:00Z', title: 'A day in Lisbon', status: 'ready' }],
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+    render(<PostComposer />, { wrapper: wrapper(client) });
+    chooseVideo();
+    pickAccount();
+    fillText();
+    fireEvent.click(screen.getByTestId('composer-submit'));
+
+    await waitFor(() => expect(screen.getByText('composer.successScheduledTitle')).toBeInTheDocument());
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['schedules'] });
   });
 
   it('preselects the accounts bound to the chosen persona', () => {
@@ -280,6 +307,10 @@ describe('PostComposer', () => {
     render(<PostComposer />, { wrapper: wrapper() });
     expect(screen.getByText('composer.accountsEmptyTitle')).toBeInTheDocument();
     expect(screen.getByText('composer.accountsEmptyHint')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'composer.accountsEmptyAction' })).toHaveAttribute(
+      'href',
+      '/accounts',
+    );
   });
 
   it('rejects a file over the size limit', () => {
@@ -460,6 +491,7 @@ describe('PostComposer', () => {
     fireEvent.click(screen.getByRole('radio', { name: 'composer.modeAsap' }));
     pickAccount();
     fillText();
+    fillTags();
     fireEvent.click(screen.getByTestId('composer-submit'));
     await waitFor(() => expect(screen.getByText('composer.successAsapTitle')).toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: 'composer.successAgain' }));
@@ -507,6 +539,7 @@ describe('PostComposer', () => {
     fireEvent.click(screen.getByRole('radio', { name: 'composer.modeAsap' }));
     pickAccount();
     fillText();
+    fillTags();
     fireEvent.click(screen.getByTestId('composer-submit'));
     await waitFor(() =>
       expect(screen.getByTestId('composer-submit')).toHaveTextContent('composer.uploading'),
@@ -532,6 +565,50 @@ describe('PostComposer', () => {
     });
     expect(screen.getByText('composer.accountsBoundEmptyTitle')).toBeInTheDocument();
     expect(screen.getByText('composer.personaNoBound')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'composer.accountsEmptyAction' })).not.toBeInTheDocument();
+  });
+
+  it('shows the connect action when the persona has no bound accounts and nothing is connected', () => {
+    vi.mocked(useSocialAccountsQuery).mockReturnValue({
+      data: { authenticated: true, accounts: [] },
+      isLoading: false,
+      isError: false,
+    } as never);
+    vi.mocked(usePersonaListQuery).mockReturnValue({
+      data: [{ id: 'persona-1', name: 'Ana', createdAt: '2026-01-01T00:00:00Z', aiLabel: false }],
+      isLoading: false,
+    } as never);
+    render(<PostComposer />, { wrapper: wrapper() });
+    fireEvent.change(screen.getByLabelText('composer.personaLabel'), {
+      target: { value: 'persona-1' },
+    });
+    expect(screen.getByText('composer.accountsEmptyTitle')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'composer.accountsEmptyAction' })).toHaveAttribute(
+      'href',
+      '/accounts',
+    );
+  });
+
+  it('names the image reason when the persona is bound only to video accounts', () => {
+    const bound = emptyPersonaDefaultAccounts();
+    bound.youtube = ['ch-1'];
+    vi.mocked(usePersonaListQuery).mockReturnValue({
+      data: [{ id: 'persona-1', name: 'Ana', createdAt: '2026-01-01T00:00:00Z', aiLabel: false, boundAccounts: bound }],
+      isLoading: false,
+    } as never);
+    render(<PostComposer />, { wrapper: wrapper() });
+    fireEvent.change(screen.getByLabelText('composer.personaLabel'), {
+      target: { value: 'persona-1' },
+    });
+    expect(screen.getByTestId('account-card-select')).toBeChecked();
+    const file = new File(['bytes'], 'photo.png', { type: 'image/png' });
+    fireEvent.change(screen.getByTestId('composer-file-input'), { target: { files: [file] } });
+    expect(screen.getByText('composer.accountsImageEmptyTitle')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'composer.accountsEmptyAction' })).toHaveAttribute(
+      'href',
+      '/accounts',
+    );
+    expect(screen.queryByText('composer.accountsBoundEmptyTitle')).not.toBeInTheDocument();
   });
 
   it('shows the persona empty state when the chosen persona disappears from the list', () => {

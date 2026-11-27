@@ -41,15 +41,30 @@ function build(
 
 describe('post-composer compose', () => {
   it('builds an asap video plan with the youtube fields', () => {
-    const result = build({ mode: 'asap' });
+    const result = build({ mode: 'asap', caption: 'Watch the vlog' });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.plan.mode).toBe('asap');
     expect(result.plan.providers).toEqual(['youtube']);
     expect(result.plan.accounts).toEqual({ youtube: ['ch-1'] });
+    expect(result.plan.caption).toBe('Watch the vlog');
     expect(result.plan.tags).toEqual(['vlog', 'lisbon']);
     expect(result.plan.privacyStatus).toBe('public');
     expect(result.plan.schedule).toBeNull();
+  });
+
+  it('omits caption, tags and privacy from a scheduled plan', () => {
+    const result = build({
+      mode: 'scheduled',
+      caption: 'A caption for the post',
+      tags: 'vlog, lisbon',
+      privacyStatus: 'private',
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.plan.caption).toBeNull();
+    expect(result.plan.tags).toBeUndefined();
+    expect(result.plan.privacyStatus).toBeUndefined();
   });
 
   it('requires tags for youtube only when publishing now', () => {

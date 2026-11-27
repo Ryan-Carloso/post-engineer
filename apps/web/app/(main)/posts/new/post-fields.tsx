@@ -111,7 +111,7 @@ export function PostFields({
           )}
         </div>
 
-        {caption ? (
+        {draft.mode === 'asap' && caption ? (
           <div>
             <label htmlFor="composer-caption" className="block text-xs font-medium text-ink-soft">
               {t('composer.captionLabel')}
@@ -128,7 +128,7 @@ export function PostFields({
           </div>
         ) : null}
 
-        {youtube ? (
+        {draft.mode === 'asap' && youtube ? (
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label htmlFor="composer-tags" className="block text-xs font-medium text-ink-soft">

@@ -12,7 +12,7 @@ import { accountOption, type AccountOption } from '@/lib/account-options';
 import { SOCIAL_PROVIDERS, type SocialProvider } from '@/lib/contracts/providers';
 import { useI18n } from '@/lib/i18n/provider';
 import { formatFileSize } from '@/lib/ui';
-import { AccountField } from './account-field';
+import { AccountField, type AccountsEmptyReason } from './account-field';
 import { MediaField, type MediaSelection } from './media-field';
 import { PersonaField } from './persona-field';
 import { PostFields } from './post-fields';
@@ -137,6 +137,15 @@ export function PostComposer() {
     if (boundAccounts === null) return accounts;
     return accounts.filter((account) => boundAccounts[account.provider].includes(account.id));
   }, [accounts, boundAccounts]);
+
+  const emptyReason: AccountsEmptyReason =
+    accounts.length === 0
+      ? 'none'
+      : boundAccounts !== null && totalBoundAccounts(boundAccounts) === 0
+        ? 'persona'
+        : draft.mediaKind === 'image'
+          ? 'image'
+          : 'persona';
 
   const pinterestAccountId = (draft.accounts.pinterest ?? [])[0] ?? null;
   const boardsQuery = usePinterestBoardsQuery(pinterestAccountId);
@@ -316,6 +325,7 @@ export function PostComposer() {
       await queryClient.invalidateQueries({ queryKey: ['schedule-status'] });
       await queryClient.invalidateQueries({ queryKey: ['schedule-range'] });
       await queryClient.invalidateQueries({ queryKey: ['schedule-has-any-post'] });
+      await queryClient.invalidateQueries({ queryKey: ['schedules'] });
     } catch (error) {
       const requestError = error instanceof ComposerRequestError ? error : null;
       const expiredUpload =
@@ -403,9 +413,7 @@ export function PostComposer() {
               issue={issueFor('accounts') ?? issueFor('persona')}
               disabled={busy}
               onToggle={onToggleAccount}
-              emptyReason={
-                boundAccounts !== null ? 'persona' : draft.mediaKind === 'image' && accounts.length > 0 ? 'image' : 'none'
-              }
+              emptyReason={emptyReason}
             />
             <PostFields
               draft={draft}
