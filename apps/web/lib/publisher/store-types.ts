@@ -29,6 +29,7 @@ export interface PublisherStore {
   expireInactiveReadySlots(now: Date): Promise<ExpiredSlot[]>;
   personaBoundAccounts(personaId: string): Promise<Record<string, string[]>>;
   updateSlot(slotId: string, fields: Record<string, unknown>): Promise<void>;
+  getSlotMediaClaimedAt(slotId: string): Promise<string | null>;
   getVideoUpload(uploadId: string): Promise<VideoUploadRecord | null>;
   claimVideoUpload(uploadId: string, now: Date): Promise<VideoUploadRecord | null>;
   downloadStorageObject(bucket: string, path: string): Promise<Uint8Array<ArrayBuffer>>;

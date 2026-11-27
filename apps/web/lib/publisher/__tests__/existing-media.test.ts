@@ -255,8 +255,43 @@ describe('resolveExistingMedia', () => {
       }),
     });
     await expect(resolveExistingMedia(store, fail, makeSlot(), NOW, false)).rejects.toThrow('db down');
+    expect(store.getSlotMediaClaimedAt).toHaveBeenCalledWith(SLOT_ID);
     expect(store.removeStorageObject).toHaveBeenCalledWith('videos', `${USER_ID}/${UPLOAD_ID}.mp4`);
     expect(fail).not.toHaveBeenCalled();
+  });
+
+  it('keeps the bytes and rethrows when stamping the claim fails after the stamp committed', async () => {
+    const getVideoUpload = vi
+      .fn()
+      .mockResolvedValueOnce(readyUpload())
+      .mockResolvedValue(readyUpload({ status: 'consumed', consumed_at: NOW.toISOString() }));
+    const store = makeStore({
+      getVideoUpload,
+      getSlotMediaClaimedAt: vi.fn(async () => NOW.toISOString()),
+      updateSlot: vi.fn(async (_slotId: string, fields: Record<string, unknown>) => {
+        if ('media_claimed_at' in fields) throw new Error('db down');
+      }),
+    });
+    await expect(resolveExistingMedia(store, fail, makeSlot(), NOW, false)).rejects.toThrow('db down');
+    expect(store.removeStorageObject).not.toHaveBeenCalled();
+    expect(fail).not.toHaveBeenCalled();
+  });
+
+  it('keeps the bytes and reports the original error when the stamp lookup fails too', async () => {
+    const store = makeStore({
+      getSlotMediaClaimedAt: vi.fn(async () => {
+        throw new Error('lookup down');
+      }),
+      updateSlot: vi.fn(async (_slotId: string, fields: Record<string, unknown>) => {
+        if ('media_claimed_at' in fields) throw new Error('db down');
+      }),
+    });
+    await expect(resolveExistingMedia(store, fail, makeSlot(), NOW, false)).rejects.toThrow('db down');
+    expect(store.removeStorageObject).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith('[publisher] claim-stamp lookup failed after a stamp error, leaving the bytes in place', {
+      slotId: SLOT_ID,
+      reason: 'lookup down',
+    });
   });
 
   it('removes the claimed bytes and rethrows when the claim itself fails after committing', async () => {
@@ -277,6 +312,22 @@ describe('resolveExistingMedia', () => {
 
   it('leaves the bytes alone when the claim fails before committing', async () => {
     const store = makeStore({
+      claimVideoUpload: vi.fn(async () => {
+        throw new Error('db down');
+      }),
+    });
+    await expect(resolveExistingMedia(store, fail, makeSlot(), NOW, false)).rejects.toThrow('db down');
+    expect(store.removeStorageObject).not.toHaveBeenCalled();
+    expect(fail).not.toHaveBeenCalled();
+  });
+
+  it('leaves the bytes alone when the re-read shows a claim from another consumer', async () => {
+    const getVideoUpload = vi
+      .fn()
+      .mockResolvedValueOnce(readyUpload())
+      .mockResolvedValue(readyUpload({ status: 'consumed', consumed_at: '2026-11-27T11:00:00.000Z' }));
+    const store = makeStore({
+      getVideoUpload,
       claimVideoUpload: vi.fn(async () => {
         throw new Error('db down');
       }),

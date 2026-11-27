@@ -132,7 +132,12 @@ async function downloadOrDefer(
   }
 }
 
-async function removeConsumedUpload(store: PublisherStore, slot: PublishSlot, row: VideoUploadRecord): Promise<void> {
+async function removeConsumedUpload(
+  store: PublisherStore,
+  slot: PublishSlot,
+  row: VideoUploadRecord,
+  expectedClaimAt: string,
+): Promise<void> {
   let current: VideoUploadRecord | null;
   try {
     current = await store.getVideoUpload(row.id);
@@ -144,6 +149,7 @@ async function removeConsumedUpload(store: PublisherStore, slot: PublishSlot, ro
     return;
   }
   if (current === null || current.status !== 'consumed' || current.user_id !== slot.userId) return;
+  if (current.consumed_at === null || Date.parse(current.consumed_at) !== Date.parse(expectedClaimAt)) return;
   if (current.storage_path === null || current.storage_path === '') return;
   try {
     await cleanupExistingMedia(store, slot.id, { bucket: VIDEOS_BUCKET, path: current.storage_path });
@@ -153,6 +159,23 @@ async function removeConsumedUpload(store: PublisherStore, slot: PublishSlot, ro
       reason: scrubErrorText(errorMessageOf(error), 200),
     });
   }
+}
+
+async function claimStampMissing(store: PublisherStore, slot: PublishSlot, claimedAt: string): Promise<boolean> {
+  let persisted: string | null;
+  try {
+    persisted = await store.getSlotMediaClaimedAt(slot.id);
+  } catch (error) {
+    logger.warn('[publisher] claim-stamp lookup failed after a stamp error, leaving the bytes in place', {
+      slotId: slot.id,
+      reason: scrubErrorText(errorMessageOf(error), 200),
+    });
+    return false;
+  }
+  if (persisted === null) return true;
+  const persistedAt = Date.parse(persisted);
+  const claimed = Date.parse(claimedAt);
+  return Number.isNaN(persistedAt) || Number.isNaN(claimed) || persistedAt !== claimed;
 }
 
 async function resolveUpload(
@@ -187,7 +210,7 @@ async function resolveUpload(
   try {
     claimed = alreadyClaimed ? row : await store.claimVideoUpload(mediaRef, now);
   } catch (error) {
-    await removeConsumedUpload(store, slot, row);
+    await removeConsumedUpload(store, slot, row, now.toISOString());
     throw error;
   }
   if (claimed === null) {
@@ -198,7 +221,9 @@ async function resolveUpload(
     try {
       await store.updateSlot(slot.id, { media_claimed_at: claimed.consumed_at });
     } catch (error) {
-      await removeConsumedUpload(store, slot, row);
+      if (await claimStampMissing(store, slot, claimed.consumed_at)) {
+        await removeConsumedUpload(store, slot, row, claimed.consumed_at);
+      }
       throw error;
     }
   }
