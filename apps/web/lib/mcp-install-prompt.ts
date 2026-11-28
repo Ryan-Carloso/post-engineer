@@ -5,13 +5,6 @@ const OAUTH_NETWORKS = OAUTH_CONNECT_PROVIDERS.join('/');
 const DIRECT_NETWORKS = DIRECT_CONNECT_PROVIDERS.slice(0, -1).join(', ');
 const LAST_DIRECT_NETWORK = DIRECT_CONNECT_PROVIDERS[DIRECT_CONNECT_PROVIDERS.length - 1];
 
-interface InstallPromptCopy {
-  lines: readonly string[];
-  placeholder: string;
-  replaceSentence: string;
-  filledSentence: string;
-}
-
 const EN_LINES: readonly string[] = [
   'Add the Post Engineer MCP server to my AI agent configuration.',
   '',
@@ -30,13 +23,13 @@ const EN_LINES: readonly string[] = [
   '       }',
   '     }',
   '   }',
-  '2. Replace <MY_API_KEY> with my real API key. No repository clone or local build is required. The @latest tag forces npx to fetch the newest version instead of reusing a stale cached copy.',
+  '2. Never paste my API key into this chat and never ask me for it. Tell me to replace <MY_API_KEY> in the POST_ENGINEER_API_KEY environment variable myself, or to load it from my vault or secret store. No repository clone or local build is required. The @latest tag forces npx to fetch the newest version instead of reusing a stale cached copy.',
   '',
   'Remote (hosted) option — no local install needed:',
   'If your agent supports remote MCP servers (for example ChatGPT), connect it to https://post-engineer.com/mcp instead of the npx command above. It serves the same 10 tools over Streamable HTTP with OAuth sign-in — sign in to Post Engineer when prompted. The actions that read a file from your own machine (publish_video from_file, and a local imagePath or avatarPath) are not available remotely: upload a video or image with publish_video create_upload (PUT the bytes to its signed URL), then complete_upload, then publish_upload or publish_existing.',
   '',
   'Available tools after connecting (10 tools; every one takes an "action"; persona and account fields accept a name or an id). Post Engineer does not generate video: I make the media with my own tools, and these tools upload, publish, schedule and measure it:',
-  '- publish_video: publish media I made: from_file (a local .mp4/.mov, max 2GB, published now), create_upload, complete_upload and publish_upload (a signed upload, video or JPEG/PNG: the bytes never pass through the server; published now), and publish_existing (a completed upload, or a local image, to every network of its accounts in one call, with mode asap or scheduled at publishAt 3h-30d ahead; a scheduled post accepts a promptVersionId for experiments). YouTube needs title, description, tags and privacyStatus; Rumble and Fanvue title and description; the other networks a caption. Publishing needs an active account: after the 7-day free trial ends, or while the subscription is inactive, the call fails with TRIAL_EXPIRED or SUBSCRIPTION_INACTIVE and names the contact link.',
+  '- publish_video: publish media I made: from_file (a local .mp4/.mov, max 2GB, published now), create_upload, complete_upload and publish_upload (a signed upload, video or JPEG/PNG: the bytes never pass through the server; published now), and publish_existing (a completed upload, or a local image, to every network of its accounts in one call, with mode asap or scheduled at publishAt 3h-30d ahead; a scheduled post accepts a promptVersionId for experiments). YouTube needs title, description, tags and privacyStatus; Rumble and Fanvue title and description; the other networks a caption. Publishing needs an active account: until the account is admitted to the closed beta (request access on Discord), or while the subscription is inactive, the call fails with BETA_ACCESS_REQUIRED or SUBSCRIPTION_INACTIVE and names the contact link.',
   '- personas: list (id and name), get, create (a name and at least one publishing account; a photo is optional), update (only the given fields change; identityCard sets the identity card, or null removes it) and delete (without confirmToken it only previews what would be removed; send the confirmToken of that preview to delete).',
   '- persona_media: get_card returns the persona\'s identity card (or null); render_prompt renders a deterministic image-edit prompt from the card plus a scene (outfit, pose, setting, lighting, framing) — advice for your image tool, nothing is generated or stored.',
   `- accounts: list (my connected social accounts with the names and ids to publish with), connect (OAuth link for ${OAUTH_NETWORKS}; direct connect for ${DIRECT_NETWORKS} and ${LAST_DIRECT_NETWORK}), disconnect (by name or id), get_persona_publishing and set_persona_publishing (the accounts a persona publishes to by default), list_boards (Pinterest boards).`,
@@ -74,13 +67,13 @@ const PT_LINES: readonly string[] = [
   '       }',
   '     }',
   '   }',
-  '2. Substitua <MINHA_API_KEY> pela minha API key real. Não é necessário clonar o repositório nem fazer build local. A tag @latest força o npx a baixar a versão mais nova em vez de reutilizar uma cópia antiga em cache.',
+  '2. Nunca cole minha API key neste chat e nunca peça que eu a envie. Diga-me para substituir <MINHA_API_KEY> na variável de ambiente POST_ENGINEER_API_KEY eu mesmo, ou para carregá-la do meu cofre de segredos. Não é necessário clonar o repositório nem fazer build local. A tag @latest força o npx a baixar a versão mais nova em vez de reutilizar uma cópia antiga em cache.',
   '',
   'Opção remota (hospedada) — sem instalação local:',
   'Se o seu agente suporta servidores MCP remotos (por exemplo, ChatGPT), conecte-o a https://post-engineer.com/mcp em vez do comando npx acima. Ele serve as mesmas 10 tools por Streamable HTTP com login OAuth — faça login no Post Engineer quando solicitado. As actions que leem um arquivo da sua máquina (publish_video from_file, e um imagePath ou avatarPath local) não estão disponíveis remotamente: envie um vídeo ou imagem com publish_video create_upload (PUT dos bytes na signed URL), depois complete_upload, depois publish_upload ou publish_existing.',
   '',
   'Tools disponíveis após conectar (10 tools; todas recebem um "action"; os campos de persona e de conta aceitam um nome ou um id). O Post Engineer não gera vídeo: eu faço a mídia com minhas próprias ferramentas, e estas tools enviam, publicam, agendam e medem:',
-  '- publish_video: publicar a mídia que eu fiz: from_file (um .mp4/.mov local, máx 2GB, publicado na hora), create_upload, complete_upload e publish_upload (um upload assinado, vídeo ou JPEG/PNG: os bytes nunca passam pelo servidor; publicado na hora), e publish_existing (um upload concluído, ou uma imagem local, para todas as redes das contas em uma chamada, com mode asap ou scheduled em publishAt de 3h a 30d à frente; um post agendado aceita um promptVersionId para experimentos). YouTube exige title, description, tags e privacyStatus; Rumble e Fanvue title e description; as demais redes uma caption. Publicar exige conta ativa: depois que o teste grátis de 7 dias termina, ou enquanto a assinatura não está ativa, a chamada falha com TRIAL_EXPIRED ou SUBSCRIPTION_INACTIVE e mostra o link de contato.',
+  '- publish_video: publicar a mídia que eu fiz: from_file (um .mp4/.mov local, máx 2GB, publicado na hora), create_upload, complete_upload e publish_upload (um upload assinado, vídeo ou JPEG/PNG: os bytes nunca passam pelo servidor; publicado na hora), e publish_existing (um upload concluído, ou uma imagem local, para todas as redes das contas em uma chamada, com mode asap ou scheduled em publishAt de 3h a 30d à frente; um post agendado aceita um promptVersionId para experimentos). YouTube exige title, description, tags e privacyStatus; Rumble e Fanvue title e description; as demais redes uma caption. Publicar exige conta ativa: até a conta ser liberada no beta fechado (peça acesso no Discord), ou enquanto a assinatura não está ativa, a chamada falha com BETA_ACCESS_REQUIRED ou SUBSCRIPTION_INACTIVE e mostra o link de contato.',
   '- personas: list (id e nome), get, create (um nome e ao menos uma conta de publicação; a foto é opcional), update (só os campos enviados mudam; identityCard define o cartão de identidade, ou null remove-o) e delete (sem confirmToken só mostra o que seria removido; envie o confirmToken dessa prévia para apagar).',
   '- persona_media: get_card devolve o cartão de identidade da persona (ou null); render_prompt gera um prompt determinístico de edição de imagem a partir do cartão mais uma cena (roupa, pose, cenário, iluminação, enquadramento) — orientação para a sua ferramenta de imagem, nada é gerado ou guardado.',
   `- accounts: list (minhas contas sociais conectadas com os nomes e ids para publicar), connect (link OAuth para ${OAUTH_NETWORKS}; conexão direta para ${DIRECT_NETWORKS} e ${LAST_DIRECT_NETWORK}), disconnect (por nome ou id), get_persona_publishing e set_persona_publishing (as contas em que uma persona publica por padrão), list_boards (boards do Pinterest).`,
@@ -100,30 +93,11 @@ const PT_LINES: readonly string[] = [
   '5. Quando eu perguntar sobre meus posts (o que vem aí, o que já saiu), chame posts (action: list) e resuma os próximos e os passados, incluindo os erros de falha. Para desempenho, use insights (action: post_metrics).',
 ];
 
-const COPY: Record<Locale, InstallPromptCopy> = {
-  en: {
-    lines: EN_LINES,
-    placeholder: '<MY_API_KEY>',
-    replaceSentence: 'Replace <MY_API_KEY> with my real API key.',
-    filledSentence: 'The API key above is already my real key.',
-  },
-  pt: {
-    lines: PT_LINES,
-    placeholder: '<MINHA_API_KEY>',
-    replaceSentence: 'Substitua <MINHA_API_KEY> pela minha API key real.',
-    filledSentence: 'A API key acima já é a minha chave real.',
-  },
+const PROMPT_LINES: Record<Locale, readonly string[]> = {
+  en: EN_LINES,
+  pt: PT_LINES,
 };
 
-export function buildInstallPrompt(locale: Locale, apiKey: string | null): string {
-  const copy = COPY[locale];
-  if (apiKey === null) return copy.lines.join('\n');
-  const quotedPlaceholder = `"${copy.placeholder}"`;
-  return copy.lines
-    .map((line) =>
-      line
-        .replace(quotedPlaceholder, JSON.stringify(apiKey))
-        .replace(copy.replaceSentence, copy.filledSentence),
-    )
-    .join('\n');
+export function buildInstallPrompt(locale: Locale): string {
+  return PROMPT_LINES[locale].join('\n');
 }

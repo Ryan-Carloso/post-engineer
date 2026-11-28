@@ -34,7 +34,7 @@ vi.mock('@/lib/api-first-comment', () => ({
 }));
 
 vi.mock('@/lib/access-query', () => ({
-  useAccessQuery: vi.fn(() => ({ data: { active: true, endsAt: '2030-01-01T00:00:00.000Z', daysLeft: 1, reason: 'trial' } })),
+  useAccessQuery: vi.fn(() => ({ data: { active: true, endsAt: '2030-01-01T00:00:00.000Z', reason: 'beta' } })),
 }));
 vi.mock('@/lib/api-slot-reschedule', () => ({
   useRescheduleSlotMutation: vi.fn(),

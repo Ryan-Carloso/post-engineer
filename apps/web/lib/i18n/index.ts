@@ -47,7 +47,6 @@ export const ptDictionary = {
   sharedView: shareLinksStrings.pt.sharedView,
   identityCard: personaIdentityCardStrings.pt.identityCard,
   notFound: notFoundStrings.pt.notFound,
-  trial: accessStrings.pt.trial,
   access: accessStrings.pt.access,
 };
 
@@ -71,7 +70,6 @@ export const enDictionary = {
   sharedView: shareLinksStrings.en.sharedView,
   identityCard: personaIdentityCardStrings.en.identityCard,
   notFound: notFoundStrings.en.notFound,
-  trial: accessStrings.en.trial,
   access: accessStrings.en.access,
 };
 

@@ -80,7 +80,7 @@ jobs:
       # so every run needs a fresh key; restore-keys picks the latest one
       # from this PR (or from manual dispatches).
       - name: Restore Stryker incremental state
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: apps/${{ matrix.app }}/reports/stryker-incremental.json
           key: stryker-inc-${{ matrix.app }}-pr-${{ github.event.pull_request.number || 'manual' }}-${{ github.run_id }}
@@ -235,7 +235,7 @@ jobs:
 
       - name: Upload mutation HTML report
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: mutation-report-${{ matrix.app }}-${{ github.event.pull_request.number || 'manual' }}
           path: apps/${{ matrix.app }}/reports/mutation/

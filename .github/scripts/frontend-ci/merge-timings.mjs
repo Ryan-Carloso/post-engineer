@@ -21,7 +21,6 @@ function readJson(file) {
 }
 
 function findTimingFiles(dir) {
-  /** @type {string[]} */
   const found = [];
   let entries;
   try {

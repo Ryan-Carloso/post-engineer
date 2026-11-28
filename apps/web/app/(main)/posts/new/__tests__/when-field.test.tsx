@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 
 vi.mock('@/lib/i18n/provider', () => {
@@ -71,7 +72,7 @@ describe('WhenField', () => {
     expect(publishAt).toHaveValue('2026-12-02T20:00');
     expect(publishAt).toHaveAttribute('min', '2026-12-01T03:00');
     expect(publishAt).toHaveAttribute('max', '2026-12-31T00:00');
-    expect(screen.getByLabelText('composer.scheduleTimezoneLabel')).toHaveValue('Europe/Lisbon');
+    expect(screen.getByLabelText('composer.scheduleTimezoneLabel')).toHaveTextContent('Europe/Lisbon');
     expect(screen.getByText('composer.scheduleWindowHint({"min":3,"max":30})')).toBeInTheDocument();
   });
 
@@ -82,26 +83,36 @@ describe('WhenField', () => {
     expect(publishAt).not.toHaveAttribute('max');
   });
 
-  it('prepends a timezone that is not in the list', () => {
+  it('prepends a timezone that is not in the list', async () => {
     renderField({ mode: 'scheduled', timezone: 'America/Sao_Paulo' });
-    const select = screen.getByLabelText('composer.scheduleTimezoneLabel') as HTMLSelectElement;
-    expect(select).toHaveValue('America/Sao_Paulo');
-    expect(screen.getByText('America/Sao_Paulo')).toBeInTheDocument();
-    expect(screen.getByText('UTC')).toBeInTheDocument();
-    expect(screen.getByText('Europe/Lisbon')).toBeInTheDocument();
+    const select = screen.getByLabelText('composer.scheduleTimezoneLabel');
+    expect(select).toHaveTextContent('America/Sao_Paulo');
+    await userEvent.setup().click(select);
+    const names = screen.getAllByRole('option').map((option) => option.textContent);
+    expect(names).toContain('UTC');
+    expect(names).toContain('Europe/Lisbon');
+    expect(names.filter((name) => name === 'America/Sao_Paulo')).toHaveLength(1);
   });
 
-  it('calls onPublishAtChange and onTimezoneChange', () => {
+  it('calls onPublishAtChange and onTimezoneChange', async () => {
     const { onPublishAtChange, onTimezoneChange } = renderField({ mode: 'scheduled' });
     fireEvent.change(screen.getByLabelText('composer.scheduleAtLabel'), {
       target: { value: '2026-12-03T10:00' },
     });
     expect(onPublishAtChange).toHaveBeenCalledTimes(1);
     expect(onPublishAtChange).toHaveBeenCalledWith('2026-12-03T10:00');
-    fireEvent.change(screen.getByLabelText('composer.scheduleTimezoneLabel'), {
-      target: { value: 'UTC' },
-    });
+    const user = userEvent.setup();
+    await user.click(screen.getByLabelText('composer.scheduleTimezoneLabel'));
+    await user.click(screen.getByRole('option', { name: 'UTC' }));
     expect(onTimezoneChange).toHaveBeenCalledTimes(1);
+    expect(onTimezoneChange).toHaveBeenCalledWith('UTC');
+  });
+
+  it('selects a timezone by typing on the focused trigger', async () => {
+    const { onTimezoneChange } = renderField({ mode: 'scheduled' });
+    const user = userEvent.setup();
+    screen.getByLabelText('composer.scheduleTimezoneLabel').focus();
+    await user.keyboard('utc');
     expect(onTimezoneChange).toHaveBeenCalledWith('UTC');
   });
 

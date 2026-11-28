@@ -6,7 +6,8 @@ import TextDiffView from '@/components/ui/text-diff-view';
 import { useI18n } from '@/lib/i18n/provider';
 import type { TranslationKey } from '@/lib/i18n';
 import { diffText, type TextDiff } from '@/lib/text-diff';
-import { INPUT_CLASS, SpinnerIcon } from '@/lib/ui';
+import { SelectField } from '@/components/ui/select';
+import { SpinnerIcon } from '@/lib/ui';
 import { promptFailureKey } from '@/lib/user-prompts-client';
 import { PromptVersionReadError, promptVersionQueryOptions } from '@/lib/use-user-prompts';
 
@@ -97,19 +98,17 @@ export default function PromptVersionCompare({
       <label htmlFor={id} className="block text-xs font-medium text-ink-soft">
         {t(label)}
       </label>
-      <select
+      <SelectField
         id={id}
         data-testid={id}
-        value={value}
-        onChange={(event) => update(Number(event.target.value))}
-        className={INPUT_CLASS}
-      >
-        {versions.map((version) => (
-          <option key={version} value={version}>
-            {t(version === currentVersion ? 'userPrompts.compareCurrentOption' : 'userPrompts.versionLabel', { version })}
-          </option>
-        ))}
-      </select>
+        value={String(value)}
+        onValueChange={(next) => update(Number(next))}
+        options={versions.map((version) => ({
+          value: String(version),
+          label: t(version === currentVersion ? 'userPrompts.compareCurrentOption' : 'userPrompts.versionLabel', { version }),
+        }))}
+        className="mt-1.5"
+      />
     </div>
   );
 

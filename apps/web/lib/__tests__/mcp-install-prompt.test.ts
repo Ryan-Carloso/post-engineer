@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { buildInstallPrompt } from '../mcp-install-prompt';
 
-const KEY = 'pe_live_abcdef1234567890abcdef1234567890';
-
 describe('buildInstallPrompt', () => {
   it('pins the full install prompt in each locale (agent-facing contract)', () => {
-    expect(buildInstallPrompt('en', null).split('\n')).toEqual(EXPECTED_EN_PROMPT);
-    expect(buildInstallPrompt('pt', null).split('\n')).toEqual(EXPECTED_PT_PROMPT);
+    expect(buildInstallPrompt('en').split('\n')).toEqual(EXPECTED_EN_PROMPT);
+    expect(buildInstallPrompt('pt').split('\n')).toEqual(EXPECTED_PT_PROMPT);
   });
 
   const TOOL_ACTIONS: Record<string, string[]> = {
@@ -23,7 +21,7 @@ describe('buildInstallPrompt', () => {
   };
 
   it.each(['en', 'pt'] as const)('documents the 10 tools and every action in the %s prompt', (locale) => {
-    const prompt = buildInstallPrompt(locale, null);
+    const prompt = buildInstallPrompt(locale);
     expect(Object.keys(TOOL_ACTIONS)).toHaveLength(10);
     for (const [tool, actions] of Object.entries(TOOL_ACTIONS)) {
       const bullet = prompt.split('\n').find((line) => line.startsWith(`- ${tool}:`));
@@ -35,7 +33,7 @@ describe('buildInstallPrompt', () => {
   });
 
   it('keeps the agent-facing facts the prompt must carry', () => {
-    const prompt = buildInstallPrompt('en', null);
+    const prompt = buildInstallPrompt('en');
     expect(prompt).toContain('post-engineer');
     expect(prompt).toContain('POST_ENGINEER_API_KEY');
     expect(prompt).toContain('"command": ["npx", "-y", "post-engineer-mcp@latest"]');
@@ -56,7 +54,7 @@ describe('buildInstallPrompt', () => {
 
   it('documents the hosted remote MCP endpoint beside the npx snippet', () => {
     for (const locale of ['en', 'pt'] as const) {
-      const prompt = buildInstallPrompt(locale, null);
+      const prompt = buildInstallPrompt(locale);
       expect(prompt, locale).toContain('https://post-engineer.com/mcp');
       expect(prompt, locale).toContain('publish_video from_file');
       expect(prompt, locale).toContain('publish_video create_upload');
@@ -67,51 +65,32 @@ describe('buildInstallPrompt', () => {
 
   it('points at the prompts hub, never the removed /api-keys page', () => {
     for (const locale of ['en', 'pt'] as const) {
-      const prompt = buildInstallPrompt(locale, null);
+      const prompt = buildInstallPrompt(locale);
       expect(prompt, locale).toContain('https://post-engineer.com/recipes.');
       expect(prompt, locale).not.toContain('/api-keys');
     }
   });
 
-  it('fills a created key into the config and drops the replace instruction (EN)', () => {
-    const lines = buildInstallPrompt('en', KEY).split('\n');
-    const expected = EXPECTED_EN_PROMPT.map((line) =>
-      line
-        .replace('"<MY_API_KEY>"', `"${KEY}"`)
-        .replace(
-          'Replace <MY_API_KEY> with my real API key.',
-          'The API key above is already my real key.',
-        ),
+  it.each([
+    ['en', '<MY_API_KEY>'],
+    ['pt', '<MINHA_API_KEY>'],
+  ] as const)('keeps the %s key placeholder in the env and tells the agent never to take the key in chat', (locale, placeholder) => {
+    const prompt = buildInstallPrompt(locale);
+    expect(prompt).toContain(`"POST_ENGINEER_API_KEY": "${placeholder}"`);
+    expect(prompt).not.toMatch(/pe_live_/);
+    expect(prompt.split('\n').find((line) => line.startsWith('2. '))).toContain(
+      locale === 'en' ? 'Never paste my API key into this chat' : 'Nunca cole minha API key neste chat',
     );
-    expect(lines).toEqual(expected);
-    expect(lines).toContain(`           "POST_ENGINEER_API_KEY": "${KEY}"`);
-    expect(lines.join('\n')).not.toContain('<MY_API_KEY>');
   });
 
-  it('fills a created key into the config and drops the replace instruction (PT)', () => {
-    const lines = buildInstallPrompt('pt', KEY).split('\n');
-    const expected = EXPECTED_PT_PROMPT.map((line) =>
-      line
-        .replace('"<MINHA_API_KEY>"', `"${KEY}"`)
-        .replace(
-          'Substitua <MINHA_API_KEY> pela minha API key real.',
-          'A API key acima já é a minha chave real.',
-        ),
-    );
-    expect(lines).toEqual(expected);
-    expect(lines).toContain(`           "POST_ENGINEER_API_KEY": "${KEY}"`);
-    expect(lines.join('\n')).not.toContain('<MINHA_API_KEY>');
-  });
-
-  it('JSON-escapes the key so the config stays valid', () => {
-    const prompt = buildInstallPrompt('en', 'a"b');
-    expect(prompt).toContain('"POST_ENGINEER_API_KEY": "a\\"b"');
+  it('takes no API key argument, so a key can never be embedded', () => {
+    expect(buildInstallPrompt.length).toBe(1);
   });
 
   it('documents the same minimum schedule window in the EN and PT install prompts', () => {
     const prompts: Record<string, string> = {
-      en: buildInstallPrompt('en', null),
-      pt: buildInstallPrompt('pt', null),
+      en: buildInstallPrompt('en'),
+      pt: buildInstallPrompt('pt'),
     };
     for (const locale of ['en', 'pt'] as const) {
       expect(prompts[locale], `${locale} prompt`).not.toMatch(
@@ -156,13 +135,13 @@ const EXPECTED_EN_PROMPT: string[] = [
   '       }',
   '     }',
   '   }',
-  '2. Replace <MY_API_KEY> with my real API key. No repository clone or local build is required. The @latest tag forces npx to fetch the newest version instead of reusing a stale cached copy.',
+  '2. Never paste my API key into this chat and never ask me for it. Tell me to replace <MY_API_KEY> in the POST_ENGINEER_API_KEY environment variable myself, or to load it from my vault or secret store. No repository clone or local build is required. The @latest tag forces npx to fetch the newest version instead of reusing a stale cached copy.',
   '',
   'Remote (hosted) option — no local install needed:',
   'If your agent supports remote MCP servers (for example ChatGPT), connect it to https://post-engineer.com/mcp instead of the npx command above. It serves the same 10 tools over Streamable HTTP with OAuth sign-in — sign in to Post Engineer when prompted. The actions that read a file from your own machine (publish_video from_file, and a local imagePath or avatarPath) are not available remotely: upload a video or image with publish_video create_upload (PUT the bytes to its signed URL), then complete_upload, then publish_upload or publish_existing.',
   '',
   'Available tools after connecting (10 tools; every one takes an "action"; persona and account fields accept a name or an id). Post Engineer does not generate video: I make the media with my own tools, and these tools upload, publish, schedule and measure it:',
-  '- publish_video: publish media I made: from_file (a local .mp4/.mov, max 2GB, published now), create_upload, complete_upload and publish_upload (a signed upload, video or JPEG/PNG: the bytes never pass through the server; published now), and publish_existing (a completed upload, or a local image, to every network of its accounts in one call, with mode asap or scheduled at publishAt 3h-30d ahead; a scheduled post accepts a promptVersionId for experiments). YouTube needs title, description, tags and privacyStatus; Rumble and Fanvue title and description; the other networks a caption. Publishing needs an active account: after the 7-day free trial ends, or while the subscription is inactive, the call fails with TRIAL_EXPIRED or SUBSCRIPTION_INACTIVE and names the contact link.',
+  '- publish_video: publish media I made: from_file (a local .mp4/.mov, max 2GB, published now), create_upload, complete_upload and publish_upload (a signed upload, video or JPEG/PNG: the bytes never pass through the server; published now), and publish_existing (a completed upload, or a local image, to every network of its accounts in one call, with mode asap or scheduled at publishAt 3h-30d ahead; a scheduled post accepts a promptVersionId for experiments). YouTube needs title, description, tags and privacyStatus; Rumble and Fanvue title and description; the other networks a caption. Publishing needs an active account: until the account is admitted to the closed beta (request access on Discord), or while the subscription is inactive, the call fails with BETA_ACCESS_REQUIRED or SUBSCRIPTION_INACTIVE and names the contact link.',
   '- personas: list (id and name), get, create (a name and at least one publishing account; a photo is optional), update (only the given fields change; identityCard sets the identity card, or null removes it) and delete (without confirmToken it only previews what would be removed; send the confirmToken of that preview to delete).',
   '- persona_media: get_card returns the persona\'s identity card (or null); render_prompt renders a deterministic image-edit prompt from the card plus a scene (outfit, pose, setting, lighting, framing) — advice for your image tool, nothing is generated or stored.',
   '- accounts: list (my connected social accounts with the names and ids to publish with), connect (OAuth link for youtube/instagram/linkedin/threads/facebook/pinterest/fanvue; direct connect for bluesky, 3speak, rumble and telegram), disconnect (by name or id), get_persona_publishing and set_persona_publishing (the accounts a persona publishes to by default), list_boards (Pinterest boards).',
@@ -200,13 +179,13 @@ const EXPECTED_PT_PROMPT: string[] = [
   '       }',
   '     }',
   '   }',
-  '2. Substitua <MINHA_API_KEY> pela minha API key real. Não é necessário clonar o repositório nem fazer build local. A tag @latest força o npx a baixar a versão mais nova em vez de reutilizar uma cópia antiga em cache.',
+  '2. Nunca cole minha API key neste chat e nunca peça que eu a envie. Diga-me para substituir <MINHA_API_KEY> na variável de ambiente POST_ENGINEER_API_KEY eu mesmo, ou para carregá-la do meu cofre de segredos. Não é necessário clonar o repositório nem fazer build local. A tag @latest força o npx a baixar a versão mais nova em vez de reutilizar uma cópia antiga em cache.',
   '',
   'Opção remota (hospedada) — sem instalação local:',
   'Se o seu agente suporta servidores MCP remotos (por exemplo, ChatGPT), conecte-o a https://post-engineer.com/mcp em vez do comando npx acima. Ele serve as mesmas 10 tools por Streamable HTTP com login OAuth — faça login no Post Engineer quando solicitado. As actions que leem um arquivo da sua máquina (publish_video from_file, e um imagePath ou avatarPath local) não estão disponíveis remotamente: envie um vídeo ou imagem com publish_video create_upload (PUT dos bytes na signed URL), depois complete_upload, depois publish_upload ou publish_existing.',
   '',
   'Tools disponíveis após conectar (10 tools; todas recebem um "action"; os campos de persona e de conta aceitam um nome ou um id). O Post Engineer não gera vídeo: eu faço a mídia com minhas próprias ferramentas, e estas tools enviam, publicam, agendam e medem:',
-  '- publish_video: publicar a mídia que eu fiz: from_file (um .mp4/.mov local, máx 2GB, publicado na hora), create_upload, complete_upload e publish_upload (um upload assinado, vídeo ou JPEG/PNG: os bytes nunca passam pelo servidor; publicado na hora), e publish_existing (um upload concluído, ou uma imagem local, para todas as redes das contas em uma chamada, com mode asap ou scheduled em publishAt de 3h a 30d à frente; um post agendado aceita um promptVersionId para experimentos). YouTube exige title, description, tags e privacyStatus; Rumble e Fanvue title e description; as demais redes uma caption. Publicar exige conta ativa: depois que o teste grátis de 7 dias termina, ou enquanto a assinatura não está ativa, a chamada falha com TRIAL_EXPIRED ou SUBSCRIPTION_INACTIVE e mostra o link de contato.',
+  '- publish_video: publicar a mídia que eu fiz: from_file (um .mp4/.mov local, máx 2GB, publicado na hora), create_upload, complete_upload e publish_upload (um upload assinado, vídeo ou JPEG/PNG: os bytes nunca passam pelo servidor; publicado na hora), e publish_existing (um upload concluído, ou uma imagem local, para todas as redes das contas em uma chamada, com mode asap ou scheduled em publishAt de 3h a 30d à frente; um post agendado aceita um promptVersionId para experimentos). YouTube exige title, description, tags e privacyStatus; Rumble e Fanvue title e description; as demais redes uma caption. Publicar exige conta ativa: até a conta ser liberada no beta fechado (peça acesso no Discord), ou enquanto a assinatura não está ativa, a chamada falha com BETA_ACCESS_REQUIRED ou SUBSCRIPTION_INACTIVE e mostra o link de contato.',
   '- personas: list (id e nome), get, create (um nome e ao menos uma conta de publicação; a foto é opcional), update (só os campos enviados mudam; identityCard define o cartão de identidade, ou null remove-o) e delete (sem confirmToken só mostra o que seria removido; envie o confirmToken dessa prévia para apagar).',
   '- persona_media: get_card devolve o cartão de identidade da persona (ou null); render_prompt gera um prompt determinístico de edição de imagem a partir do cartão mais uma cena (roupa, pose, cenário, iluminação, enquadramento) — orientação para a sua ferramenta de imagem, nada é gerado ou guardado.',
   '- accounts: list (minhas contas sociais conectadas com os nomes e ids para publicar), connect (link OAuth para youtube/instagram/linkedin/threads/facebook/pinterest/fanvue; conexão direta para bluesky, 3speak, rumble e telegram), disconnect (por nome ou id), get_persona_publishing e set_persona_publishing (as contas em que uma persona publica por padrão), list_boards (boards do Pinterest).',

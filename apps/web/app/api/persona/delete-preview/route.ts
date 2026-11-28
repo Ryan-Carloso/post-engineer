@@ -10,7 +10,7 @@ import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-r
 import { scopedPersonaIdQuery } from '../persona-id-query';
 
 const ROUTE = 'GET /api/persona/delete-preview';
-const UPCOMING_SLOT_STATUSES = ['ready', 'publishing'];
+const UPCOMING_SLOT_STATUSES = ['ready', 'publishing'] as const;
 
 async function getHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);

@@ -693,15 +693,9 @@
                     "notNull": true
                 },
                 {
-                    "name": "trial_ends_at",
-                    "type": "timestamp with time zone",
-                    "default": "(now() + '7 days'::interval)",
-                    "notNull": true
-                },
-                {
                     "name": "access_until",
                     "type": "timestamp with time zone",
-                    "default": "(now() + '7 days'::interval)",
+                    "default": "now()",
                     "notNull": true
                 },
                 {
@@ -720,7 +714,7 @@
             },
             "constraints": {
                 "user_profiles_pkey": "PRIMARY KEY (id)",
-                "user_profiles_subscription_status_check": "CHECK (((subscription_status IS NULL) OR (subscription_status = ANY (ARRAY['trialing'::text, 'active'::text, 'past_due'::text, 'canceled'::text, 'unpaid'::text, 'incomplete'::text, 'incomplete_expired'::text, 'paused'::text]))))"
+                "user_profiles_subscription_status_check": "CHECK (((subscription_status IS NULL) OR (subscription_status = ANY (ARRAY['trialing'::text, 'active'::text, 'past_due'::text, 'canceled'::text, 'unpaid'::text, 'incomplete'::text, 'incomplete_expired'::text, 'paused'::text, 'beta'::text]))))"
             }
         },
         "video_uploads": {
@@ -1098,6 +1092,7 @@
             },
             "constraints": {
                 "scheduled_posts_pkey": "PRIMARY KEY (id)",
+                "scheduled_posts_status_check": "CHECK ((status = ANY (ARRAY['pending'::text, 'generating'::text, 'ready'::text, 'awaiting_approval'::text, 'publishing'::text, 'published'::text, 'failed'::text, 'expired'::text, 'cancelled'::text])))",
                 "scheduled_posts_media_ref_check": "CHECK (((media_kind IS NULL) OR (media_ref IS NOT NULL)))",
                 "scheduled_posts_media_kind_check": "CHECK (((media_kind IS NULL) OR (media_kind = ANY (ARRAY['upload'::text, 'image'::text]))))",
                 "scheduled_posts_prompt_version_id_fkey": "FOREIGN KEY (prompt_version_id) REFERENCES prompt_versions(id) ON DELETE SET NULL",

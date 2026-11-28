@@ -8,8 +8,8 @@ export const mcpGuide: DocPage = {
   description: {
     en: 'Connect Claude and other agents to Post Engineer with the MCP server, locally or remotely.',
   },
-  updatedAt: '2026-11-27',
-  contentHash: '2903ac0c5f2e7c00d7d409691f48fdc6b480358d8b68e50f0e58d6bd0b8664b7',
+  updatedAt: '2026-11-28',
+  contentHash: 'a9da7d61ba09f08fa02788728b5749042f14ae07011abb67fc6d3b102b7ec71b',
   blocks: [
     {
       kind: 'paragraph',
@@ -24,7 +24,7 @@ export const mcpGuide: DocPage = {
         en: 'Install the server with npx and point it at your API key. The snippet below is the same setup the app shows.',
       },
     },
-    { kind: 'code', language: 'text', code: buildInstallPrompt('en', null) },
+    { kind: 'code', language: 'text', code: buildInstallPrompt('en') },
     { kind: 'heading', level: 2, text: { en: 'Remote server' } },
     {
       kind: 'paragraph',

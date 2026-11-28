@@ -682,7 +682,6 @@ describe('oauth-connect — fanvue PKCE', () => {
       expect(url.searchParams.get('state')).toBe(result.state);
       expect(result.codeVerifier).toMatch(/^[A-Za-z0-9_-]{43}$/);
       expect(url.searchParams.get('code_challenge')).toBe(
-        // codeql[js/insufficient-password-hash]
         createHash('sha256').update(result.codeVerifier as string, 'utf8').digest('base64url'),
       );
       expect(decodeOAuthState(result.state)).toMatchObject({ provider: 'fanvue', redirectUri: FANVUE_REDIRECT });

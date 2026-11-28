@@ -31,3 +31,17 @@ if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
     dispatchEvent: () => false,
   });
 }
+
+if (typeof window !== 'undefined') {
+  HTMLElement.prototype.showPopover = function showPopover(): void {
+    this.style.display = 'block';
+  };
+  HTMLElement.prototype.hidePopover = function hidePopover(): void {
+    this.style.display = 'none';
+  };
+  Element.prototype.getAnimations = (): Animation[] => [];
+  Element.prototype.scrollIntoView = function scrollIntoView(): void {};
+  Element.prototype.checkVisibility = (): boolean => true;
+  document.elementFromPoint = (): Element | null => null;
+  document.elementsFromPoint = (): Element[] => [];
+}

@@ -279,11 +279,11 @@ def test_unsafe_workflow_lines_fail_and_comments_do_not():
 
 
 def test_mappings_match_files_in_the_tree():
-    whatsapp = "apps/web/lib/whatsapp.ts"
-    mapped = "apps/web/lib/__tests__/whatsapp.test.ts"
-    assert mapped in scope.test_candidates(whatsapp)
+    public_links = "apps/web/lib/public-links.ts"
+    mapped = "apps/web/lib/__tests__/public-links.test.ts"
+    assert mapped in scope.test_candidates(public_links)
     assert (ROOT / mapped).is_file()
-    assert whatsapp in scope.production_candidates(mapped)
+    assert public_links in scope.production_candidates(mapped)
 
 
 def test_removed_engine_paths_are_not_mapped():

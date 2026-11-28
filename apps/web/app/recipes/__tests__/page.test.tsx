@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import { beforeEach, describe, it, expect, vi } from 'vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 
 vi.mock('@/lib/i18n/provider', () => {
   const translations: Record<string, string> = {
@@ -20,7 +20,8 @@ vi.mock('@/lib/i18n/provider', () => {
     'recipes.stepRecipesHint': 'Copy a prompt and paste it into your agent.',
     'recipes.signInCta': 'Sign in or create an account',
     'recipes.signInHint': 'Sign in to create your API key.',
-    'apiKeys.copy': 'Copy',
+    'apiKeys.copyPrompt': 'Copy prompt',
+    'apiKeys.docsCopied': 'Copied!',
     'userPrompts.stepTitle': 'Your prompts',
     'userPrompts.stepHint': 'Write your own prompts.',
   };
@@ -43,8 +44,8 @@ vi.mock('../components/public-prompts-section', () => ({
 }));
 
 vi.mock('@/components/ui/api-keys-section', () => ({
-  default: ({ onKeyCreated }: { onKeyCreated?: (key: string) => void }) => (
-    <button type="button" data-testid="api-keys-section" onClick={() => onKeyCreated?.(CREATED_KEY)}>
+  default: ({ onKeyCreated }: { onKeyCreated?: () => void }) => (
+    <button type="button" data-testid="api-keys-section" onClick={() => onKeyCreated?.()}>
       create key
     </button>
   ),
@@ -53,8 +54,6 @@ vi.mock('@/components/ui/api-keys-section', () => ({
 import RecipesPage from '../page';
 import { ViewerProvider } from '../viewer-context';
 import { buildInstallPrompt } from '@/lib/mcp-install-prompt';
-
-const CREATED_KEY = 'pe_live_abcdef1234567890abcdef1234567890';
 
 function renderHub(signedIn: boolean) {
   return render(
@@ -147,20 +146,70 @@ describe('/recipes prompts hub', () => {
   it('shows the setup prompt with the placeholder to a signed-out visitor', () => {
     renderHub(false);
     expect(screen.getByTestId('mcp-install-prompt').textContent).toBe(
-      buildInstallPrompt('en', null),
+      buildInstallPrompt('en'),
     );
   });
 
-  it('fills a key created in step 1 into the setup prompt in step 2', () => {
+  it('keeps the placeholder in the setup prompt after a key is created in step 1', () => {
     renderHub(true);
-    expect(screen.getByTestId('mcp-install-prompt').textContent).toBe(
-      buildInstallPrompt('en', null),
-    );
     fireEvent.click(screen.getByTestId('api-keys-section'));
-    expect(screen.getByTestId('mcp-install-prompt').textContent).toBe(
-      buildInstallPrompt('en', CREATED_KEY),
-    );
-    expect(screen.getByTestId('mcp-install-prompt')).toHaveTextContent(CREATED_KEY);
+    const prompt = screen.getByTestId('mcp-install-prompt');
+    expect(prompt.textContent).toBe(buildInstallPrompt('en'));
+    expect(prompt.textContent).toContain('<MY_API_KEY>');
+    expect(prompt.textContent).not.toContain('pe_live_');
+  });
+
+  it('scrolls to step 2 and highlights it briefly once a key is created', () => {
+    vi.useFakeTimers();
+    try {
+      const scrollIntoView = vi.fn();
+      window.HTMLElement.prototype.scrollIntoView = scrollIntoView;
+      renderHub(true);
+      expect(scrollIntoView).not.toHaveBeenCalled();
+      expect(screen.getByTestId('hub-step-2')).toHaveAttribute('data-highlighted', 'false');
+
+      fireEvent.click(screen.getByTestId('api-keys-section'));
+
+      expect(scrollIntoView).toHaveBeenCalledTimes(1);
+      expect(scrollIntoView.mock.contexts[0]).toBe(screen.getByTestId('hub-step-2'));
+      expect(screen.getByTestId('hub-step-2')).toHaveAttribute('data-highlighted', 'true');
+
+      act(() => {
+        vi.advanceTimersByTime(2600);
+      });
+      expect(screen.getByTestId('hub-step-2')).toHaveAttribute('data-highlighted', 'false');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('scrolls to step 2 again when a second key is created', () => {
+    const scrollIntoView = vi.fn();
+    window.HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    renderHub(true);
+
+    fireEvent.click(screen.getByTestId('api-keys-section'));
+    fireEvent.click(screen.getByTestId('api-keys-section'));
+
+    expect(scrollIntoView).toHaveBeenCalledTimes(2);
+  });
+
+  it('dims the steps after the setup prompt until it is copied, and keeps them usable', async () => {
+    renderHub(true);
+    for (const step of ['hub-step-3', 'hub-step-4']) {
+      expect(screen.getByTestId(step)).toHaveAttribute('data-dimmed', 'true');
+    }
+    expect(screen.getByTestId('hub-step-1')).toHaveAttribute('data-dimmed', 'false');
+    expect(screen.getByTestId('hub-step-2')).toHaveAttribute('data-dimmed', 'false');
+    expect(screen.getByTestId('public-prompts-section')).toBeInTheDocument();
+    expect(screen.getByTestId('my-prompts-section')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('copy-mcp-prompt-btn'));
+    await screen.findByText('Copied!');
+
+    for (const step of ['hub-step-3', 'hub-step-4']) {
+      expect(screen.getByTestId(step)).toHaveAttribute('data-dimmed', 'false');
+    }
   });
 
   it('lists the public prompts from the database in step 3, signed in or not', () => {

@@ -3,11 +3,6 @@ import { buildMcpCallGraph, toolCallsEndpoint } from './parity/mcp-calls.js';
 import { ExclusionSchema, verifyExclusion, type Exclusion, type VerifyContext } from './parity/exclusions.js';
 import { readRouteFile, type HandlerFacts, type RouteFile } from './parity/route-facts.js';
 
-// Bypass fixtures for the parity verifier: each one is a route (or MCP
-// source) that tried to satisfy an exclusion kind without the behaviour it
-// claims — the claim in a comment or a string, one handler vouching for
-// another, a covered-by pointing at an unrelated tool. Every one must fail.
-
 const MCP_INDEX = 'index.ts';
 const MCP_SOURCES = [
   {
@@ -24,8 +19,6 @@ const MCP_SOURCES = [
     `,
   },
   {
-    // A module other than index.ts that registers a tool: discovery must
-    // see it, or the reverse parity check silently skips the tool.
     file: 'tools-prompts.ts',
     text: `server.tool('local_tool', 'd', {}, async () => ({ ok: true }));`,
   },

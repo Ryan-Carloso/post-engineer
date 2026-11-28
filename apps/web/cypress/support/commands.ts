@@ -11,7 +11,6 @@ import {
 } from './password-grant';
 
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Cypress {
     interface Chainable {
       loginE2EUser(): Chainable;

@@ -3,14 +3,11 @@ import { pathToFileURL } from 'node:url';
 
 export const BUN_CSS_DECLARATION = '../../.github/scripts/frontend-ci/css-side-effect.d.ts';
 
-/**
- * @param {unknown} tsconfig
- */
 export function configForBunCheck(tsconfig) {
   if (typeof tsconfig !== 'object' || tsconfig === null) {
     throw new Error('tsconfig must be an object');
   }
-  const clone = /** @type {{ compilerOptions?: Record<string, unknown>, include?: unknown }} */ (
+  const clone = (
     structuredClone(tsconfig)
   );
   if (typeof clone.compilerOptions === 'object' && clone.compilerOptions !== null) {
