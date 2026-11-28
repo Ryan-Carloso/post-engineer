@@ -123,9 +123,9 @@ describe('POST /api/videos/upload-url', () => {
     await expect(POST(jsonRequest({ contentType: 'video/mp4', sizeBytes: 1 }))).rejects.toThrow('db down');
   });
 
-  it('answers 402 and does nothing once the free trial has ended', async () => {
+  it('answers 402 and does nothing while the account has not joined the beta', async () => {
     vi.mocked(assertAccessActive).mockResolvedValueOnce(
-      NextResponse.json({ success: false, code: 'TRIAL_EXPIRED' }, { status: 402 }) as never,
+      NextResponse.json({ success: false, code: 'BETA_ACCESS_REQUIRED' }, { status: 402 }) as never,
     );
     const response = await POST(jsonRequest({ contentType: 'video/mp4', sizeBytes: 1 }));
     expect(response.status).toBe(402);

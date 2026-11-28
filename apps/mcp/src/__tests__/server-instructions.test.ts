@@ -108,9 +108,9 @@ describe.each(['stdio', 'http'] as const)('server instructions on the %s server'
     expect(SERVER_INSTRUCTIONS).toContain('posts (action: list)');
   });
 
-  it('says that generation is gone and that the free trial gates publishing', () => {
+  it('says that generation is gone and that the closed beta gates publishing', () => {
     expect(SERVER_INSTRUCTIONS).toContain('It does not generate video');
-    expect(SERVER_INSTRUCTIONS).toContain('TRIAL_EXPIRED');
+    expect(SERVER_INSTRUCTIONS).toContain('BETA_ACCESS_REQUIRED');
   });
 
   describe('prompt test flow', () => {

@@ -17,9 +17,9 @@ const { mockRequireSupabaseSession, mockApplyRateLimit, mockHandleYoutubeUpload,
   };
 });
 
-const { mockAssertTrialActive } = vi.hoisted(() => ({ mockAssertTrialActive: vi.fn() }));
+const { mockAssertAccessActive } = vi.hoisted(() => ({ mockAssertAccessActive: vi.fn() }));
 vi.mock('@/lib/access', () => ({
-  assertAccessActive: (...args: unknown[]) => mockAssertTrialActive(...args),
+  assertAccessActive: (...args: unknown[]) => mockAssertAccessActive(...args),
 }));
 
 vi.mock('@/lib/api-error-reporting', () => ({
@@ -127,7 +127,7 @@ describe('POST /api/upload-content', () => {
       error: null,
     });
     mockApplyRateLimit.mockResolvedValue(null);
-    mockAssertTrialActive.mockResolvedValue(null);
+    mockAssertAccessActive.mockResolvedValue(null);
     mockHandleYoutubeUpload.mockResolvedValue({ success: true, provider: 'youtube', results: [] });
     mockHandleInstagramUpload.mockResolvedValue({ success: true, provider: 'instagram', results: [] });
     mockHandleBlueskyUpload.mockResolvedValue({ success: true, provider: 'bluesky', results: [] });
@@ -168,15 +168,15 @@ describe('POST /api/upload-content', () => {
     });
   });
 
-  it('answers 402 and publishes nothing for a session caller whose free trial has ended', async () => {
-    mockAssertTrialActive.mockResolvedValueOnce(
-      NextResponse.json({ success: false, code: 'TRIAL_EXPIRED' }, { status: 402 }),
+  it('answers 402 and publishes nothing for a session caller who has not joined the beta', async () => {
+    mockAssertAccessActive.mockResolvedValueOnce(
+      NextResponse.json({ success: false, code: 'BETA_ACCESS_REQUIRED' }, { status: 402 }),
     );
 
     const res = await POST(await makeRequest());
 
     expect(res.status).toBe(402);
-    expect(mockAssertTrialActive).toHaveBeenCalledWith(USER_ID, { route: 'POST /api/upload-content' });
+    expect(mockAssertAccessActive).toHaveBeenCalledWith(USER_ID, { route: 'POST /api/upload-content' });
     expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
   });
 
@@ -213,7 +213,7 @@ describe('POST /api/upload-content', () => {
     const res = await POST(await makeRequest());
 
     expect(res.status).toBe(200);
-    expect(mockAssertTrialActive).toHaveBeenCalledWith('key-user', {
+    expect(mockAssertAccessActive).toHaveBeenCalledWith('key-user', {
       route: 'POST /api/upload-content',
     });
     expect(mockHandleYoutubeUpload).toHaveBeenCalledTimes(1);
@@ -278,7 +278,7 @@ describe('POST /api/upload-content', () => {
 
     await POST(await makeRequest());
 
-    expect(mockAssertTrialActive).not.toHaveBeenCalled();
+    expect(mockAssertAccessActive).not.toHaveBeenCalled();
     expect(mockApplyRateLimit).not.toHaveBeenCalled();
   });
 

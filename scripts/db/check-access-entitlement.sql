@@ -40,15 +40,28 @@ begin
 end;
 $$;
 
-insert into public.user_profiles (id, trial_ends_at, access_until)
-values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', now() + interval '30 days', now() + interval '30 days');
+insert into public.user_profiles (id, access_until)
+values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', now() + interval '30 days');
 
 insert into public.user_billing_links (user_id, stripe_customer_id)
 values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'cus_access_check');
 
 select pg_temp.expect_value(
   $$select (access_until > now() + interval '6 days')::text from public.user_profiles where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'$$,
-  'true', 'the trial keeps publishing far ahead of the trial window');
+  'true', 'an admitted account keeps publishing far ahead');
+
+insert into public.user_profiles (id)
+values ('dddddddd-dddd-dddd-dddd-dddddddddddd');
+select pg_temp.expect_value(
+  $$select (access_until <= now() and subscription_status is null)::text from public.user_profiles where id = 'dddddddd-dddd-dddd-dddd-dddddddddddd'$$,
+  'true', 'a new account is awaiting the beta and cannot publish');
+
+update public.user_profiles
+set access_until = '2099-01-01T00:00:00Z', subscription_status = 'beta'
+where id = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
+select pg_temp.expect_value(
+  $$select (access_until > now() + interval '365 days')::text from public.user_profiles where id = 'dddddddd-dddd-dddd-dddd-dddddddddddd'$$,
+  'true', 'the beta status is accepted and admits the account');
 
 select pg_temp.expect_value(
   $$select public.link_stripe_customer('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'cus_access_check')::text$$,

@@ -22,7 +22,7 @@ export function videoOperationSchemas({ success, object, str }) {
         maxBytes: { type: 'integer' },
       }),
       extraResponses: {
-        402: 'TRIAL_EXPIRED: the free trial ended; uploading for publishing is blocked.',
+        402: 'BETA_ACCESS_REQUIRED: the account has not joined the closed beta; uploading for publishing is blocked.',
         413: 'Declared size over the 2GB video or 8 MB image limit.',
         502: 'The signed upload URL could not be created.',
       },
@@ -67,7 +67,7 @@ export function videoOperationSchemas({ success, object, str }) {
         logId: str,
       }),
       extraResponses: {
-        402: 'TRIAL_EXPIRED: the free trial ended; publishing is blocked.',
+        402: 'BETA_ACCESS_REQUIRED: the account has not joined the closed beta; publishing is blocked.',
         409: 'The upload is not completed yet, or was already used to publish.',
         410: 'The upload expired before publishing. Mint a new one.',
         413: 'The stored video is over the 2GB limit.',

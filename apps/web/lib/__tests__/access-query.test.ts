@@ -28,8 +28,7 @@ describe('fetchAccessStatus', () => {
     await expect(fetchAccessStatus(() => NOW)).resolves.toEqual({
       endsAt: '2026-11-22T12:00:00.000Z',
       active: true,
-      daysLeft: 2,
-      reason: 'trial',
+      reason: 'beta',
     });
     expect(from).toHaveBeenCalledWith('user_profiles');
     expect(select).toHaveBeenCalledWith('access_until,subscription_status');
@@ -44,7 +43,6 @@ describe('fetchAccessStatus', () => {
     await expect(fetchAccessStatus(() => NOW)).resolves.toEqual({
       endsAt: '2026-11-20T11:00:00.000Z',
       active: false,
-      daysLeft: 0,
       reason: 'none',
     });
   });
@@ -55,13 +53,12 @@ describe('fetchAccessStatus', () => {
     expect(from).not.toHaveBeenCalled();
   });
 
-  it('shows a full trial when the profile row does not exist yet', async () => {
+  it('shows an account awaiting the beta when the profile row does not exist yet', async () => {
     maybeSingle.mockResolvedValue({ data: null, error: null });
     await expect(fetchAccessStatus(() => NOW)).resolves.toEqual({
-      endsAt: '2026-11-27T12:00:00.000Z',
-      active: true,
-      daysLeft: 7,
-      reason: 'trial',
+      endsAt: '2026-11-20T12:00:00.000Z',
+      active: false,
+      reason: 'beta',
     });
   });
 

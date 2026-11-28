@@ -279,14 +279,14 @@ describe('POST /api/schedule/slots/[slotId]/approve', () => {
     });
     mockSession();
     vi.mocked(assertAccessActive).mockResolvedValueOnce(
-      NextResponse.json({ success: false, code: 'TRIAL_EXPIRED' }, { status: 402 }) as never,
+      NextResponse.json({ success: false, code: 'BETA_ACCESS_REQUIRED' }, { status: 402 }) as never,
     );
 
     const response = await postApprove(SLOT_ID);
 
     expect(response.status).toBe(402);
     const body = (await response.json()) as { code?: string };
-    expect(body.code).toBe('TRIAL_EXPIRED');
+    expect(body.code).toBe('BETA_ACCESS_REQUIRED');
     expect(vi.mocked(assertAccessActive)).toHaveBeenCalledWith(USER_ID, {
       route: 'POST /api/schedule/slots/[slotId]/approve',
     });

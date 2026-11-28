@@ -15,7 +15,7 @@ tenta de novo uma conta que falhou e mede o desempenho de cada post. Personas
 agrupam as contas de publicação de uma marca ou personagem. Gerencie tudo pelo
 painel web, controle programaticamente via API, ou deixe seu agente de IA operar
 pelo servidor MCP — tudo neste único monorepo. O Post Engineer não gera mídia.
-Contas novas têm 7 dias de teste grátis.
+O beta fechado é grátis, com acesso liberado pelo Discord.
 
 > Prefere a versão hospedada? A mesma plataforma roda em
 > [post-engineer.com](https://post-engineer.com) — você pode pular a
@@ -50,7 +50,7 @@ apps/mcp/       Servidor MCP para agentes de IA (pacote npm: post-engineer-mcp)
 ```
 
 O app web cuida de autenticação, personas, agendamento, uploads, OAuth, do
-teste grátis, da API e da publicação: um agendador no próprio processo pega
+controle de acesso ao beta, da API e da publicação: um agendador no próprio processo pega
 cada slot vencido no Postgres e publica pelo mesmo núcleo de upload que a API
 usa. O servidor MCP fala com a API web usando uma chave de API do usuário. O
 Postgres (via Supabase) é o sistema de registro: personas, agendamentos,

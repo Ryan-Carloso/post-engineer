@@ -1,4 +1,6 @@
 const CONTACT_URL = 'https://wa.me/351962248268';
+const DISCORD_URL = 'https://discord.gg/ukmCXMCDJ';
+const GITHUB_URL = 'https://github.com/Ryan-Carloso/post-engineer';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function interceptShellData(): void {
@@ -35,52 +37,46 @@ describe('Account access notice', () => {
     interceptShellData();
   });
 
-  it('shows the days left and the WhatsApp contact while the trial runs', () => {
-    interceptAccess(new Date(Date.now() + 3 * DAY_MS - 60_000).toISOString());
-    visitAccount();
-    cy.get('[data-testid="trial-banner"]')
-      .should('be.visible')
-      .and('contain.text', 'Teste grátis: faltam 3 dias.')
-      .and('contain.text', 'Agendar e publicar param quando ele termina.');
-    cy.get('[data-testid="trial-banner"] [data-testid="access-contact-link"]')
-      .should('have.attr', 'href', CONTACT_URL)
-      .and('have.attr', 'target', '_blank')
-      .and('contain.text', 'Fale com a gente no WhatsApp');
-    cy.get('[data-testid="access-inactive-card"]').should('not.exist');
-  });
-
-  it('says it is the last day when less than a day is left', () => {
-    interceptAccess(new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString());
-    visitAccount();
-    cy.get('[data-testid="trial-banner"]').should('contain.text', 'Teste grátis: último dia.');
-  });
-
-  it('replaces the banner with the WhatsApp card once the trial has ended', () => {
-    interceptAccess(new Date(Date.now() - DAY_MS).toISOString());
+  it('shows the Discord request card, with WhatsApp and GitHub, to an account awaiting the beta', () => {
+    interceptAccess(new Date(Date.now() - 60_000).toISOString());
     visitAccount();
     cy.get('[data-testid="access-inactive-card"]')
       .should('be.visible')
       .and('have.attr', 'role', 'alert')
-      .and('contain.text', 'Seu teste grátis terminou')
-      .and('contain.text', 'Agendar e publicar estão pausados.');
-    cy.get('[data-testid="access-inactive-card"] [data-testid="access-contact-link"]').should('have.attr', 'href', CONTACT_URL);
-    cy.get('[data-testid="trial-banner"]').should('not.exist');
+      .and('contain.text', 'Você ainda não está no beta')
+      .and('contain.text', 'Agendar e publicar ficam pausados');
+    cy.get('[data-testid="access-inactive-card"] [data-testid="access-discord-link"]')
+      .should('have.attr', 'href', DISCORD_URL)
+      .and('contain.text', 'Pedir acesso no Discord');
+    cy.get('[data-testid="access-inactive-card"] [data-testid="access-contact-link"]').should('have.attr', 'href').and('include', CONTACT_URL);
+    cy.get('[data-testid="access-inactive-card"] [data-testid="access-github-link"]').should('have.attr', 'href', GITHUB_URL);
   });
 
-  it('names the cancelled subscription, not the trial, when a paid account lapses', () => {
+  it('shows the same request card when a beta admission was revoked', () => {
+    interceptAccess(new Date(Date.now() - DAY_MS).toISOString(), 'beta');
+    visitAccount();
+    cy.get('[data-testid="access-inactive-card"]').should('contain.text', 'Você ainda não está no beta');
+  });
+
+  it('shows no notice for an admitted beta account', () => {
+    interceptAccess('2099-01-01T00:00:00.000Z', 'beta');
+    visitAccount();
+    cy.get('[data-testid="access-inactive-card"]').should('not.exist');
+  });
+
+  it('names the cancelled subscription, not the beta, when a paid account lapses', () => {
     interceptAccess(new Date(Date.now() - DAY_MS).toISOString(), 'canceled');
     visitAccount();
     cy.get('[data-testid="access-inactive-card"]')
       .should('be.visible')
       .and('contain.text', 'Sua assinatura está inativa')
       .and('contain.text', 'a assinatura que cobria esta conta não está ativa');
-    cy.get('[data-testid="access-inactive-card"]').should('not.contain.text', 'Seu teste grátis terminou');
+    cy.get('[data-testid="access-inactive-card"]').should('not.contain.text', 'Você ainda não está no beta');
   });
 
-  it('shows no banner for an active paid subscription', () => {
+  it('shows no notice for an active paid subscription', () => {
     interceptAccess(new Date(Date.now() + 300 * DAY_MS).toISOString(), 'active');
     visitAccount();
-    cy.get('[data-testid="trial-banner"]').should('not.exist');
     cy.get('[data-testid="access-inactive-card"]').should('not.exist');
   });
 });

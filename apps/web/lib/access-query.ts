@@ -2,9 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { createSupabaseClient } from '@/lib/supabase/client';
-import { computeAccessStatus, TRIAL_DAYS, type AccessStatus } from '@/lib/access-status';
-
-const DAY_MS = 24 * 60 * 60 * 1000;
+import { computeAccessStatus, type AccessStatus } from '@/lib/access-status';
 
 const ACCESS_QUERY_KEY = ['access-status'] as const;
 
@@ -21,10 +19,11 @@ export async function fetchAccessStatus(now: () => Date = () => new Date()): Pro
     .maybeSingle();
   if (error) throw new Error(`access lookup failed: ${error.message}`);
   const current = now();
-  const accessUntil =
-    data === null ? new Date(current.getTime() + TRIAL_DAYS * DAY_MS).toISOString() : data.access_until;
+  if (data === null) {
+    return computeAccessStatus({ accessUntil: current.toISOString(), subscriptionStatus: null }, current);
+  }
   return computeAccessStatus(
-    { accessUntil, subscriptionStatus: data === null ? null : data.subscription_status },
+    { accessUntil: data.access_until, subscriptionStatus: data.subscription_status },
     current,
   );
 }

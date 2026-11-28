@@ -776,25 +776,22 @@ export interface Database {
         id: string;
         created_at: string;
         updated_at: string;
-        trial_ends_at: string;
         access_until: string;
-        subscription_status: 'trialing' | 'active' | 'past_due' | 'canceled' | 'unpaid' | 'incomplete' | 'incomplete_expired' | 'paused' | null;
+        subscription_status: 'trialing' | 'active' | 'past_due' | 'canceled' | 'unpaid' | 'incomplete' | 'incomplete_expired' | 'paused' | 'beta' | null;
         };
         Insert: {
         id: string;
         created_at?: string;
         updated_at?: string;
-        trial_ends_at?: string;
         access_until?: string;
-        subscription_status?: 'trialing' | 'active' | 'past_due' | 'canceled' | 'unpaid' | 'incomplete' | 'incomplete_expired' | 'paused' | null;
+        subscription_status?: 'trialing' | 'active' | 'past_due' | 'canceled' | 'unpaid' | 'incomplete' | 'incomplete_expired' | 'paused' | 'beta' | null;
         };
         Update: {
         id?: string;
         created_at?: string;
         updated_at?: string;
-        trial_ends_at?: string;
         access_until?: string;
-        subscription_status?: 'trialing' | 'active' | 'past_due' | 'canceled' | 'unpaid' | 'incomplete' | 'incomplete_expired' | 'paused' | null;
+        subscription_status?: 'trialing' | 'active' | 'past_due' | 'canceled' | 'unpaid' | 'incomplete' | 'incomplete_expired' | 'paused' | 'beta' | null;
         };
         Relationships: [];
       };
