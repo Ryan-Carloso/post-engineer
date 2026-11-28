@@ -18,14 +18,19 @@ name: opencode-review
 #   instructions live in a temp OPENCODE_CONFIG / OPENCODE_CONFIG_DIR so the
 #   committed opencode.json is not rewritten and the 190KB review-learnings
 #   file is not injected into the prompt.
-# - Review chain (REVIEW_MODELS, comma-separated), first success wins, each
-#   attempt capped at 12 minutes. The default is two OpenCode free models,
-#   which need no secret: nemotron-3.5-lightning-free (a full review in
-#   about 2.5 minutes) then flint-40b-free (about 7 minutes). Both were
-#   measured on this PR's real review prompt with the reviewer's tools.
-#   An attempt with no Verdict line is discarded.
-# - A second pass (REVIEW_MODEL_VERIFY, flint-40b-free, a different model
-#   from the pass-1 primary) confirms or refutes pass 1. It is skipped when
+# - Review models (REVIEW_MODELS, comma-separated) run in parallel, each
+#   capped at 12 minutes; the first attempt that ends with a Verdict line
+#   wins and the others are stopped. Free models hang for whole runs at
+#   random (the same model answers one hour and hangs the next), so the
+#   default mixes providers: two OpenCode free models, which need no secret
+#   (nemotron-3.5-lightning-free, about 2.5 minutes on a real review, and
+#   flint-40b-free, about 7), plus OpenRouter's
+#   nvidia/nemotron-3-ultra-550b-a55b:free, which completed a review in CI
+#   while the OpenCode free models hung. An attempt with no Verdict line is
+#   discarded.
+# - A second pass (REVIEW_MODEL_VERIFY, flint-40b-free; when flint won
+#   pass 1, the next REVIEW_MODELS entry instead, so a model never verifies
+#   its own review) confirms or refutes pass 1. It is skipped when
 #   the diff is docs/assets-only and pass 1 has no CRITICAL/MAJOR, or when
 #   its provider key is missing. If pass 2 fails or drops every finding, the
 #   comment keeps pass 1.
@@ -62,15 +67,15 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  REVIEW_MODELS: ${{ vars.REVIEW_MODELS || 'opencode/nemotron-3.5-lightning-free,opencode/flint-40b-free' }}
+  REVIEW_MODELS: ${{ vars.REVIEW_MODELS || 'opencode/nemotron-3.5-lightning-free,opencode/flint-40b-free,openrouter/nvidia/nemotron-3-ultra-550b-a55b:free' }}
   REVIEW_MODEL_VERIFY: ${{ vars.REVIEW_MODEL_VERIFY || 'opencode/flint-40b-free' }}
 
 jobs:
   review:
     runs-on: ubuntu-latest
-    # Two pass-1 attempts and pass 2 at 12m each, plus install/post overhead.
+    # Pass 1 (parallel attempts, 12m cap) and pass 2 (12m), plus install/post overhead.
     # The validator recomputes this from REVIEW_MODELS.
-    timeout-minutes: 41
+    timeout-minutes: 30
     permissions:
       contents: read
       pull-requests: write
@@ -322,7 +327,7 @@ jobs:
             --extra mechanical-checks.md heuristics.md \
             > pr-context.md
 
-      - name: Run OpenCode review with fallbacks
+      - name: Run OpenCode review (parallel race)
         id: pass1
         if: steps.check.outputs.has_key == 'true'
         env:
@@ -340,63 +345,94 @@ jobs:
           is_free() {
             [[ "$1" == *-free || "$1" == *:free ]]
           }
-          # One review attempt. Fails (so the loop tries the next model) when
-          # OpenCode falls back to the build agent or writes an empty file.
-          review_with_model() {
-            local model="$1"
-            local limit="$2"
-            local rc=0
-            set +e
-            timeout "$limit" opencode run \
-              --agent reviewer \
-              --model "$model" \
-              --file pr.diff \
-              --file pr-context.md \
-              --file .github/review/review-checklist.md \
-              --title "PR #$PR_NUMBER review" \
-              "$(cat .github/review/review-prompt.md)" < /dev/null > review-raw.md 2> review-stderr.txt
-            rc=$?
-            set -e
-            echo "$model: exit $rc, $(wc -c < review-raw.md) bytes of review output" >&2
-            if grep -q 'Falling back to default agent' review-raw.md review-stderr.txt; then
+          # Every model starts at once; the first attempt that ends with a
+          # Verdict line wins and the others are stopped. Free models hang
+          # for whole runs at random, so one hung model costs nothing while
+          # another answers. Each attempt gets its own OpenCode data and
+          # cache dirs so the concurrent sessions never share storage, and
+          # its own process group so stopping it also stops its children.
+          start_attempt() {
+            local i="$1"
+            local model="$2"
+            (
+              set +e
+              XDG_DATA_HOME="$RUNNER_TEMP/opencode-attempt-$i/data" \
+              XDG_CACHE_HOME="$RUNNER_TEMP/opencode-attempt-$i/cache" \
+              XDG_STATE_HOME="$RUNNER_TEMP/opencode-attempt-$i/state" \
+              setsid timeout 12m opencode run \
+                --agent reviewer \
+                --model "$model" \
+                --file pr.diff \
+                --file pr-context.md \
+                --file .github/review/review-checklist.md \
+                --title "PR #$PR_NUMBER review" \
+                "$(cat .github/review/review-prompt.md)" < /dev/null > "attempt-$i.md" 2> "attempt-$i.stderr.txt" &
+              echo $! > "attempt-$i.pid"
+              wait "$!"
+              echo $? > "attempt-$i.rc"
+            ) &
+          }
+          attempt_ok() {
+            local i="$1"
+            local model="$2"
+            local rc
+            rc=$(cat "attempt-$i.rc")
+            echo "$model: exit $rc, $(wc -c < "attempt-$i.md") bytes of review output" >&2
+            if grep -q 'Falling back to default agent' "attempt-$i.md" "attempt-$i.stderr.txt"; then
               echo "OpenCode fell back to the default agent for $model; discarding this attempt." >&2
               return 1
             fi
-            [ "$rc" -eq 0 ] && [ -s review-raw.md ] || return 1
-            if ! grep -qE '^Verdict: (APPROVE|REQUEST_CHANGES)' review-raw.md; then
+            [ "$rc" -eq 0 ] && [ -s "attempt-$i.md" ] || return 1
+            if ! grep -qE '^Verdict: (APPROVE|REQUEST_CHANGES)' "attempt-$i.md"; then
               echo "$model wrote no Verdict line; discarding this attempt." >&2
               return 1
             fi
           }
-          IFS=',' read -r -a attempts <<< "$REVIEW_MODELS"
+          attempts=()
+          IFS=',' read -r -a requested <<< "$REVIEW_MODELS"
+          for model in "${requested[@]}"; do
+            model="${model// /}"
+            [ -n "$model" ] && attempts+=("$model")
+          done
           if [ "${#attempts[@]}" -eq 0 ]; then
             echo "No review model can run with the configured keys" >&2
             exit 1
           fi
-          echo "Review attempt order:"
-          for attempt in "${attempts[@]}"; do
-            echo "  - $attempt"
+          for i in "${!attempts[@]}"; do
+            echo "Starting review with ${attempts[$i]} (timeout 12m) ..."
+            start_attempt "$i" "${attempts[$i]}"
           done
-          success=false
           chosen=""
-          for attempt in "${attempts[@]}"; do
-            attempt="${attempt// /}"
-            [ -z "$attempt" ] && continue
-            limit=12m
-            echo "Attempting review with $attempt (timeout $limit) ..."
-            if review_with_model "$attempt" "$limit"; then
-              echo "Review completed with $attempt."
-              success=true
-              chosen="$attempt"
-              break
-            fi
-            echo "Review with $attempt failed; trying the next fallback."
-            tail -c 2000 review-stderr.txt >&2 || true
+          chosen_index=""
+          declare -A done_attempts=()
+          while [ -z "$chosen" ] && [ "${#done_attempts[@]}" -lt "${#attempts[@]}" ]; do
+            sleep 5
+            for i in "${!attempts[@]}"; do
+              [ -n "${done_attempts[$i]:-}" ] && continue
+              [ -f "attempt-$i.rc" ] || continue
+              done_attempts[$i]=1
+              if attempt_ok "$i" "${attempts[$i]}"; then
+                chosen="${attempts[$i]}"
+                chosen_index="$i"
+                echo "Review completed with $chosen."
+                break
+              fi
+              echo "Review with ${attempts[$i]} failed." >&2
+              tail -c 2000 "attempt-$i.stderr.txt" >&2 || true
+            done
           done
-          if [ "$success" != "true" ]; then
-            echo "OpenCode produced no output from any endpoint" >&2
+          for i in "${!attempts[@]}"; do
+            if [ ! -f "attempt-$i.rc" ] && [ -f "attempt-$i.pid" ]; then
+              echo "Stopping ${attempts[$i]}." >&2
+              kill -- "-$(cat "attempt-$i.pid")" 2>/dev/null || true
+            fi
+          done
+          if [ -z "$chosen" ]; then
+            echo "OpenCode produced no review from any model" >&2
             exit 1
           fi
+          cp "attempt-$chosen_index.md" review-raw.md
+          cp "attempt-$chosen_index.stderr.txt" review-stderr.txt
           cp review-raw.md review.md
           free=false
           if is_free "$chosen"; then
@@ -471,6 +507,18 @@ jobs:
             has_major=true
           fi
           verify="$REVIEW_MODEL_VERIFY"
+          pass1_model=$(sed -n 's/^PASS1_MODEL=//p' review-meta.env)
+          if [ "$verify" = "$pass1_model" ]; then
+            IFS=',' read -r -a candidates <<< "$REVIEW_MODELS"
+            for candidate in "${candidates[@]}"; do
+              candidate="${candidate// /}"
+              if [ -n "$candidate" ] && [ "$candidate" != "$pass1_model" ]; then
+                verify="$candidate"
+                break
+              fi
+            done
+            echo "Pass 1 came from $pass1_model; verifying with $verify instead."
+          fi
           provider="${verify%%/*}"
           key_ok=false
           case "$provider" in
@@ -563,6 +611,7 @@ jobs:
           # public PR comment. Raw pass files are scrubbed too, before the
           # artifact upload.
           python3 - <<'EOF'
+          import glob
           import os
           files = (
               "review.verified.md",
@@ -576,6 +625,7 @@ jobs:
               "review-stderr.txt",
               "pass2-stderr.txt",
           )
+          files += tuple(sorted(glob.glob("attempt-*.md") + glob.glob("attempt-*.stderr.txt")))
           for path in files:
               if not os.path.exists(path):
                   continue
@@ -609,6 +659,8 @@ jobs:
             heuristics.md
             review-stderr.txt
             pass2-stderr.txt
+            attempt-*.md
+            attempt-*.stderr.txt
 
       - name: Post review as a new PR comment
         if: steps.check.outputs.has_key == 'true' && steps.pass1.outcome == 'success'

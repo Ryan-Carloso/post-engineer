@@ -93,19 +93,23 @@ def main() -> int:
     chain_match = re.search(r"^  REVIEW_MODELS: \$\{\{ vars\.REVIEW_MODELS \|\| '([^']+)' \}\}$", text, re.M)
     chain = chain_match.group(1).split(",") if chain_match else []
     check(
-        "REVIEW_MODELS default starts with nemotron-3.5-lightning-free",
-        chain[:1] == ["opencode/nemotron-3.5-lightning-free"],
+        "REVIEW_MODELS default races the measured models across two providers",
+        chain
+        == [
+            "opencode/nemotron-3.5-lightning-free",
+            "opencode/flint-40b-free",
+            "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
+        ],
         f"chain={chain}",
     )
     check(
-        "REVIEW_MODELS default falls back to flint-40b-free",
-        chain == ["opencode/nemotron-3.5-lightning-free", "opencode/flint-40b-free"],
-        f"chain={chain}",
+        "REVIEW_MODEL_VERIFY default is flint-40b-free",
+        "REVIEW_MODEL_VERIFY: ${{ vars.REVIEW_MODEL_VERIFY || 'opencode/flint-40b-free' }}" in text,
     )
     check(
-        "REVIEW_MODEL_VERIFY default is flint-40b-free, not the pass-1 primary",
-        "REVIEW_MODEL_VERIFY: ${{ vars.REVIEW_MODEL_VERIFY || 'opencode/flint-40b-free' }}" in text
-        and chain[:1] != ["opencode/flint-40b-free"],
+        "pass 2 never verifies with the model that won pass 1",
+        'if [ "$verify" = "$pass1_model" ]; then' in text
+        and '[ "$candidate" != "$pass1_model" ]' in text,
     )
 
     check(
@@ -130,7 +134,7 @@ def main() -> int:
     )
     check(
         "pass 1 reads attempts from REVIEW_MODELS",
-        'read -r -a attempts <<< "$REVIEW_MODELS"' in text,
+        'read -r -a requested <<< "$REVIEW_MODELS"' in text,
     )
     check(
         "free-model banner matches free ids",
@@ -142,28 +146,35 @@ def main() -> int:
         "non-interactive review must not read from stdin",
     )
     check(
-        "attempt order is printed before the first model runs",
-        text.find("Review attempt order:") != -1
-        and text.find("Review attempt order:") < text.find("Attempting review with"),
+        "pass 1 starts every model in parallel",
+        'for i in "${!attempts[@]}"; do' in text
+        and 'start_attempt "$i" "${attempts[$i]}"' in text
+        and text.find('start_attempt "$i"') < text.find("while [ -z \"$chosen\" ]"),
+        "a hung free model must not delay the others",
+    )
+    check(
+        "pass 1 stops the losing attempts",
+        'kill -- "-$(cat "attempt-$i.pid")"' in text
+        and "setsid timeout 12m opencode run" in text,
+    )
+    check(
+        "parallel attempts use separate OpenCode data dirs",
+        'XDG_DATA_HOME="$RUNNER_TEMP/opencode-attempt-$i/data"' in text,
     )
     check(
         "pass 1 attempt timeout is 12m",
-        "limit=12m" in text and "limit=20m" not in text and "limit=30m" not in text,
+        text.count("timeout 12m opencode run") == 2,
         "a working review finishes in under 10 minutes; a hung model must not hold the job longer",
-    )
-    check(
-        "pass 2 timeout is 12m",
-        "timeout 12m opencode run" in text,
     )
     attempt_minutes = 12
     overhead_minutes = 5
-    required_minutes = attempt_minutes * len(chain) + attempt_minutes + overhead_minutes
+    required_minutes = attempt_minutes + attempt_minutes + overhead_minutes
     timeout_match = re.search(r"^\s*timeout-minutes:\s*(\d+)\s*$", text, re.M)
     timeout_minutes = int(timeout_match.group(1)) if timeout_match else 0
     check(
-        "job timeout covers max chain plus pass 2",
+        "job timeout covers parallel pass 1 plus pass 2",
         timeout_minutes >= required_minutes,
-        f"timeout-minutes is {timeout_minutes}; {len(chain)} attempts plus pass 2 "
+        f"timeout-minutes is {timeout_minutes}; parallel pass 1 plus pass 2 "
         f"need at least {required_minutes}m",
     )
     check(
@@ -272,7 +283,7 @@ def main() -> int:
     check(
         "an attempt without a Verdict line fails in both passes",
         text.count("grep -qE '^Verdict: (APPROVE|REQUEST_CHANGES)'") == 2
-        and "review-raw.md; then" in text
+        and '"attempt-$i.md"; then' in text
         and "pass2-raw.md; then" in text,
         "narration with no verdict must not be posted as a review",
     )
