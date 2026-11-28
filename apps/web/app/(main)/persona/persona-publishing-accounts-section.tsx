@@ -83,7 +83,7 @@ interface CardAccount {
 }
 
 export function PersonaPublishingAccountsSection({ personaId }: { personaId?: string }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const youtube = useYouTubeAccountsQuery();
   const instagram = useInstagramAccountsQuery();
   const bluesky = useBlueskyAccountsQuery();
@@ -103,7 +103,9 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId?: st
   const setLoadedPublishingAccounts = usePersonaStore((s) => s.setLoadedPublishingAccounts);
   const submitResult = usePersonaStore((s) => s.result);
   const currentPersonaId = useRef(personaId);
-  currentPersonaId.current = personaId;
+  useEffect(() => {
+    currentPersonaId.current = personaId;
+  }, [personaId]);
   const selection = draftSelection;
   const [loading, setLoading] = useState(!isDraft);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -111,8 +113,6 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId?: st
   const load = useCallback(async () => {
     if (personaId === undefined) return;
     const requested = personaId;
-    setLoading(true);
-    setLoadError(null);
     try {
       const binding = await fetchBinding(requested, t('persona.publishingAccountsLoadError'));
       if (requested !== currentPersonaId.current) return;
@@ -129,6 +129,16 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId?: st
       if (requested === currentPersonaId.current) setLoading(false);
     }
   }, [personaId, t, setDraftSelection, setLoadedPublishingAccounts, setPublishingAccountsLoaded]);
+
+  const loadKey = `${personaId ?? ''}:${locale}`;
+  const [prevLoadKey, setPrevLoadKey] = useState(loadKey);
+  if (prevLoadKey !== loadKey) {
+    setPrevLoadKey(loadKey);
+    if (!isDraft) {
+      setLoading(true);
+      setLoadError(null);
+    }
+  }
 
   useEffect(() => {
     if (isDraft) {
@@ -358,7 +368,11 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId?: st
               type="button"
               variant="outline"
               className="mt-3"
-              onClick={() => void load()}
+              onClick={() => {
+                setLoading(true);
+                setLoadError(null);
+                void load();
+              }}
               data-testid="publishing-accounts-retry"
             >
               {t('persona.tryAgain')}

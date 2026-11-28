@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -63,6 +63,8 @@ type SubmitStatus =
   | { kind: 'publishing' }
   | { kind: 'done'; result: PublishResult };
 
+const subscribe = (): (() => void) => () => undefined;
+
 const SCHEDULE_FIELDS = ['publishing.schedule.publishAt', 'publishing.schedule.timezone'];
 
 function serverIssues(error: ComposerRequestError): ComposerIssue[] {
@@ -88,9 +90,9 @@ export function PostComposer() {
   const [issues, setIssues] = useState<ComposerIssue[]>([]);
   const [failure, setFailure] = useState<'upload' | 'publish' | null>(null);
   const [status, setStatus] = useState<SubmitStatus>({ kind: 'idle' });
-  const [mounted, setMounted] = useState(false);
-  const timezoneTouched = useRef(false);
-  const publishAtTouched = useRef(false);
+  const mounted = useSyncExternalStore(subscribe, () => true, () => false);
+  const [timezoneTouched, setTimezoneTouched] = useState(false);
+  const [publishAtTouched, setPublishAtTouched] = useState(false);
   const uploadRef = useRef<UploadedMedia | null>(null);
   const idempotencyKeyRef = useRef<string | null>(null);
 
@@ -133,31 +135,30 @@ export function PostComposer() {
   const boardsQuery = usePinterestBoardsQuery(pinterestAccountId);
   const boards = boardsQuery.data ?? [];
 
-  useEffect(() => {
-    const timezone = browserTimezone();
-    setMounted(true);
+  if (mounted && !timezoneTouched) {
+    setTimezoneTouched(true);
     setDraft((current) => {
-      const nextTimezone = timezoneTouched.current ? current.timezone : timezone;
+      const nextTimezone = browserTimezone();
       return {
         ...current,
         timezone: nextTimezone,
-        publishAt: publishAtTouched.current
-          ? current.publishAt
-          : defaultPublishAt(new Date(), nextTimezone),
+        publishAt: publishAtTouched ? current.publishAt : defaultPublishAt(new Date(), nextTimezone),
       };
     });
-  }, []);
+  }
 
   useEffect(() => {
     if (media === null) return undefined;
     return () => URL.revokeObjectURL(media.previewUrl);
   }, [media]);
 
-  useEffect(() => {
-    if (draft.pinterestBoardId === '' || boardsQuery.data === undefined) return;
-    if (boardsQuery.data.some((board) => board.id === draft.pinterestBoardId)) return;
+  if (
+    draft.pinterestBoardId !== '' &&
+    boardsQuery.data !== undefined &&
+    !boardsQuery.data.some((board) => board.id === draft.pinterestBoardId)
+  ) {
     setDraft((current) => ({ ...current, pinterestBoardId: '' }));
-  }, [boardsQuery.data, draft.pinterestBoardId]);
+  }
 
   const busy = status.kind === 'uploading' || status.kind === 'publishing';
   const providers = selectedProviders(draft.accounts);
@@ -344,8 +345,8 @@ export function PostComposer() {
     setStatus({ kind: 'idle' });
     uploadRef.current = null;
     idempotencyKeyRef.current = null;
-    timezoneTouched.current = false;
-    publishAtTouched.current = false;
+    setTimezoneTouched(false);
+    setPublishAtTouched(false);
     setDraft(() => {
       const timezone = browserTimezone();
       return {
@@ -442,12 +443,12 @@ export function PostComposer() {
               disabled={busy}
               onModeChange={(mode) => changeDraft({ mode })}
               onPublishAtChange={(publishAt) => {
-                publishAtTouched.current = true;
+                setPublishAtTouched(true);
                 changeDraft({ publishAt });
               }}
               onTimezoneChange={(timezone) => {
-                timezoneTouched.current = true;
-                if (!publishAtTouched.current) {
+                setTimezoneTouched(true);
+                if (!publishAtTouched) {
                   changeDraft({ timezone, publishAt: defaultPublishAt(new Date(), timezone) });
                   return;
                 }

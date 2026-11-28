@@ -22,13 +22,14 @@ export function RescheduleEditor({
   const reschedule = useRescheduleSlotMutation();
   const [draft, setDraft] = useState(() => utcToZonedInputValue(slotAt, timezone) ?? '');
   const [invalid, setInvalid] = useState(false);
+  const [createdAt] = useState(() => Date.now());
   const min = useMemo(
-    () => utcToZonedInputValue(new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString(), timezone),
-    [timezone],
+    () => utcToZonedInputValue(new Date(createdAt + 3 * 60 * 60 * 1000).toISOString(), timezone),
+    [createdAt, timezone],
   );
   const max = useMemo(
-    () => utcToZonedInputValue(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), timezone),
-    [timezone],
+    () => utcToZonedInputValue(new Date(createdAt + 30 * 24 * 60 * 60 * 1000).toISOString(), timezone),
+    [createdAt, timezone],
   );
 
   const handleSave = (): void => {

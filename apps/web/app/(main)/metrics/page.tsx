@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useMemo, useState } from 'react';
 import { usePersonasQuery, useSocialAccountsQuery } from '@/lib/api';
 import { useI18n } from '@/lib/i18n/provider';
 import type { TranslationKey } from '@/lib/i18n';
@@ -55,10 +55,7 @@ const METRICS_MODE_PARAM = 'view';
 function MetricsPageContent(): React.ReactElement {
   const { t, locale } = useI18n();
   const [query, setQuery] = useState<MetricsQuery>(EMPTY_QUERY);
-  const [view, setView] = useState<MetricsView>('chart');
-  useEffect(() => {
-    setView(readMetricsView());
-  }, []);
+  const [view, setView] = useState<MetricsView>(() => readMetricsView());
   const changeView = (next: MetricsView): void => {
     setView(next);
     writeMetricsView(next);
