@@ -1,3 +1,4 @@
+import { narrowFirstCommentWarnings } from '@/lib/first-comment/form-field';
 import { notifyIfSessionExpired } from '@/lib/session-expiry';
 
 import type { MediaContentType, SubmissionPlan } from './compose';
@@ -11,10 +12,17 @@ interface PublishAccountResult {
   accountId: string;
   success: boolean;
   error?: string;
+  errorCode?: string;
+  warnings?: ReturnType<typeof narrowFirstCommentWarnings>;
   videoUrl?: string;
   permalink?: string;
   postId?: string;
   videoId?: string;
+}
+
+export interface ReconnectWarning {
+  code: 'account_needs_reconnect';
+  accounts: { provider: string; accountId: string }[];
 }
 
 interface ProviderPublish {
@@ -37,6 +45,7 @@ export type PublishResult =
       replayed: boolean;
       scheduleId: string;
       slots: ScheduledSlotSummary[];
+      warnings?: ReconnectWarning[];
     };
 
 export type ComposerRequestStage = 'mint' | 'upload' | 'complete' | 'publish';
@@ -211,15 +220,34 @@ export function buildPublishBody(
 
 function parseAccountResult(value: unknown): PublishAccountResult | null {
   if (!isRecord(value) || typeof value.accountId !== 'string') return null;
+  const warnings = narrowFirstCommentWarnings(value.warnings);
   return {
     accountId: value.accountId,
     success: value.success === true,
     error: optionalString(value, 'error'),
+    errorCode: optionalString(value, 'errorCode'),
+    warnings: warnings.length > 0 ? warnings : undefined,
     videoUrl: optionalString(value, 'videoUrl'),
     permalink: optionalString(value, 'permalink'),
     postId: optionalString(value, 'postId'),
     videoId: optionalString(value, 'videoId'),
   };
+}
+
+function narrowReconnectWarnings(value: unknown): ReconnectWarning[] {
+  if (!Array.isArray(value)) return [];
+  const warnings: ReconnectWarning[] = [];
+  for (const item of value) {
+    if (!isRecord(item) || item.code !== 'account_needs_reconnect' || !Array.isArray(item.accounts)) continue;
+    const accounts = item.accounts
+      .filter(
+        (account): account is { provider: string; accountId: string } =>
+          isRecord(account) && typeof account.provider === 'string' && typeof account.accountId === 'string',
+      )
+      .map((account) => ({ provider: account.provider, accountId: account.accountId }));
+    warnings.push({ code: 'account_needs_reconnect', accounts });
+  }
+  return warnings;
 }
 
 function parsePublishes(value: unknown): ProviderPublish[] {
@@ -280,11 +308,13 @@ export async function publishExisting(
     if (scheduleId === null) {
       throw new ComposerRequestError('publish', response.status, null, null, null);
     }
+    const warnings = narrowReconnectWarnings(payload.warnings);
     return {
       mode: 'scheduled',
       replayed: payload.replayed === true,
       scheduleId,
       slots: parseSlots(payload.slots),
+      ...(warnings.length > 0 ? { warnings } : {}),
     };
   }
   if (payload.mode !== 'asap') {

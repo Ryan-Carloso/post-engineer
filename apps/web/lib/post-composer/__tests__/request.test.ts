@@ -282,6 +282,114 @@ describe('publishExisting', () => {
     });
   });
 
+  it('keeps the per-account errorCode and narrows first-comment warnings', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          success: false,
+          mode: 'asap',
+          replayed: false,
+          publishes: [
+            {
+              provider: 'youtube',
+              success: false,
+              results: [
+                {
+                  accountId: 'ch-1',
+                  success: false,
+                  error: 'token revoked',
+                  errorCode: 'token_expired',
+                  warnings: ['FIRST_COMMENT_FAILED', 'bogus', 4],
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+    );
+    const result = await publishExisting(PLAN, { kind: 'upload', uploadId: 'upload-1' }, 'key-1');
+    expect(result).toEqual({
+      mode: 'asap',
+      success: false,
+      replayed: false,
+      publishes: [
+        {
+          provider: 'youtube',
+          success: false,
+          results: [
+            {
+              accountId: 'ch-1',
+              success: false,
+              error: 'token revoked',
+              errorCode: 'token_expired',
+              warnings: ['FIRST_COMMENT_FAILED'],
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  it('parses top-level reconnect warnings on a scheduled result', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          success: true,
+          mode: 'scheduled',
+          replayed: false,
+          schedule: { id: 'schedule-1' },
+          slots: [{ id: 'slot-1', slot_at: '2026-12-02T20:00:00Z', title: 'T', status: 'ready' }],
+          warnings: [
+            { code: 'account_needs_reconnect', accounts: [{ provider: 'youtube', accountId: 'UC1' }] },
+          ],
+        }),
+      ),
+    );
+    const result = await publishExisting(
+      { ...PLAN, mode: 'scheduled', schedule: { publishAt: '2026-12-02T20:00', timezone: 'Europe/Lisbon' } },
+      { kind: 'upload', uploadId: 'upload-1' },
+      'key-1',
+    );
+    expect(result).toEqual({
+      mode: 'scheduled',
+      replayed: false,
+      scheduleId: 'schedule-1',
+      slots: [{ id: 'slot-1', slotAt: '2026-12-02T20:00:00Z', title: 'T', status: 'ready' }],
+      warnings: [
+        { code: 'account_needs_reconnect', accounts: [{ provider: 'youtube', accountId: 'UC1' }] },
+      ],
+    });
+  });
+
+  it('leaves warnings absent on a scheduled result without them', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          success: true,
+          mode: 'scheduled',
+          replayed: false,
+          schedule: { id: 'schedule-1' },
+          slots: [{ id: 'slot-1', slot_at: '2026-12-02T20:00:00Z', title: 'T', status: 'ready' }],
+        }),
+      ),
+    );
+    const result = await publishExisting(
+      { ...PLAN, mode: 'scheduled', schedule: { publishAt: '2026-12-02T20:00', timezone: 'Europe/Lisbon' } },
+      { kind: 'upload', uploadId: 'upload-1' },
+      'key-1',
+    );
+    expect(result).toEqual({
+      mode: 'scheduled',
+      replayed: false,
+      scheduleId: 'schedule-1',
+      slots: [{ id: 'slot-1', slotAt: '2026-12-02T20:00:00Z', title: 'T', status: 'ready' }],
+    });
+    expect('warnings' in result).toBe(false);
+  });
+
   it('raises a publish error carrying the server field and code', async () => {
     vi.stubGlobal(
       'fetch',
