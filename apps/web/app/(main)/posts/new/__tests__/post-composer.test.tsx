@@ -205,6 +205,31 @@ describe('PostComposer', () => {
     expect(await screen.findByText('composer.successAsapTitle')).toBeInTheDocument();
   });
 
+  it('shows the awaiting-approval panel when the publish is held for approval', async () => {
+    vi.mocked(publishExisting).mockResolvedValue({
+      mode: 'asap',
+      held: true,
+      approvalRequired: true,
+      replayed: false,
+      slot: { id: 'slot-1', slotAt: '2026-12-02T20:00:00Z', status: 'awaiting_approval' },
+    });
+    render(<PostComposer />, { wrapper: wrapper() });
+    chooseVideo();
+    fireEvent.click(screen.getByRole('radio', { name: 'composer.modeAsap' }));
+    pickAccount();
+    fillText();
+    fillTags();
+    fireEvent.click(screen.getByTestId('composer-submit'));
+
+    await waitFor(() => expect(publishExisting).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText('composer.heldTitle')).toBeInTheDocument();
+    expect(screen.queryByText('composer.successAsapTitle')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'composer.successViewPost' })).toHaveAttribute(
+      'href',
+      '/posts/slot-1',
+    );
+  });
+
   it('schedules the post and links to the created slot', async () => {
     vi.mocked(publishExisting).mockResolvedValue({
       mode: 'scheduled',
