@@ -611,6 +611,31 @@ describe('PostComposer', () => {
     expect(screen.queryByText('composer.accountsBoundEmptyTitle')).not.toBeInTheDocument();
   });
 
+  it('names the disconnected reason when the persona is bound to accounts that are not connected', () => {
+    vi.mocked(useSocialAccountsQuery).mockReturnValue({
+      data: { authenticated: true, accounts: [INSTAGRAM_ACCOUNT] },
+      isLoading: false,
+      isError: false,
+    } as never);
+    const bound = emptyPersonaDefaultAccounts();
+    bound.youtube = ['ch-1'];
+    vi.mocked(usePersonaListQuery).mockReturnValue({
+      data: [{ id: 'persona-1', name: 'Ana', createdAt: '2026-01-01T00:00:00Z', aiLabel: false, boundAccounts: bound }],
+      isLoading: false,
+    } as never);
+    render(<PostComposer />, { wrapper: wrapper() });
+    fireEvent.change(screen.getByLabelText('composer.personaLabel'), {
+      target: { value: 'persona-1' },
+    });
+    chooseVideo();
+    expect(screen.getByText('composer.accountsDisconnectedEmptyTitle')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'composer.accountsEmptyAction' })).toHaveAttribute(
+      'href',
+      '/accounts',
+    );
+    expect(screen.queryByText('composer.accountsBoundEmptyTitle')).not.toBeInTheDocument();
+  });
+
   it('shows the persona empty state when the chosen persona disappears from the list', () => {
     const bound = emptyPersonaDefaultAccounts();
     bound.youtube = ['ch-1'];

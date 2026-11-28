@@ -25,6 +25,9 @@ export const postComposerStrings = {
       accountsImageHint: 'Imagem publica só em {providers}. Conecte uma dessas contas ou envie um vídeo.',
       accountsBoundEmptyTitle: 'Nenhuma conta ligada a esta persona',
       accountsBoundEmptyDescription: 'Ligue contas na persona para publicar com ela.',
+      accountsDisconnectedEmptyTitle: 'Contas ligadas desconectadas',
+      accountsDisconnectedEmptyDescription:
+        'As contas ligadas a esta persona não estão conectadas. Reconecte-as em Contas para publicar com ela.',
       personaLabel: 'Persona',
       personaNone: 'Sem persona',
       personaHint: 'Opcional: etiqueta o post com uma persona e usa as contas ligadas a ela.',
@@ -116,6 +119,9 @@ export const postComposerStrings = {
       accountsImageHint: 'Images publish only to {providers}. Connect one of these accounts or upload a video.',
       accountsBoundEmptyTitle: 'No account bound to this persona',
       accountsBoundEmptyDescription: 'Bind accounts on the persona to publish with it.',
+      accountsDisconnectedEmptyTitle: 'Bound accounts disconnected',
+      accountsDisconnectedEmptyDescription:
+        'The accounts bound to this persona are not connected. Reconnect them in Accounts to publish with it.',
       personaLabel: 'Persona',
       personaNone: 'No persona',
       personaHint: 'Optional: label the post with a persona and use the accounts bound to it.',

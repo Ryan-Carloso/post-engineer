@@ -122,6 +122,16 @@ describe('AccountField', () => {
     expect(screen.queryByRole('link', { name: 'composer.accountsEmptyAction' })).not.toBeInTheDocument();
   });
 
+  it('shows the disconnected empty state with the accounts link', () => {
+    renderField({ accounts: [], emptyReason: 'disconnected' });
+    expect(screen.getByText('composer.accountsDisconnectedEmptyTitle')).toBeInTheDocument();
+    expect(screen.getByText('composer.accountsDisconnectedEmptyDescription')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'composer.accountsEmptyAction' })).toHaveAttribute(
+      'href',
+      '/accounts',
+    );
+  });
+
   it('hides accounts whose provider is not in the provider list', () => {
     renderField({ providers: ['instagram'] });
     expect(screen.queryByText('E2E Channel')).not.toBeInTheDocument();

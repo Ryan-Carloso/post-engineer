@@ -13,7 +13,7 @@ import { PROVIDER_LABELS, type AccountOption } from '@/lib/account-options';
 import { IMAGE_PROVIDERS, type SocialProvider } from '@/lib/contracts/providers';
 import { useI18n } from '@/lib/i18n/provider';
 
-export type AccountsEmptyReason = 'none' | 'image' | 'persona';
+export type AccountsEmptyReason = 'none' | 'image' | 'persona' | 'disconnected';
 
 export function AccountField({
   accounts,
@@ -46,6 +46,10 @@ export function AccountField({
       }),
     },
     persona: { title: t('composer.accountsBoundEmptyTitle'), description: t('composer.accountsBoundEmptyDescription') },
+    disconnected: {
+      title: t('composer.accountsDisconnectedEmptyTitle'),
+      description: t('composer.accountsDisconnectedEmptyDescription'),
+    },
   }[emptyReason];
   const groups = providers
     .map((provider) => ({

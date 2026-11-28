@@ -145,7 +145,7 @@ export function PostComposer() {
         ? 'persona'
         : draft.mediaKind === 'image'
           ? 'image'
-          : 'persona';
+          : 'disconnected';
 
   const pinterestAccountId = (draft.accounts.pinterest ?? [])[0] ?? null;
   const boardsQuery = usePinterestBoardsQuery(pinterestAccountId);
