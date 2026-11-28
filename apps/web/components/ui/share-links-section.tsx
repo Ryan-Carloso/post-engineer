@@ -15,7 +15,8 @@ import { SHARE_LINK_MAX_ACTIVE } from '@/lib/contracts/share-links';
 import { useCopyText } from '@/lib/use-copy-text';
 import { Button } from '@/components/ui/button';
 import ConfirmDialog from '@/components/ui/confirm-dialog';
-import { GlobeIcon, INPUT_CLASS, SpinnerIcon } from '@/lib/ui';
+import { SelectField } from '@/components/ui/select';
+import { GlobeIcon, SpinnerIcon } from '@/lib/ui';
 import { cn } from '@/lib/utils';
 
 type LinkStatus = 'active' | 'revoked' | 'expired';
@@ -110,21 +111,18 @@ export default function ShareLinksSection(): ReactNode {
             <label htmlFor="share-link-persona" className="block text-xs font-medium text-ink-soft">
               {t('shareLinks.personaLabel')}
             </label>
-            <select
+            <SelectField
               id="share-link-persona"
               data-testid="share-link-persona"
               value={personaId}
               disabled={busy}
-              onChange={(event) => setPersonaId(event.target.value)}
-              className={INPUT_CLASS}
-            >
-              <option value={ALL_PERSONAS}>{t('shareLinks.personaAll')}</option>
-              {personas.map((persona) => (
-                <option key={persona.id} value={persona.id}>
-                  {persona.name}
-                </option>
-              ))}
-            </select>
+              onValueChange={setPersonaId}
+              options={[
+                { value: ALL_PERSONAS, label: t('shareLinks.personaAll') },
+                ...personas.map((persona) => ({ value: persona.id, label: persona.name })),
+              ]}
+              className="mt-1.5"
+            />
           </div>
           <Button
             type="button"

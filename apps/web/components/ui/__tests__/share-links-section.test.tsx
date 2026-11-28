@@ -10,6 +10,7 @@ import { STORAGE_KEY } from '@/lib/i18n/types';
 vi.mock('@/lib/api', () => ({ usePersonasQuery: vi.fn() }));
 
 import { usePersonasQuery } from '@/lib/api';
+import { chooseOption } from '@/test/choose-option';
 
 const LINK_ID = '33333333-3333-4333-8333-333333333333';
 const PERSONA = '22222222-2222-4222-8222-222222222222';
@@ -119,7 +120,7 @@ describe('ShareLinksSection', () => {
     const fetchMock = installFetch({ create: { status: 201, body: { ...CREATED, personaIds: [PERSONA] } } });
     renderSection('en');
     await screen.findByTestId('share-links-empty-state');
-    fireEvent.change(screen.getByTestId('share-link-persona'), { target: { value: PERSONA } });
+    await chooseOption(screen.getByTestId('share-link-persona'), 'Maria');
     fireEvent.click(screen.getByTestId('create-share-link-btn'));
     await screen.findByTestId('share-link-url');
     const post = fetchMock.mock.calls.find((call) => (call[1] as RequestInit | undefined)?.method === 'POST');

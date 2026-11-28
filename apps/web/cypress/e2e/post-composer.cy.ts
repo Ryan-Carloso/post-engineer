@@ -118,7 +118,8 @@ describe('web post composer', () => {
 
   it('preselects the accounts bound to the persona', () => {
     visitComposer();
-    cy.get('#composer-persona').select('persona-e2e-1');
+    cy.get('#composer-persona').click();
+    cy.get('[role="option"]').contains('E2E Persona').click();
     cy.contains('[data-testid=account-card]', 'E2E Channel')
       .find('[data-testid=account-card-select]')
       .should('be.checked');
