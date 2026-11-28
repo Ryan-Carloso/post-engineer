@@ -221,7 +221,7 @@ describe('withApiErrorReporting', () => {
     },
   );
 
-  it.each([401, 403])(
+  it.each([403])(
     'reports a %i auth failure as a server_warning (never an $exception)',
     async (status) => {
       const wrapped = withApiErrorReporting(
@@ -246,6 +246,110 @@ describe('withApiErrorReporting', () => {
       expect(client.captureException).not.toHaveBeenCalled();
     },
   );
+
+  it('records nothing for a 401 response when anonymous', async () => {
+    const wrapped = withApiErrorReporting(
+      'GET /api/test',
+      async () => NextResponse.json({ error: 'nope', code: 'UNAUTHORIZED' }, { status: 401 }),
+    );
+
+    const res = await wrapped(getRequest());
+
+    expect(res.status).toBe(401);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(client.capture).not.toHaveBeenCalled();
+    expect(client.captureAs).not.toHaveBeenCalled();
+    expect(client.captureException).not.toHaveBeenCalled();
+    expect(client.captureExceptionAs).not.toHaveBeenCalled();
+  });
+
+  it('records nothing for a 401 response when getUserId resolves', async () => {
+    const wrapped = withApiErrorReporting(
+      'GET /api/test',
+      async () => NextResponse.json({ error: 'nope', code: 'UNAUTHORIZED' }, { status: 401 }),
+      { getUserId: async () => 'user-123' },
+    );
+
+    const res = await wrapped(getRequest());
+
+    expect(res.status).toBe(401);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(client.capture).not.toHaveBeenCalled();
+    expect(client.captureAs).not.toHaveBeenCalled();
+    expect(client.captureException).not.toHaveBeenCalled();
+    expect(client.captureExceptionAs).not.toHaveBeenCalled();
+  });
+
+  it('scrubs absolute paths out of attached free-text properties on a 4xx warning', async () => {
+    const response = NextResponse.json({ error: 'nope', code: 'BAD_INPUT' }, { status: 400 });
+    attachApiErrorProperties(response, {
+      detail: 'read /var/lib/post-engineer/secrets.txt failed',
+    });
+    const wrapped = withApiErrorReporting('GET /api/test', async () => response);
+
+    await wrapped(getRequest());
+
+    await vi.waitFor(() => expect(client.capture).toHaveBeenCalledTimes(1));
+    const [, properties] = client.capture.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
+    expect(properties.detail).toBe('read <path>/secrets.txt failed');
+    expect(properties.route).toBe('GET /api/test');
+  });
+
+  it('keeps an attached route literal verbatim while scrubbing sibling free text', async () => {
+    const response = NextResponse.json({ error: 'nope', code: 'BAD_INPUT' }, { status: 400 });
+    attachApiErrorProperties(response, {
+      route: 'POST /api/persona',
+      detail: 'read /var/lib/post-engineer/secrets.txt failed',
+    });
+    const wrapped = withApiErrorReporting('GET /api/test', async () => response);
+
+    await wrapped(getRequest());
+
+    await vi.waitFor(() => expect(client.capture).toHaveBeenCalledTimes(1));
+    const [, properties] = client.capture.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
+    expect(properties.route).toBe('POST /api/persona');
+    expect(properties.detail).toBe('read <path>/secrets.txt failed');
+  });
+
+  it('caps long attached free text on a 4xx warning', async () => {
+    const response = NextResponse.json({ error: 'nope', code: 'BAD_INPUT' }, { status: 400 });
+    attachApiErrorProperties(response, { detail: 'x'.repeat(600) });
+    const wrapped = withApiErrorReporting('GET /api/test', async () => response);
+
+    await wrapped(getRequest());
+
+    await vi.waitFor(() => expect(client.capture).toHaveBeenCalledTimes(1));
+    const [, properties] = client.capture.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
+    expect(properties.detail).toBe('x'.repeat(500));
+  });
+
+  it('scrubs free text inside nested attached properties on a 4xx warning', async () => {
+    const response = NextResponse.json({ error: 'nope', code: 'BAD_INPUT' }, { status: 400 });
+    attachApiErrorProperties(response, {
+      tags: ['read /var/lib/post-engineer/a.txt failed', 'clean'],
+      nested: { detail: 'read /etc/post-engineer/b.txt failed', count: 3 },
+    });
+    const wrapped = withApiErrorReporting('GET /api/test', async () => response);
+
+    await wrapped(getRequest());
+
+    await vi.waitFor(() => expect(client.capture).toHaveBeenCalledTimes(1));
+    const [, properties] = client.capture.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
+    expect(properties.tags).toEqual(['read <path>/a.txt failed', 'clean']);
+    expect(properties.nested).toEqual({ detail: 'read <path>/b.txt failed', count: 3 });
+  });
 
   it('reports a 500 response via captureException with route, status and code', async () => {
     const wrapped = withApiErrorReporting(
@@ -282,6 +386,30 @@ describe('withApiErrorReporting', () => {
     expect(await res.json()).toMatchObject({
       success: false,
       code: 'INTERNAL_ERROR',
+    });
+  });
+
+  it('scrubs a body-controlled code carrying an absolute path on a 5xx $exception', async () => {
+    const wrapped = withApiErrorReporting(
+      'GET /api/test',
+      async () =>
+        NextResponse.json(
+          { error: 'x', code: '/etc/post-engineer/config.json' },
+          { status: 500 },
+        ),
+    );
+
+    await wrapped(getRequest());
+
+    await vi.waitFor(() => expect(client.captureException).toHaveBeenCalledTimes(1));
+    const [error, properties] = client.captureException.mock.calls[0] as [
+      Error,
+      Record<string, unknown>,
+    ];
+    expect(error.message).toBe('[GET /api/test] 500 <path>/config.json');
+    expect(properties).toMatchObject({
+      code: '<path>/config.json',
+      $exception_message: '[GET /api/test] 500 <path>/config.json',
     });
   });
 
