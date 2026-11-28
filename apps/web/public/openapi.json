@@ -1978,7 +1978,7 @@
             }
           },
           "402": {
-            "description": "TRIAL_EXPIRED: the free trial ended; publishing and scheduling are blocked.",
+            "description": "BETA_ACCESS_REQUIRED: the account has not joined the closed beta; publishing and scheduling are blocked.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4698,7 +4698,7 @@
             }
           },
           "402": {
-            "description": "TRIAL_EXPIRED: the free trial ended; publishing is blocked.",
+            "description": "BETA_ACCESS_REQUIRED: the account has not joined the closed beta; publishing is blocked.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4838,7 +4838,7 @@
             }
           },
           "402": {
-            "description": "TRIAL_EXPIRED: the free trial ended; uploading for publishing is blocked.",
+            "description": "BETA_ACCESS_REQUIRED: the account has not joined the closed beta; uploading for publishing is blocked.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5155,7 +5155,7 @@
             }
           },
           "402": {
-            "description": "TRIAL_EXPIRED: the free trial ended; publishing is blocked.",
+            "description": "BETA_ACCESS_REQUIRED: the account has not joined the closed beta; publishing is blocked.",
             "content": {
               "application/json": {
                 "schema": {

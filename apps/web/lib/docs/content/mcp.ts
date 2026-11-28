@@ -8,8 +8,8 @@ export const mcpGuide: DocPage = {
   description: {
     en: 'Connect Claude and other agents to Post Engineer with the MCP server, locally or remotely.',
   },
-  updatedAt: '2026-11-27',
-  contentHash: '2903ac0c5f2e7c00d7d409691f48fdc6b480358d8b68e50f0e58d6bd0b8664b7',
+  updatedAt: '2026-11-28',
+  contentHash: '109ef4633e2328e09c10f61d4bac721a590e2cab31bb3088d4b204a87f2d87a4',
   blocks: [
     {
       kind: 'paragraph',
