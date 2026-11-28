@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 
 vi.mock('@/lib/i18n/provider', () => ({
@@ -19,34 +19,13 @@ vi.mock('@/lib/i18n/provider', () => ({
 
 import WhatsAppFloatingButton from '../whatsapp-button';
 
-const WHATSAPP_ENV = 'NEXT_PUBLIC_WHATSAPP_NUMBER';
-const TEST_NUMBER = '15551234567';
-const origWhatsappEnv = process.env[WHATSAPP_ENV];
-
 describe('WhatsAppFloatingButton', () => {
-  beforeEach(() => {
-    process.env[WHATSAPP_ENV] = TEST_NUMBER;
-  });
-
-  afterEach(() => {
-    if (origWhatsappEnv === undefined) delete process.env[WHATSAPP_ENV];
-    else process.env[WHATSAPP_ENV] = origWhatsappEnv;
-  });
-
-  it('renders the floating button with the configured number', () => {
-    const { container } = render(<WhatsAppFloatingButton />);
+  it('renders the floating button with the built-in number', () => {
+    render(<WhatsAppFloatingButton />);
     const link = screen.getByRole('link', { name: 'WhatsApp' });
     expect(link).toHaveAttribute(
       'href',
-      `https://wa.me/${TEST_NUMBER}?text=${encodeURIComponent('Hi! I need help.')}`,
+      `https://wa.me/351962248268?text=${encodeURIComponent('Hi! I need help.')}`,
     );
-    expect(container.firstChild).not.toBeNull();
-  });
-
-  it('renders nothing when the support number is not configured', () => {
-    delete process.env[WHATSAPP_ENV];
-    const { container } = render(<WhatsAppFloatingButton />);
-    expect(container.firstChild).toBeNull();
   });
 });
-

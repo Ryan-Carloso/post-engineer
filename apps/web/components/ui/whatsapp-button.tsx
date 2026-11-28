@@ -2,13 +2,11 @@
 
 import type { ReactNode } from 'react';
 import { useI18n } from '@/lib/i18n/provider';
-import { whatsappUrl } from '@/lib/whatsapp';
+import { whatsappUrl } from '@/lib/public-links';
 
 export default function WhatsAppFloatingButton(): ReactNode {
   const { t } = useI18n();
-  const message = t('pricing.whatsappHelp');
-  const href = whatsappUrl(message);
-  if (!href) return null;
+  const href = whatsappUrl(t('pricing.whatsappHelp'));
   return (
     <a
       href={href}

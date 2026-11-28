@@ -1,7 +1,9 @@
 import { DOC_PAGES, docLocales, docPath } from '@/lib/docs/registry';
-import { GITHUB_URL, OG_IMAGE_PATH, SITE_URL } from './site-urls';
+import { GITHUB_URL, SITE_URL } from './public-links';
 
-export { GITHUB_URL, OG_IMAGE_PATH, SITE_URL };
+export { GITHUB_URL, SITE_URL };
+
+export const OG_IMAGE_PATH = '/og.png';
 
 export const LEGAL_UPDATED_AT = '2026-11-26';
 

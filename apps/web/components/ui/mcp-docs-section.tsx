@@ -5,7 +5,7 @@ import type { TranslationKey } from '@/lib/i18n';
 import { useI18n } from '@/lib/i18n/provider';
 import { buildInstallPrompt } from '@/lib/mcp-install-prompt';
 import { useCopyText } from '@/lib/use-copy-text';
-import { whatsappUrl } from '@/lib/whatsapp';
+import { whatsappUrl } from '@/lib/public-links';
 import { Button } from '@/components/ui/button';
 import {
   AccountsIcon,
@@ -112,20 +112,18 @@ export default function McpDocsSection({ apiKey }: { apiKey: string | null }): R
           {t('apiKeys.docsSecurityNote')}
         </p>
 
-        {helpHref !== null ? (
-          <a
-            href={helpHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            data-testid="mcp-docs-help-cta"
-            className="mt-4 inline-flex items-center gap-2 rounded-xl border border-line bg-card px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-surface"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="size-4" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z" />
-            </svg>
-            {t('apiKeys.needHelp')}
-          </a>
-        ) : null}
+        <a
+          href={helpHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          data-testid="mcp-docs-help-cta"
+          className="mt-4 inline-flex items-center gap-2 rounded-xl border border-line bg-card px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-surface"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="size-4" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z" />
+          </svg>
+          {t('apiKeys.needHelp')}
+        </a>
       </div>
     </section>
   );

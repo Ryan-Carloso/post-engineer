@@ -16,7 +16,7 @@ import {
   useOnboardingWizardStore,
 } from '@/lib/onboarding-wizard';
 import { createSupabaseClient } from '@/lib/supabase/client';
-import { whatsappUrl } from '@/lib/whatsapp';
+import { DISCORD_INVITE_URL, whatsappUrl } from '@/lib/public-links';
 import { CREATE_POSTS_HREF } from './day-section';
 import { WizardStepTwo } from './onboarding-step2';
 
@@ -143,7 +143,6 @@ function WizardStepThree() {
 function WizardStepFour() {
   const { t } = useI18n();
   const close = useOnboardingWizardStore((s) => s.close);
-  const whatsappHref = whatsappUrl(t('onboarding.step4Whatsapp'));
   return (
     <>
       <DialogHeader>
@@ -151,13 +150,16 @@ function WizardStepFour() {
         <DialogDescription>{t('onboarding.step4Body')}</DialogDescription>
       </DialogHeader>
       <div className="flex flex-wrap gap-2">
-        {whatsappHref && (
-          <Button asChild size="sm">
-            <a href={whatsappHref} target="_blank" rel="noreferrer" data-testid="onboarding-whatsapp-cta">
-              {t('onboarding.talkToUs')} ↗
-            </a>
-          </Button>
-        )}
+        <Button asChild size="sm">
+          <a href={whatsappUrl(t('onboarding.step4Whatsapp'))} target="_blank" rel="noreferrer" data-testid="onboarding-whatsapp-cta">
+            {t('onboarding.talkToUs')} ↗
+          </a>
+        </Button>
+        <Button asChild size="sm">
+          <a href={DISCORD_INVITE_URL} target="_blank" rel="noreferrer" data-testid="onboarding-discord-cta">
+            {t('onboarding.joinDiscord')} ↗
+          </a>
+        </Button>
         <Button asChild size="sm" variant="outline">
           <a href={`mailto:${SUPPORT_EMAIL}`} data-testid="onboarding-email-cta">
             {t('onboarding.talkToUs')} · {SUPPORT_EMAIL}

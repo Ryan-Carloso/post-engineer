@@ -108,7 +108,6 @@ jobs:
           NEXT_PUBLIC_APP_URL: http://localhost:3000
           NEXT_PUBLIC_POSTHOG_HOST: https://example.posthog.com
           NEXT_PUBLIC_POSTHOG_KEY: dummy-posthog-key
-          NEXT_PUBLIC_WHATSAPP_NUMBER: "000000000000"
         run: pnpm build
 
       - name: Save Next.js build cache

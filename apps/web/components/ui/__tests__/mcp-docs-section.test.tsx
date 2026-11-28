@@ -34,7 +34,6 @@ describe('McpDocsSection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockLocale = 'en';
-    vi.stubEnv('NEXT_PUBLIC_WHATSAPP_NUMBER', '15551234567');
     Object.defineProperty(window.navigator, 'clipboard', {
       value: { writeText: vi.fn().mockResolvedValue(undefined) },
       writable: true,
@@ -55,7 +54,7 @@ describe('McpDocsSection', () => {
     expect(screen.getByText('Keep your key secret.')).toBeInTheDocument();
     expect(screen.getByTestId('copy-mcp-prompt-btn')).toHaveTextContent('Copy');
     const help = screen.getByRole('link', { name: 'Need help?' });
-    expect(help).toHaveAttribute('href', expect.stringContaining('https://wa.me/15551234567'));
+    expect(help).toHaveAttribute('href', expect.stringContaining('https://wa.me/351962248268'));
     expect(help).toHaveAttribute('href', expect.stringContaining('text=I%20need%20help'));
   });
 
@@ -66,14 +65,6 @@ describe('McpDocsSection', () => {
     expect(tools).not.toHaveAttribute('open');
     expect(tools).toContainElement(screen.getByTestId('mcp-tools-grid'));
     expect(within(tools).getByText('Available tools').closest('summary')).not.toBeNull();
-  });
-
-  it('hides the WhatsApp help link when the support number is not configured', () => {
-    vi.stubEnv('NEXT_PUBLIC_WHATSAPP_NUMBER', undefined);
-    render(<McpDocsSection apiKey={null} />);
-
-    expect(screen.getByText('Install prompt')).toBeInTheDocument();
-    expect(screen.queryByTestId('mcp-docs-help-cta')).toBeNull();
   });
 
   it('renders the tools grid with the 10 intent tools and the actions of each', () => {

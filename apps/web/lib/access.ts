@@ -3,7 +3,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { NextResponse } from 'next/server';
 import { apiErrorResponse } from '@/lib/api-error';
-import { CONTACT_WHATSAPP_URL } from '@/lib/contact';
+import { whatsappUrl } from '@/lib/public-links';
 import { ERROR_CODES, errorMessage, type ErrorCode } from '@/lib/error-codes';
 import { logger } from '@/lib/logger';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
@@ -62,6 +62,6 @@ export async function assertAccessActive(
   return apiErrorResponse(402, errorMessage(code), {
     route: options.route,
     code,
-    extra: { contactUrl: CONTACT_WHATSAPP_URL, accessEndedAt: window.accessUntil, reason: status.reason },
+    extra: { contactUrl: whatsappUrl(), accessEndedAt: window.accessUntil, reason: status.reason },
   });
 }
