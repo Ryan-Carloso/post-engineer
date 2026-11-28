@@ -8,6 +8,8 @@ import {
   createApiKey,
   fetchApiKeys,
   revokeApiKey,
+  updateApiKey,
+  useUpdateApiKeyMutation,
   useApiKeysQuery,
   useCreateApiKeyMutation,
   useRevokeApiKeyMutation,
@@ -117,6 +119,68 @@ describe('api-keys-client — fetchers', () => {
     const error = await revokeApiKey('k-1').catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(HttpStatusError);
     expect((error as HttpStatusError).status).toBe(401);
+  });
+});
+
+describe('api-keys-client — update', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('updateApiKey patches the mode and persona scope and returns the key', async () => {
+    const updated = { ...apiKeyItem, approvalMode: 'approval', personaIds: ['p-1'] };
+    vi.stubGlobal('fetch', vi.fn(async () => response(200, { success: true, key: updated })));
+    await expect(
+      updateApiKey({ id: 'k-1', approvalMode: 'approval', personaIds: ['p-1'] }),
+    ).resolves.toEqual(updated);
+    expect(fetch).toHaveBeenCalledWith('/api/api-keys/k-1', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ approvalMode: 'approval', personaIds: ['p-1'] }),
+    });
+  });
+
+  it('updateApiKey sends personaIds null to remove the scope', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => response(200, { success: true, key: apiKeyItem })));
+    await updateApiKey({ id: 'k-1', approvalMode: 'yolo', personaIds: null });
+    expect(vi.mocked(fetch).mock.calls[0][1]?.body).toBe(
+      JSON.stringify({ approvalMode: 'yolo', personaIds: null }),
+    );
+  });
+
+  it.each([400, 404, 409, 500])('updateApiKey throws an HttpStatusError carrying HTTP %i', async (status) => {
+    vi.stubGlobal('fetch', vi.fn(async () => response(status)));
+    const error = await updateApiKey({ id: 'k-1', approvalMode: 'yolo', personaIds: null }).catch(
+      (caught: unknown) => caught,
+    );
+    expect(error).toBeInstanceOf(HttpStatusError);
+    expect((error as HttpStatusError).status).toBe(status);
+  });
+
+  it('updateApiKey throws when a 200 body carries no key', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => { throw new Error('html'); } }) as unknown as Response));
+    await expect(updateApiKey({ id: 'k-1', approvalMode: 'yolo', personaIds: null })).rejects.toBeInstanceOf(
+      HttpStatusError,
+    );
+  });
+
+  it('the update mutation refetches the key list only on success', async () => {
+    const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+    const wrap = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    vi.stubGlobal('fetch', vi.fn(async () => response(409)));
+    const failing = renderHook(() => useUpdateApiKeyMutation(), { wrapper: wrap });
+    await expect(
+      failing.result.current.mutateAsync({ id: 'k-1', approvalMode: 'yolo', personaIds: null }),
+    ).rejects.toBeInstanceOf(HttpStatusError);
+    expect(invalidate).not.toHaveBeenCalled();
+
+    vi.stubGlobal('fetch', vi.fn(async () => response(200, { success: true, key: apiKeyItem })));
+    const ok = renderHook(() => useUpdateApiKeyMutation(), { wrapper: wrap });
+    await ok.result.current.mutateAsync({ id: 'k-1', approvalMode: 'yolo', personaIds: null });
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['user-api-keys'] }));
   });
 });
 

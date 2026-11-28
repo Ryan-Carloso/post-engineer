@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { buildInstallPrompt } from '../mcp-install-prompt';
 
-const KEY = 'pe_live_abcdef1234567890abcdef1234567890';
-
 describe('buildInstallPrompt', () => {
   it('pins the full install prompt in each locale (agent-facing contract)', () => {
-    expect(buildInstallPrompt('en', null).split('\n')).toEqual(EXPECTED_EN_PROMPT);
-    expect(buildInstallPrompt('pt', null).split('\n')).toEqual(EXPECTED_PT_PROMPT);
+    expect(buildInstallPrompt('en').split('\n')).toEqual(EXPECTED_EN_PROMPT);
+    expect(buildInstallPrompt('pt').split('\n')).toEqual(EXPECTED_PT_PROMPT);
   });
 
   const TOOL_ACTIONS: Record<string, string[]> = {
@@ -23,7 +21,7 @@ describe('buildInstallPrompt', () => {
   };
 
   it.each(['en', 'pt'] as const)('documents the 10 tools and every action in the %s prompt', (locale) => {
-    const prompt = buildInstallPrompt(locale, null);
+    const prompt = buildInstallPrompt(locale);
     expect(Object.keys(TOOL_ACTIONS)).toHaveLength(10);
     for (const [tool, actions] of Object.entries(TOOL_ACTIONS)) {
       const bullet = prompt.split('\n').find((line) => line.startsWith(`- ${tool}:`));
@@ -35,7 +33,7 @@ describe('buildInstallPrompt', () => {
   });
 
   it('keeps the agent-facing facts the prompt must carry', () => {
-    const prompt = buildInstallPrompt('en', null);
+    const prompt = buildInstallPrompt('en');
     expect(prompt).toContain('post-engineer');
     expect(prompt).toContain('POST_ENGINEER_API_KEY');
     expect(prompt).toContain('"command": ["npx", "-y", "post-engineer-mcp@latest"]');
@@ -56,7 +54,7 @@ describe('buildInstallPrompt', () => {
 
   it('documents the hosted remote MCP endpoint beside the npx snippet', () => {
     for (const locale of ['en', 'pt'] as const) {
-      const prompt = buildInstallPrompt(locale, null);
+      const prompt = buildInstallPrompt(locale);
       expect(prompt, locale).toContain('https://post-engineer.com/mcp');
       expect(prompt, locale).toContain('publish_video from_file');
       expect(prompt, locale).toContain('publish_video create_upload');
@@ -67,51 +65,32 @@ describe('buildInstallPrompt', () => {
 
   it('points at the prompts hub, never the removed /api-keys page', () => {
     for (const locale of ['en', 'pt'] as const) {
-      const prompt = buildInstallPrompt(locale, null);
+      const prompt = buildInstallPrompt(locale);
       expect(prompt, locale).toContain('https://post-engineer.com/recipes.');
       expect(prompt, locale).not.toContain('/api-keys');
     }
   });
 
-  it('fills a created key into the config and drops the replace instruction (EN)', () => {
-    const lines = buildInstallPrompt('en', KEY).split('\n');
-    const expected = EXPECTED_EN_PROMPT.map((line) =>
-      line
-        .replace('"<MY_API_KEY>"', `"${KEY}"`)
-        .replace(
-          'Replace <MY_API_KEY> with my real API key.',
-          'The API key above is already my real key.',
-        ),
+  it.each([
+    ['en', '<MY_API_KEY>'],
+    ['pt', '<MINHA_API_KEY>'],
+  ] as const)('keeps the %s key placeholder in the env and tells the agent never to take the key in chat', (locale, placeholder) => {
+    const prompt = buildInstallPrompt(locale);
+    expect(prompt).toContain(`"POST_ENGINEER_API_KEY": "${placeholder}"`);
+    expect(prompt).not.toMatch(/pe_live_/);
+    expect(prompt.split('\n').find((line) => line.startsWith('2. '))).toContain(
+      locale === 'en' ? 'Never paste my API key into this chat' : 'Nunca cole minha API key neste chat',
     );
-    expect(lines).toEqual(expected);
-    expect(lines).toContain(`           "POST_ENGINEER_API_KEY": "${KEY}"`);
-    expect(lines.join('\n')).not.toContain('<MY_API_KEY>');
   });
 
-  it('fills a created key into the config and drops the replace instruction (PT)', () => {
-    const lines = buildInstallPrompt('pt', KEY).split('\n');
-    const expected = EXPECTED_PT_PROMPT.map((line) =>
-      line
-        .replace('"<MINHA_API_KEY>"', `"${KEY}"`)
-        .replace(
-          'Substitua <MINHA_API_KEY> pela minha API key real.',
-          'A API key acima já é a minha chave real.',
-        ),
-    );
-    expect(lines).toEqual(expected);
-    expect(lines).toContain(`           "POST_ENGINEER_API_KEY": "${KEY}"`);
-    expect(lines.join('\n')).not.toContain('<MINHA_API_KEY>');
-  });
-
-  it('JSON-escapes the key so the config stays valid', () => {
-    const prompt = buildInstallPrompt('en', 'a"b');
-    expect(prompt).toContain('"POST_ENGINEER_API_KEY": "a\\"b"');
+  it('takes no API key argument, so a key can never be embedded', () => {
+    expect(buildInstallPrompt.length).toBe(1);
   });
 
   it('documents the same minimum schedule window in the EN and PT install prompts', () => {
     const prompts: Record<string, string> = {
-      en: buildInstallPrompt('en', null),
-      pt: buildInstallPrompt('pt', null),
+      en: buildInstallPrompt('en'),
+      pt: buildInstallPrompt('pt'),
     };
     for (const locale of ['en', 'pt'] as const) {
       expect(prompts[locale], `${locale} prompt`).not.toMatch(
@@ -156,7 +135,7 @@ const EXPECTED_EN_PROMPT: string[] = [
   '       }',
   '     }',
   '   }',
-  '2. Replace <MY_API_KEY> with my real API key. No repository clone or local build is required. The @latest tag forces npx to fetch the newest version instead of reusing a stale cached copy.',
+  '2. Never paste my API key into this chat and never ask me for it. Tell me to replace <MY_API_KEY> in the POST_ENGINEER_API_KEY environment variable myself, or to load it from my vault or secret store. No repository clone or local build is required. The @latest tag forces npx to fetch the newest version instead of reusing a stale cached copy.',
   '',
   'Remote (hosted) option — no local install needed:',
   'If your agent supports remote MCP servers (for example ChatGPT), connect it to https://post-engineer.com/mcp instead of the npx command above. It serves the same 10 tools over Streamable HTTP with OAuth sign-in — sign in to Post Engineer when prompted. The actions that read a file from your own machine (publish_video from_file, and a local imagePath or avatarPath) are not available remotely: upload a video or image with publish_video create_upload (PUT the bytes to its signed URL), then complete_upload, then publish_upload or publish_existing.',
@@ -200,7 +179,7 @@ const EXPECTED_PT_PROMPT: string[] = [
   '       }',
   '     }',
   '   }',
-  '2. Substitua <MINHA_API_KEY> pela minha API key real. Não é necessário clonar o repositório nem fazer build local. A tag @latest força o npx a baixar a versão mais nova em vez de reutilizar uma cópia antiga em cache.',
+  '2. Nunca cole minha API key neste chat e nunca peça que eu a envie. Diga-me para substituir <MINHA_API_KEY> na variável de ambiente POST_ENGINEER_API_KEY eu mesmo, ou para carregá-la do meu cofre de segredos. Não é necessário clonar o repositório nem fazer build local. A tag @latest força o npx a baixar a versão mais nova em vez de reutilizar uma cópia antiga em cache.',
   '',
   'Opção remota (hospedada) — sem instalação local:',
   'Se o seu agente suporta servidores MCP remotos (por exemplo, ChatGPT), conecte-o a https://post-engineer.com/mcp em vez do comando npx acima. Ele serve as mesmas 10 tools por Streamable HTTP com login OAuth — faça login no Post Engineer quando solicitado. As actions que leem um arquivo da sua máquina (publish_video from_file, e um imagePath ou avatarPath local) não estão disponíveis remotamente: envie um vídeo ou imagem com publish_video create_upload (PUT dos bytes na signed URL), depois complete_upload, depois publish_upload ou publish_existing.',

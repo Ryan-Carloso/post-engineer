@@ -10,6 +10,9 @@
     "GET /api/api-keys": {
       "kind": "bearer-rejected"
     },
+    "PATCH /api/api-keys/[id]": {
+      "kind": "bearer-rejected"
+    },
     "POST /api/api-keys": {
       "kind": "bearer-rejected"
     },
