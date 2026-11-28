@@ -22,6 +22,12 @@ export default function RecipesPage() {
   const setupRef = useRef<HTMLElement>(null);
   const markPromptCopied = useCallback(() => setPromptCopied(true), []);
 
+  const [prevKeyCreations, setPrevKeyCreations] = useState(0);
+  if (prevKeyCreations !== keyCreations) {
+    setPrevKeyCreations(keyCreations);
+    setHighlightSetup(true);
+  }
+
   useEffect(() => {
     if (keyCreations === 0) return;
     const target = setupRef.current;
@@ -29,7 +35,6 @@ export default function RecipesPage() {
       const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
       target.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
     }
-    setHighlightSetup(true);
     const timer = setTimeout(() => setHighlightSetup(false), SETUP_HIGHLIGHT_MS);
     return () => clearTimeout(timer);
   }, [keyCreations]);
