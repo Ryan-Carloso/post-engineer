@@ -228,6 +228,37 @@ describe('replayAsapHold', () => {
     expect(response).toBeNull();
     expect(client.__deletedSchedules).toHaveLength(0);
   });
+
+  it('carries the reconnect warning on a replayed hold', async () => {
+    const client = fakeSupabase({
+      existingSchedule: { id: SCHEDULE_ID, created_at: new Date().toISOString() },
+      existingSlots: [{ id: 'slot-1', slot_at: new Date().toISOString(), status: 'awaiting_approval' }],
+    });
+
+    const response = await replayAsapHold(client as never, SCHEDULE_ID, USER_ID, 'POST /api/media/publish-existing', {
+      code: 'account_needs_reconnect',
+      accounts: [{ provider: 'youtube', accountId: 'UC1' }],
+    });
+
+    expect(response?.status).toBe(200);
+    const body = await response?.json();
+    expect(body.warnings).toEqual([
+      { code: 'account_needs_reconnect', accounts: [{ provider: 'youtube', accountId: 'UC1' }] },
+    ]);
+  });
+
+  it('omits warnings on a replayed hold without a dead account', async () => {
+    const client = fakeSupabase({
+      existingSchedule: { id: SCHEDULE_ID, created_at: new Date().toISOString() },
+      existingSlots: [{ id: 'slot-1', slot_at: new Date().toISOString(), status: 'awaiting_approval' }],
+    });
+
+    const response = await replayAsapHold(client as never, SCHEDULE_ID, USER_ID, 'POST /api/media/publish-existing');
+
+    expect(response?.status).toBe(200);
+    const body = await response?.json();
+    expect(body).not.toHaveProperty('warnings');
+  });
 });
 
 describe('scheduleAsapHold', () => {
@@ -294,5 +325,37 @@ describe('scheduleAsapHold', () => {
 
     expect(response.status).toBe(200);
     expect((client.__insertedSlots[0] as Record<string, unknown>).first_comment).toBe('Link in bio');
+  });
+
+  it('carries the reconnect warning on a fresh hold', async () => {
+    const client = fakeSupabase();
+    const updateUpload = vi.fn(async () => true);
+    mockStore(updateUpload);
+    const ctx = holdContext(client);
+    ctx.reconnectWarning = {
+      code: 'account_needs_reconnect',
+      accounts: [{ provider: 'youtube', accountId: 'UC1' }],
+    };
+
+    const response = await scheduleAsapHold(ctx, SCHEDULE_ID);
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.approvalRequired).toBe(true);
+    expect(body.warnings).toEqual([
+      { code: 'account_needs_reconnect', accounts: [{ provider: 'youtube', accountId: 'UC1' }] },
+    ]);
+  });
+
+  it('omits warnings on a fresh hold without a dead account', async () => {
+    const client = fakeSupabase();
+    const updateUpload = vi.fn(async () => true);
+    mockStore(updateUpload);
+
+    const response = await scheduleAsapHold(holdContext(client), SCHEDULE_ID);
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).not.toHaveProperty('warnings');
   });
 });

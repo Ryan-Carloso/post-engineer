@@ -213,7 +213,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     if (replay !== null) return replay;
   }
   if (input.publishing.mode === 'asap' && auth.approvalMode === 'approval') {
-    const holdReplay = await replayAsapHold(supabase, idem.scheduleId, userId, ROUTE);
+    const holdReplay = await replayAsapHold(supabase, idem.scheduleId, userId, ROUTE, reconnectWarning);
     if (holdReplay !== null) return holdReplay;
   }
   if (resolved instanceof NextResponse) return resolved;

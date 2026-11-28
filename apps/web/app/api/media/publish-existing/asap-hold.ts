@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import type { AccountNeedsReconnectWarning } from '@/lib/account-needs-reconnect';
 import { apiErrorResponse } from '@/lib/api-error';
 import { ERROR_CODES, formatErrorMessage } from '@/lib/error-codes';
 import { logger } from '@/lib/logger';
@@ -14,13 +15,18 @@ import type { PublishExistingContext } from './context';
 import { buildSlotRows } from './slot-rows';
 import { loadReplaySlots } from './replay';
 
-function holdResponse(slot: { id: string; slotAt: string; status: string }, replayed: boolean): NextResponse {
+function holdResponse(
+  slot: { id: string; slotAt: string; status: string },
+  replayed: boolean,
+  reconnectWarning: AccountNeedsReconnectWarning | null,
+): NextResponse {
   return NextResponse.json({
     success: true,
     mode: 'asap',
     approvalRequired: slot.status === 'awaiting_approval',
     ...(replayed ? { replayed: true } : {}),
     slot: { id: slot.id, slotAt: slot.slotAt, status: slot.status },
+    ...(reconnectWarning === null ? {} : { warnings: [reconnectWarning] }),
   });
 }
 
@@ -29,6 +35,7 @@ export async function replayAsapHold(
   scheduleId: string,
   userId: string,
   route: string,
+  reconnectWarning: AccountNeedsReconnectWarning | null = null,
 ): Promise<NextResponse | null> {
   const loaded = await loadReplaySlots(supabase, scheduleId, userId, route, 'id, slot_at, status');
   if (loaded === null) return null;
@@ -41,6 +48,7 @@ export async function replayAsapHold(
       status: typeof first.status === 'string' ? first.status : 'awaiting_approval',
     },
     true,
+    reconnectWarning,
   );
 }
 
@@ -74,7 +82,7 @@ export async function scheduleAsapHold(ctx: PublishExistingContext, scheduleId: 
   if (scheduleError) {
     await discardStagedImage(supabase, media, scheduleId, userId);
     if (violatedConstraint(scheduleError) === SCHEDULE_PK_CONSTRAINT) {
-      const replay = await replayAsapHold(supabase, scheduleId, userId, route);
+      const replay = await replayAsapHold(supabase, scheduleId, userId, route, ctx.reconnectWarning);
       if (replay !== null) return replay;
     }
     logger.error('[publish-existing] schedule insert failed', scheduleError, { scheduleId, userId });
@@ -112,5 +120,6 @@ export async function scheduleAsapHold(ctx: PublishExistingContext, scheduleId: 
       status: 'awaiting_approval',
     },
     false,
+    ctx.reconnectWarning,
   );
 }

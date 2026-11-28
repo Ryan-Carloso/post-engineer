@@ -839,6 +839,34 @@ describe('POST /api/media/publish-existing', () => {
     expect(client.__rpcCalls).toHaveLength(0);
   });
 
+  it('carries the reconnect warning on a fresh approval-key ASAP hold', async () => {
+    const client = fakeSupabase({
+      socialRows: [{ provider: 'youtube', provider_account_id: 'UC1', needs_reconnect: true }],
+    });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    mockUploadStore({ uploadRow: uploadRow() });
+    authAs(null, true, 'approval');
+
+    const response = await POST(
+      jsonRequest({
+        media: { kind: 'upload', uploadId: UPLOAD_ID },
+        title: 'Hold video',
+        description: 'Approve it later.',
+        publishing: { mode: 'asap', providers: ['youtube'], accounts: { youtube: ['UC1'] } },
+        tags: ['ready'],
+        privacyStatus: 'public',
+        idempotencyKey: 'hold-key-dead',
+      }),
+    );
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body.approvalRequired).toBe(true);
+    expect(body.warnings).toEqual([
+      { code: 'account_needs_reconnect', accounts: [{ provider: 'youtube', accountId: 'UC1' }] },
+    ]);
+    expect(vi.mocked(dispatchPublish)).not.toHaveBeenCalled();
+  });
+
   it('replays an approval-key ASAP hold with the same idempotency key', async () => {
     const scheduleId = deterministicUuid('publish-existing/v1', `${USER_ID}:replay-key-2`);
     const client = fakeSupabase({
