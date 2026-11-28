@@ -221,7 +221,7 @@ describe('withApiErrorReporting', () => {
     },
   );
 
-  it.each([401, 403])(
+  it.each([403])(
     'reports a %i auth failure as a server_warning (never an $exception)',
     async (status) => {
       const wrapped = withApiErrorReporting(
@@ -246,6 +246,39 @@ describe('withApiErrorReporting', () => {
       expect(client.captureException).not.toHaveBeenCalled();
     },
   );
+
+  it('records nothing for a 401 response when anonymous', async () => {
+    const wrapped = withApiErrorReporting(
+      'GET /api/test',
+      async () => NextResponse.json({ error: 'nope', code: 'UNAUTHORIZED' }, { status: 401 }),
+    );
+
+    const res = await wrapped(getRequest());
+
+    expect(res.status).toBe(401);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(client.capture).not.toHaveBeenCalled();
+    expect(client.captureAs).not.toHaveBeenCalled();
+    expect(client.captureException).not.toHaveBeenCalled();
+    expect(client.captureExceptionAs).not.toHaveBeenCalled();
+  });
+
+  it('records nothing for a 401 response when getUserId resolves', async () => {
+    const wrapped = withApiErrorReporting(
+      'GET /api/test',
+      async () => NextResponse.json({ error: 'nope', code: 'UNAUTHORIZED' }, { status: 401 }),
+      { getUserId: async () => 'user-123' },
+    );
+
+    const res = await wrapped(getRequest());
+
+    expect(res.status).toBe(401);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(client.capture).not.toHaveBeenCalled();
+    expect(client.captureAs).not.toHaveBeenCalled();
+    expect(client.captureException).not.toHaveBeenCalled();
+    expect(client.captureExceptionAs).not.toHaveBeenCalled();
+  });
 
   it('reports a 500 response via captureException with route, status and code', async () => {
     const wrapped = withApiErrorReporting(
