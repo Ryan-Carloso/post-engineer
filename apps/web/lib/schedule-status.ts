@@ -2,11 +2,25 @@ import { HttpStatusError } from '@/lib/errors';
 import type { PublishProviderFailure, PublishUserNotice } from '@/lib/publish-user-notice';
 import { narrowSlotMedia, type SlotMedia } from '@/lib/slot-detail';
 
+export const SCHEDULED_POST_STATUSES = [
+  'pending',
+  'generating',
+  'ready',
+  'awaiting_approval',
+  'publishing',
+  'published',
+  'failed',
+  'expired',
+  'cancelled',
+] as const;
+
+export type ScheduledPostStatus = (typeof SCHEDULED_POST_STATUSES)[number];
+
 export interface ScheduledSlot {
   id: string;
   scheduleId: string;
   slotAt: string;
-  status: 'ready' | 'awaiting_approval' | 'publishing' | 'published' | 'failed' | 'expired' | 'cancelled';
+  status: ScheduledPostStatus;
   title: string | null;
   description?: string | null;
   media?: SlotMedia | null;
@@ -20,7 +34,7 @@ export interface SlotRow {
   id: string;
   schedule_id: string;
   slot_at: string;
-  status: ScheduledSlot['status'];
+  status: ScheduledPostStatus;
   title: string | null;
   description?: string | null;
   media?: SlotMedia | null;

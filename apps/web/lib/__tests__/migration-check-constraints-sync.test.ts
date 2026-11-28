@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
+import { SCHEDULED_POST_STATUSES } from '@/lib/schedule-status';
 import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
 import { APPROVAL_MODES } from '@/lib/api-keys';
 import { ScheduleRowSchema } from '@/lib/contracts/schedule';
@@ -71,6 +72,7 @@ const EXPECTED: Record<string, readonly string[]> = {
   video_uploads_declared_content_type_check: UPLOAD_CONTENT_TYPES,
   video_uploads_detected_content_type_check: UPLOAD_CONTENT_TYPES,
   scheduled_posts_media_kind_check: SCHEDULED_MEDIA_KINDS,
+  scheduled_posts_status_check: SCHEDULED_POST_STATUSES,
   user_tool_configs_search_tool_check: TOOL_CONFIG_SEARCH_TOOLS,
   user_tool_configs_stock_sources_check: TOOL_CONFIG_STOCK_SOURCES,
   user_prompts_visibility_check: PROMPT_VISIBILITIES,
