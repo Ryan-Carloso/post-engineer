@@ -59,6 +59,12 @@ describe('app/layout — RootLayout', () => {
     expect(link).toHaveAttribute('href', expect.stringContaining('https://wa.me/351962248268'));
     expect(link).toHaveAttribute('target', '_blank');
   });
+
+  it('opens WhatsApp with the localized help message prefilled', () => {
+    render(<RootLayout>content</RootLayout>);
+    const link = screen.getByRole('link', { name: 'WhatsApp' });
+    expect(link.getAttribute('href')).toMatch(/^https:\/\/wa\.me\/351962248268\?text=.+/);
+  });
 });
 
 describe('root layout metadata icons', () => {

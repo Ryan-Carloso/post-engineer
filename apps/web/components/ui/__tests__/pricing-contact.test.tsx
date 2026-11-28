@@ -60,4 +60,11 @@ describe('PricingContactCard', () => {
     expect(screen.getByText('Open source.')).toBeInTheDocument();
     expect(container.textContent).not.toMatch(/\$\d/);
   });
+
+  it('renders the WhatsApp and Discord buttons with the same style', () => {
+    render(<PricingContactCard />);
+    expect(screen.getByTestId('pricing-discord-cta').className).toBe(
+      screen.getByTestId('pricing-whatsapp-cta').className,
+    );
+  });
 });

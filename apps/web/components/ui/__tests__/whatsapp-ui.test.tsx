@@ -28,4 +28,11 @@ describe('WhatsAppFloatingButton', () => {
       `https://wa.me/351962248268?text=${encodeURIComponent('Hi! I need help.')}`,
     );
   });
+
+  it('opens the chat in a new tab', () => {
+    render(<WhatsAppFloatingButton />);
+    const link = screen.getByRole('link', { name: 'WhatsApp' });
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noreferrer');
+  });
 });

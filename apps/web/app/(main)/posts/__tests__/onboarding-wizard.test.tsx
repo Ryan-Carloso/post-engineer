@@ -652,6 +652,19 @@ describe('OnboardingWizard step 4', () => {
   });
 });
 
+describe('OnboardingWizard step 4 contact links', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    openAtStep(4);
+  });
+
+  it('always renders the WhatsApp button with the built-in number', async () => {
+    renderWizard();
+    await screen.findByRole('dialog');
+    expect(screen.getByTestId('onboarding-whatsapp-cta').getAttribute('href')).toMatch(/^https:\/\/wa\.me\/351962248268\?text=/);
+  });
+});
+
 describe('OnboardingWizardButton', () => {
   beforeEach(() => {
     window.localStorage.clear();

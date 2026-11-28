@@ -58,6 +58,11 @@ describe('McpDocsSection', () => {
     expect(help).toHaveAttribute('href', expect.stringContaining('text=I%20need%20help'));
   });
 
+  it('always renders the help link', () => {
+    render(<McpDocsSection apiKey={KEY} />);
+    expect(screen.getByTestId('mcp-docs-help-cta')).toHaveAttribute('href', expect.stringContaining('https://wa.me/351962248268'));
+  });
+
   it('keeps the tools grid collapsed by default so the prompt stays the focus', () => {
     render(<McpDocsSection apiKey={null} />);
     const tools = screen.getByTestId('mcp-tools');
