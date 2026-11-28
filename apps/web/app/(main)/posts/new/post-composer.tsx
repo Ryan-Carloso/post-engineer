@@ -9,7 +9,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Button } from '@/components/ui/button';
 import { usePersonaListQuery, useSocialAccountsQuery } from '@/lib/api';
 import { accountOption, type AccountOption } from '@/lib/account-options';
-import { SOCIAL_PROVIDERS, type SocialProvider } from '@/lib/contracts/providers';
+import { type SocialProvider } from '@/lib/contracts/providers';
 import { useI18n } from '@/lib/i18n/provider';
 import { formatFileSize } from '@/lib/ui';
 import { AccountField, type AccountsEmptyReason } from './account-field';
@@ -19,6 +19,11 @@ import { PostFields } from './post-fields';
 import { ResultPanel } from './result-panel';
 import { WhenField } from './when-field';
 import { usePinterestBoardsQuery } from './boards';
+import {
+  preselectedAccounts,
+  pruneAccounts,
+  pruneDisconnectedAccounts,
+} from './composer-accounts';
 import {
   SCHEDULE_MAX_AHEAD_DAYS,
   SCHEDULE_MIN_ADVANCE_HOURS,
@@ -38,7 +43,6 @@ import {
   type ComposerDraft,
   type ComposerField,
   type ComposerIssue,
-  type ComposerMediaKind,
 } from '@/lib/post-composer/compose';
 import {
   ComposerRequestError,
@@ -73,47 +77,6 @@ function serverIssues(error: ComposerRequestError): ComposerIssue[] {
       vars: { min: SCHEDULE_MIN_ADVANCE_HOURS, max: SCHEDULE_MAX_AHEAD_DAYS },
     },
   ];
-}
-
-function pruneAccounts(
-  accounts: Partial<Record<SocialProvider, string[]>>,
-  kind: ComposerMediaKind | null,
-): Partial<Record<SocialProvider, string[]>> {
-  const allowed = new Set<SocialProvider>(providersForMedia(kind));
-  const kept: Partial<Record<SocialProvider, string[]>> = {};
-  for (const provider of SOCIAL_PROVIDERS) {
-    const ids = accounts[provider];
-    if (ids !== undefined && ids.length > 0 && allowed.has(provider)) kept[provider] = ids;
-  }
-  return kept;
-}
-
-function pruneDisconnectedAccounts(
-  accounts: Partial<Record<SocialProvider, string[]>>,
-  connected: ReadonlySet<string>,
-): Partial<Record<SocialProvider, string[]>> {
-  const kept: Partial<Record<SocialProvider, string[]>> = {};
-  for (const provider of SOCIAL_PROVIDERS) {
-    const ids = accounts[provider];
-    if (ids === undefined) continue;
-    const visible = ids.filter((id) => connected.has(`${provider}\0${id}`));
-    if (visible.length > 0) kept[provider] = visible;
-  }
-  return kept;
-}
-
-function preselectedAccounts(
-  bound: PersonaDefaultAccounts,
-  kind: ComposerMediaKind | null,
-): Partial<Record<SocialProvider, string[]>> {
-  const allowed = new Set<SocialProvider>(providersForMedia(kind));
-  const selected: Partial<Record<SocialProvider, string[]>> = {};
-  for (const provider of SOCIAL_PROVIDERS) {
-    if (allowed.has(provider) && bound[provider].length > 0) {
-      selected[provider] = [...bound[provider]];
-    }
-  }
-  return selected;
 }
 
 export function PostComposer() {
