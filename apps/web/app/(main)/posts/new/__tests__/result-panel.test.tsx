@@ -189,4 +189,84 @@ describe('ResultPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'composer.successAgain' }));
     expect(onAgain).toHaveBeenCalledTimes(1);
   });
+
+  it('shows the server error text under a failed account', () => {
+    renderPanel(ASAP);
+    expect(screen.getByText('composer.resultError({"error":"quota"})')).toBeInTheDocument();
+    expect(screen.getByText('composer.resultFailed')).toBeInTheDocument();
+  });
+
+  it('shows a first-comment warning amber and still shows Published', () => {
+    renderPanel({
+      mode: 'asap',
+      success: true,
+      replayed: false,
+      publishes: [
+        {
+          provider: 'youtube',
+          success: true,
+          results: [
+            {
+              accountId: 'ch-1',
+              success: true,
+              videoUrl: 'https://youtu.be/x',
+              warnings: ['FIRST_COMMENT_FAILED'],
+            },
+          ],
+        },
+      ],
+    });
+    const warning = screen.getByText('posts.commentWarningFailed({"provider":"YouTube"})');
+    expect(warning).toBeInTheDocument();
+    expect(warning).toHaveClass('text-warning');
+    expect(screen.getByText('composer.resultOk')).toBeInTheDocument();
+  });
+
+  it('shows the reconnect warning on a scheduled result with dead accounts', () => {
+    renderPanel({
+      ...SCHEDULED,
+      warnings: [
+        { code: 'account_needs_reconnect', accounts: [{ provider: 'youtube', accountId: 'UC1' }] },
+      ],
+    });
+    const warning = screen.getByText('composer.resultReconnectWarning');
+    expect(warning).toBeInTheDocument();
+    expect(warning).toHaveClass('text-warning');
+    expect(screen.getByText('composer.successScheduledTitle')).toBeInTheDocument();
+  });
+
+  it('renders the held panel with a link to the held slot, never a success title', () => {
+    renderPanel({
+      mode: 'asap',
+      held: true,
+      approvalRequired: true,
+      replayed: false,
+      slot: { id: 'slot-1', slotAt: '2026-12-02T20:00:00Z', status: 'awaiting_approval' },
+    });
+    expect(screen.getByText('composer.heldTitle')).toBeInTheDocument();
+    expect(screen.getByText('composer.heldBody')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'composer.successViewPost' })).toHaveAttribute(
+      'href',
+      '/posts/slot-1',
+    );
+    expect(screen.queryByText('composer.successAsapTitle')).not.toBeInTheDocument();
+    expect(screen.queryByText('composer.resultReplayed')).not.toBeInTheDocument();
+  });
+
+  it('renders the replayed approved hold without a success title', () => {
+    renderPanel({
+      mode: 'asap',
+      held: false,
+      approvalRequired: false,
+      replayed: true,
+      slot: { id: 'slot-1', slotAt: '2026-12-02T20:00:00Z', status: 'ready' },
+    });
+    expect(screen.getByText('composer.heldTitle')).toBeInTheDocument();
+    expect(screen.getByText('composer.resultReplayed')).toBeInTheDocument();
+    expect(screen.queryByText('composer.successAsapTitle')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'composer.successViewPost' })).toHaveAttribute(
+      'href',
+      '/posts/slot-1',
+    );
+  });
 });
