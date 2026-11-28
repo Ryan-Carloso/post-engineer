@@ -1473,6 +1473,17 @@ describe('POST /api/media/publish-existing', () => {
       expect(client.__insertedSchedules).toHaveLength(0);
     });
 
+    it('answers 400 VALIDATION_FAILED for an impossible calendar date', async () => {
+      const client = fakeSupabase({ socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }] });
+      vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+      const response = await POST(
+        jsonRequest(scheduledUploadBody({ publishAt: '2026-02-30T10:00', timezone: 'UTC' })),
+      );
+      expect(response.status).toBe(400);
+      expect((await response.json()).code).toBe('VALIDATION_FAILED');
+      expect(client.__insertedSchedules).toHaveLength(0);
+    });
+
     it('rejects the old start + times shape', async () => {
       const client = fakeSupabase({ socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }] });
       vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);

@@ -96,6 +96,23 @@ describe('post-composer compose', () => {
     expect(tooFar.ok).toBe(false);
   });
 
+  it('rejects an impossible calendar date', () => {
+    const feb30 = build({ mode: 'scheduled', publishAt: '2026-02-30T20:00' });
+    expect(feb30.ok).toBe(false);
+    if (!feb30.ok) {
+      expect(feb30.issues).toContainEqual(
+        expect.objectContaining({ field: 'schedule', key: 'composer.validationSchedule' }),
+      );
+    }
+    const nov31 = build({ mode: 'scheduled', publishAt: '2026-11-31T20:00' });
+    expect(nov31.ok).toBe(false);
+    if (!nov31.ok) {
+      expect(nov31.issues).toContainEqual(
+        expect.objectContaining({ field: 'schedule', key: 'composer.validationSchedule' }),
+      );
+    }
+  });
+
   it('requires media, accounts, a title and a description', () => {
     const result = build({ mediaKind: null, accounts: {}, title: ' ', description: '' });
     expect(result.ok).toBe(false);

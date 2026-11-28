@@ -54,6 +54,18 @@ describe('parseNaiveDateTime', () => {
     expect(parseNaiveDateTime('2026-10-01T14:60:00')).toBeNull();
   });
 
+  it('rejects impossible calendar dates', () => {
+    expect(parseNaiveDateTime('2026-02-30T10:00')).toBeNull();
+    expect(parseNaiveDateTime('2026-04-31T10:00')).toBeNull();
+    expect(parseNaiveDateTime('2027-02-29T10:00')).toBeNull();
+  });
+
+  it('accepts February 29 in a leap year', () => {
+    expect(parseNaiveDateTime('2028-02-29T10:00')).toEqual({
+      year: 2028, month: 2, day: 29, hour: 10, minute: 0, second: 0,
+    });
+  });
+
   it('rejects non-datetime strings', () => {
     expect(parseNaiveDateTime('tomorrow')).toBeNull();
     expect(parseNaiveDateTime('2026-10-01T14:00:00Z')).toBeNull();
@@ -104,6 +116,16 @@ describe('parseZonedDateTime', () => {
     expect(parseZonedDateTime('', 'Europe/Lisbon')).toBeNull();
     expect(parseZonedDateTime(null, 'Europe/Lisbon')).toBeNull();
     expect(parseZonedDateTime(123, 'Europe/Lisbon')).toBeNull();
+  });
+
+  it('rejects impossible calendar dates with an explicit offset', () => {
+    expect(parseZonedDateTime('2026-02-30T10:00:00Z', 'UTC')).toBeNull();
+    expect(parseZonedDateTime('2026-02-30T10:00:00+01:00', 'UTC')).toBeNull();
+  });
+
+  it('keeps an offset date that legitimately shifts across midnight UTC', () => {
+    expect(parseZonedDateTime('2026-02-28T23:00:00-05:00', 'UTC')?.toISOString())
+      .toBe('2026-03-01T04:00:00.000Z');
   });
 });
 

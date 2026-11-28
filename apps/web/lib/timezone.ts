@@ -62,6 +62,11 @@ export interface NaiveDateTime {
 
 const NAIVE_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/;
 
+function isValidCalendarDate(year: number, month: number, day: number): boolean {
+  if (month < 1 || month > 12 || day < 1) return false;
+  return day <= new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
 export function parseNaiveDateTime(value: string): NaiveDateTime | null {
   const match = NAIVE_RE.exec(value.trim());
   if (!match) return null;
@@ -71,7 +76,7 @@ export function parseNaiveDateTime(value: string): NaiveDateTime | null {
   const hour = Number(match[4]);
   const minute = Number(match[5]);
   const second = match[6] === undefined ? 0 : Number(match[6]);
-  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  if (!isValidCalendarDate(year, month, day)) return null;
   if (hour > 23 || minute > 59 || second > 59) return null;
   return { year, month, day, hour, minute, second };
 }
@@ -87,6 +92,13 @@ export function parseZonedDateTime(value: unknown, timeZone: string): Date | nul
   const trimmed = value.trim();
   if (!trimmed) return null;
   if (hasExplicitOffset(trimmed)) {
+    const dateMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(trimmed);
+    if (
+      dateMatch !== null &&
+      !isValidCalendarDate(Number(dateMatch[1]), Number(dateMatch[2]), Number(dateMatch[3]))
+    ) {
+      return null;
+    }
     const parsed = new Date(trimmed);
     return Number.isNaN(parsed.getTime()) ? null : parsed;
   }
