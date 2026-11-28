@@ -21,12 +21,13 @@ import {
 export { EmptyState } from '@/components/ui/empty-state';
 
 export const CREATE_POSTS_HREF = '/recipes';
+export const NEW_POST_HREF = '/posts/new';
 
 export function NewPostButton({ className, testId }: { className?: string; testId?: string }) {
   const { t } = useI18n();
   return (
     <Button asChild size="sm" className={cn('shrink-0', className)} data-testid={testId}>
-      <Link href={CREATE_POSTS_HREF}>
+      <Link href={NEW_POST_HREF}>
         <CalendarPlus aria-hidden />
         {t('posts.newPostAction')}
       </Link>

@@ -21,7 +21,7 @@ import { useRumbleAccountsQuery, useTelegramAccountsQuery } from '@/lib/social-a
 import { usePinterestAccountsQuery } from '@/lib/pinterest-accounts';
 import { useFanvueAccountsQuery } from '@/lib/fanvue-accounts';
 import { useI18n } from '@/lib/i18n/provider';
-import { InlineFieldError, SectionDivider } from './persona-section-parts';
+import { InlineFieldError, SectionDivider } from '@/components/ui/form-field';
 import { SOCIAL_PROVIDERS, type SocialProvider } from '@/lib/providers/registry';
 import { PROVIDER_LABELS } from '@/lib/account-options';
 import { emptyPersonaDefaultAccounts, totalBoundAccounts, samePublishingAccounts, prunePublishingAccounts } from '@/lib/persona-publishing-accounts';

@@ -6,7 +6,7 @@ import { CalendarPlus, TriangleAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useI18n } from '@/lib/i18n/provider';
 import type { PublishUserNotice } from '@/lib/publish-user-notice';
-import { CREATE_POSTS_HREF } from '../day-section';
+import { NEW_POST_HREF } from '../day-section';
 import { PublishAccountNotices } from '../publish-user-notice';
 
 export function PostFailureNotice({
@@ -43,7 +43,7 @@ export function PostFailureNotice({
             </details>
           )}
           <Button asChild size="sm" className="mt-3">
-            <Link href={CREATE_POSTS_HREF}>
+            <Link href={NEW_POST_HREF}>
               <CalendarPlus className="size-4" aria-hidden />
               {t('posts.cardScheduleAgain')}
             </Link>
