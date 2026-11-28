@@ -441,7 +441,7 @@ export interface Database {
         schedule_id: string;
         user_id: string;
         slot_at: string;
-        status: string;
+        status: 'pending' | 'generating' | 'ready' | 'awaiting_approval' | 'publishing' | 'published' | 'failed' | 'expired' | 'cancelled';
         error: string | null;
         published_at: string | null;
         created_at: string;
@@ -463,7 +463,7 @@ export interface Database {
         schedule_id: string;
         user_id: string;
         slot_at: string;
-        status?: string;
+        status?: 'pending' | 'generating' | 'ready' | 'awaiting_approval' | 'publishing' | 'published' | 'failed' | 'expired' | 'cancelled';
         error?: string | null;
         published_at?: string | null;
         created_at?: string;
@@ -485,7 +485,7 @@ export interface Database {
         schedule_id?: string;
         user_id?: string;
         slot_at?: string;
-        status?: string;
+        status?: 'pending' | 'generating' | 'ready' | 'awaiting_approval' | 'publishing' | 'published' | 'failed' | 'expired' | 'cancelled';
         error?: string | null;
         published_at?: string | null;
         created_at?: string;
