@@ -14,10 +14,15 @@ const { createSchedulerMock, schedulerHandle, createdDeps } = vi.hoisted(() => {
 });
 
 vi.mock('../scheduler', () => ({ createScheduler: createSchedulerMock }));
+vi.mock('../publisher/job', () => ({
+  runPublishDueTick: vi.fn().mockResolvedValue(undefined),
+  announcePublishScheduler: vi.fn(),
+}));
 vi.mock('../scheduler-lease', () => ({
   tryAcquireSchedulerLease: vi.fn().mockResolvedValue(true),
   getSchedulerLastSuccess: vi.fn().mockResolvedValue(null),
   recordSchedulerSuccess: vi.fn().mockResolvedValue(undefined),
+  releaseSchedulerLease: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('../supabase/service', () => ({ createSupabaseServiceClient: vi.fn(() => ({})) }));
 vi.mock('../metrics/post-metrics', () => ({
@@ -32,11 +37,10 @@ vi.mock('../metrics/post-metrics-daily', () => ({
 }));
 vi.mock('../metrics/provider-counters', () => ({ fetchProviderCounters: vi.fn() }));
 vi.mock('../metrics/youtube-account-resolution', () => ({ resolveYouTubeMetricsTarget: vi.fn() }));
-vi.mock('../engine-tasks', () => ({ fetchEnginePostMetricsSource: vi.fn() }));
 vi.mock('../analytics', () => ({ trackApiEvent: vi.fn() }));
 vi.mock('../posthog-server', () => ({ flushPostHog: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../logger', () => ({
-  logger: { info: vi.fn(), error: vi.fn() },
+  logger: { debug: vi.fn(), info: vi.fn(), error: vi.fn() },
 }));
 vi.mock('../videos/signed-upload', () => ({
   sweepExpiredVideoUploads: vi.fn().mockResolvedValue(0),
@@ -73,6 +77,8 @@ import { isUnauthorizedError } from '../account-break';
 import { collectPostMetrics, createPostMetricsStore } from '../metrics/post-metrics';
 import { collectPostMetricsDaily } from '../metrics/post-metrics-daily';
 import { logger } from '../logger';
+import { announcePublishScheduler, runPublishDueTick } from '../publisher/job';
+import { getSchedulerLastSuccess, releaseSchedulerLease, tryAcquireSchedulerLease } from '../scheduler-lease';
 import {
   createSupabaseVideoUploadStorage,
   createSupabaseVideoUploadStore,
@@ -102,6 +108,7 @@ beforeEach(() => {
   vi.mocked(flushPostHog).mockClear();
   vi.mocked(logger.error).mockClear();
   vi.mocked(logger.info).mockClear();
+  vi.mocked(releaseSchedulerLease).mockClear();
   vi.mocked(sweepExpiredVideoUploads).mockReset();
   vi.mocked(sweepExpiredVideoUploads).mockResolvedValue(0);
   vi.mocked(createSupabaseVideoUploadStore).mockClear();
@@ -250,6 +257,83 @@ describe('startInternalScheduler', () => {
     };
     const result = await deps.acquireLease('post-metrics', 1800, 'h1');
     expect(result).toEqual({ acquired: true, lastSuccessAt: null });
+  });
+
+  it('registers the publish-due job: due every tick, no success event, the publisher tick as its run', () => {
+    process.env.SCHEDULER_ENABLED = 'true';
+    startInternalScheduler();
+    const deps = createdDeps[0] as {
+      jobs: Array<{ name: string; dueAfterMs: number; leaseTtlSeconds: number; successEvent: string | null; run: unknown }>;
+    };
+    const job = deps.jobs.find((j) => j.name === 'publish-due');
+    expect(job).toMatchObject({ dueAfterMs: 0, leaseTtlSeconds: 120, successEvent: null });
+    expect(job?.run).toBe(runPublishDueTick);
+  });
+
+  it('announces the publish scheduler once when it starts', () => {
+    process.env.SCHEDULER_ENABLED = 'true';
+    vi.mocked(announcePublishScheduler).mockClear();
+    startInternalScheduler();
+    expect(announcePublishScheduler).toHaveBeenCalledTimes(1);
+  });
+
+  it('announces nothing when the scheduler is disabled', () => {
+    process.env.SCHEDULER_ENABLED = 'false';
+    vi.mocked(announcePublishScheduler).mockClear();
+    expect(startInternalScheduler()).toBeNull();
+    expect(announcePublishScheduler).not.toHaveBeenCalled();
+  });
+
+  it('wires the lease release to the release RPC', async () => {
+    process.env.SCHEDULER_ENABLED = 'true';
+    startInternalScheduler();
+    const deps = createdDeps[0] as { releaseLease: unknown };
+    expect(deps.releaseLease).toBe(releaseSchedulerLease);
+  });
+
+  it('releases an acquired lease when the last-success read fails, then rethrows', async () => {
+    vi.mocked(getSchedulerLastSuccess).mockRejectedValueOnce(new Error('last-success rpc failed'));
+    process.env.SCHEDULER_ENABLED = 'true';
+    startInternalScheduler();
+    const deps = createdDeps[0] as {
+      acquireLease: (job: string, ttl: number, holder: string) => Promise<unknown>;
+    };
+    await expect(deps.acquireLease('post-metrics', 1800, 'h1')).rejects.toThrow('last-success rpc failed');
+    expect(releaseSchedulerLease).toHaveBeenCalledWith('post-metrics', 'h1');
+  });
+
+  it('does not release a lease it did not acquire when the last-success read fails', async () => {
+    vi.mocked(tryAcquireSchedulerLease).mockResolvedValueOnce(false);
+    vi.mocked(getSchedulerLastSuccess).mockRejectedValueOnce(new Error('last-success rpc failed'));
+    process.env.SCHEDULER_ENABLED = 'true';
+    startInternalScheduler();
+    const deps = createdDeps[0] as {
+      acquireLease: (job: string, ttl: number, holder: string) => Promise<unknown>;
+    };
+    await expect(deps.acquireLease('post-metrics', 1800, 'h1')).rejects.toThrow('last-success rpc failed');
+    expect(releaseSchedulerLease).not.toHaveBeenCalled();
+  });
+
+  it('logs a failed release after a failed last-success read and still rethrows the read error', async () => {
+    vi.mocked(getSchedulerLastSuccess).mockRejectedValueOnce(new Error('last-success rpc failed'));
+    vi.mocked(releaseSchedulerLease).mockRejectedValueOnce(new Error('release rpc failed'));
+    process.env.SCHEDULER_ENABLED = 'true';
+    startInternalScheduler();
+    const deps = createdDeps[0] as {
+      acquireLease: (job: string, ttl: number, holder: string) => Promise<unknown>;
+    };
+    await expect(deps.acquireLease('post-metrics', 1800, 'h1')).rejects.toThrow('last-success rpc failed');
+    expect(logger.error).toHaveBeenCalledWith(
+      '[scheduler] post-metrics: lease release failed',
+      expect.any(Error),
+    );
+  });
+
+  it('ticks every 60 seconds', () => {
+    process.env.SCHEDULER_ENABLED = 'true';
+    startInternalScheduler();
+    const deps = createdDeps[0] as { tickMs: number };
+    expect(deps.tickMs).toBe(60_000);
   });
 
   it('the scheduler clock injects the real Date.now', () => {

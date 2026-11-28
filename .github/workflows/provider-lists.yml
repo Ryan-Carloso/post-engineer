@@ -4,13 +4,11 @@ name: provider-lists
 #
 # shared/contracts/providers.ts (SOCIAL_PROVIDERS) is the one list and the
 # home of every named subset. The lint reads the production sources of the
-# web, the MCP, the shared contracts, the scripts, the Apify Actor and the
-# engine, and fails on:
+# web, the MCP, the shared contracts, the scripts and the Python files under
+# .github/scripts, and fails on:
 #   - a hand-typed provider list (array, union, tuple, set, Literal[...]);
 #   - a per-provider ternary/if/switch chain (use Record<SocialProvider, …>);
 #   - a per-provider map or select string that skips a network.
-# The engine (apps/engine/app/providers.py) and the Apify Actor keep one
-# mirror each; the lint checks each mirror equals SOCIAL_PROVIDERS.
 # Rules: .github/scripts/provider-lists/rules.mjs. Findings become ::error
 # annotations and fail the job.
 #

@@ -1,27 +1,30 @@
 # Self-hosting Post Engineer
 
 This guide covers running Post Engineer on your own infrastructure (a VPS or
-any host you control) with Docker for the engine. It replaces any
+any host you control) with Docker for the MCP server. It replaces any
 machine-specific deploy scripts: everything here uses placeholders you replace
 with your own values.
+
+The web app includes the publish scheduler, which runs inside the Node process.
+Run the web app as a long-lived process (a container or a Node service), not on
+a serverless platform: a function has no process to keep ticking, and long
+provider uploads can exceed a function's wall-clock limit.
 
 ## Architecture on one host
 
 ```text
                     ┌──────────────────────────────┐
 Internet ──HTTPS──▶ │ Caddy (reverse proxy, :443)  │
-                    └──┬──────────┬──────────┬─────┘
-                       │          │          │
-          ┌────────────▼──┐ ┌─────▼─────┐ ┌──▼──────────────────┐
-          │ apps/web      │ │apps/engine│ │ apps/mcp (optional) │
-          │ (Next.js)     │ │ (FastAPI) │ │ remote MCP, :8081   │
-          └───────────────┘ └───────────┘ └─────────────────────┘
+                    └──┬───────────────────────┬───┘
+                       │                       │
+          ┌────────────▼──┐            ┌───────▼─────────────┐
+          │ apps/web      │            │ apps/mcp (optional) │
+          │ (Next.js)     │            │ remote MCP, :8081   │
+          └───────────────┘            └─────────────────────┘
 ```
 
-The web app can run on a platform like Vercel or as a Node process behind the
-same proxy; the engine runs in Docker via `apps/engine/docker-compose.yml`
-(service name `engine`, container `mpt-engine-cpu`, listening on
-`127.0.0.1:8080` inside the host network namespace).
+The web app can run as a Node process behind the same proxy; the web app
+process also runs the publish scheduler, so it must stay alive.
 
 ## 1. Prerequisites on the host
 
@@ -33,17 +36,14 @@ same proxy; the engine runs in Docker via `apps/engine/docker-compose.yml`
 
 ## 2. Environment setup
 
-On the host, create the same three env files documented in the
-[README](../README.md#3-create-the-three-env-files-never-commit-these):
+On the host, create the env file documented in the
+[README](../README.md#3-create-the-env-file-never-commit-it):
 
 - `apps/web/.env`
-- `apps/engine/.env`
-- `apps/engine/config.toml` (copied from `apps/engine/config.example.toml`)
 
 Generate fresh secrets on the host — never copy them from another machine:
 
 ```bash
-openssl rand -hex 32     # MONEYPRINT_API_SECRET (identical in both .env files)
 openssl rand -base64 32  # TOKEN_ENCRYPTION_KEY
 ```
 
@@ -70,47 +70,10 @@ new numbered files; you only need to run the ones newer than what you
 already applied. All files are idempotent, so re-running the whole
 sequence is safe.
 
-## 3. Run the engine with Docker Compose
-
-```bash
-cd apps/engine
-docker compose up -d --build
-docker compose logs -f engine
-```
-
-The compose file mounts `./config.toml` read-only into the container and reads
-secrets from the adjacent `.env` file (never baked into the image). The API is
-available at `http://127.0.0.1:8080` (see `/docs`); keep that port bound to
-localhost and expose it only through the reverse proxy.
-
-Build metadata (`GET /version`, `/health`): the engine reports the
-`VERSION` / `PR_NUMBER` / `BUILD` / `COMMIT` env vars when they are set at
-deploy time. The deployed version is `MAJOR.MINOR.PR_NUMBER` (e.g. PR #152
--> `1.28.152`), where MAJOR.MINOR comes from the repo-root `VERSION` file
-and the PR number is the merged PR that introduced the commit being
-deployed. A self-hosted manual deploy can pass the same values:
-
-```bash
-cd apps/engine
-VERSION=1.28.152 PR_NUMBER=152 BUILD=152 COMMIT=$(git rev-parse HEAD) \
-  docker compose up -d --build
-```
-
-Unset, the engine falls back to the mounted `VERSION` file for the version
-and reports `null` pr/build/commit.
-
-To update:
-
-```bash
-cd apps/engine
-docker compose pull   # no-op unless you publish your own image
-docker compose up -d --build
-```
-
-## 4. Reverse proxy with Caddy (example)
+## 3. Reverse proxy with Caddy (example)
 
 Replace `APP_DOMAIN` with your domain. This example terminates TLS
-automatically and forwards to the two apps:
+automatically and forwards to the web app:
 
 ```caddy
 APP_DOMAIN {
@@ -121,16 +84,8 @@ APP_DOMAIN {
         max_size 6GB
     }
 
-    # Web dashboard (Next.js). If you host the web app on Vercel instead,
-    # point your DNS there and keep only the /engine/* block below.
+    # Web dashboard (Next.js) and its in-process publish scheduler.
     reverse_proxy 127.0.0.1:3434
-
-    # Engine API — keep the engine itself on localhost; Caddy is the only
-    # public entry point.
-    handle /engine/* {
-        uri strip_prefix /engine
-        reverse_proxy 127.0.0.1:8080
-    }
 
     # Remote MCP (optional, see below) — the MCP server itself stays on
     # localhost (127.0.0.1:8081); Caddy is the only public entry point.
@@ -141,9 +96,6 @@ APP_DOMAIN {
     }
 }
 ```
-
-Set `MONEYPRINT_API_URL` in `apps/web/.env` to the public engine URL
-(e.g. `https://APP_DOMAIN/engine`) so the web app can reach it.
 
 ### Remote MCP HTTP service (optional)
 
@@ -193,20 +145,17 @@ into one shared bucket.
 
 Security notes:
 
-- Never publish the engine's port directly; it authenticates with a single
-  shared secret (see [SECURITY.md](../SECURITY.md)).
+- Keep the MCP port bound to localhost and expose it only through the proxy.
 - Restrict SSH, keep the host patched, and put the database behind a firewall
   or private network.
 
-## 5. Backups
+## 4. Backups
 
 Back up regularly:
 
 - **Postgres** — Supabase hosted projects include point-in-time recovery;
   for self-hosted Postgres, schedule `pg_dump` (daily at minimum) and store
   dumps off-host.
-- **`apps/engine/storage`** (Docker volume `engine_storage`) — rendered videos
-  and task artifacts. Snapshot the volume or sync it to object storage.
 - **The `personas` storage bucket (private, Supabase)** — persona photos and
   image libraries, under `personas/{userId}/{personaId}/…`. Back it up together
   with Postgres: the rows store the *path*, so a bucket restored under a
@@ -214,17 +163,19 @@ Back up regularly:
   reads the FIRST path segment (`foldername(name)[1] = auth.uid()`) — keep it
   that way, or the objects written before the per-persona folders become
   unreachable for their owner. See `supabase/README.md` for the full layout.
-- **Env files** (`apps/web/.env`, `apps/engine/.env`, `apps/engine/config.toml`)
-  — keep an encrypted copy somewhere safe; they contain the keys needed to
-  decrypt OAuth tokens (`TOKEN_ENCRYPTION_KEY`).
+- **The `videos` and `uploads` storage buckets** — the media awaiting a
+  scheduled publish. Rows point at the object path; back up the buckets with
+  Postgres.
+- **Env file** (`apps/web/.env`) — keep an encrypted copy somewhere safe; it
+  contains the key needed to decrypt OAuth tokens (`TOKEN_ENCRYPTION_KEY`).
 
-## 6. Updating
+## 5. Updating
 
 1. `git pull` the latest `main`.
 2. Check the release notes for schema changes and apply them to your database.
 3. Rebuild and restart, exporting the build metadata first so
-   `GET /version` and `/health` identify the live build (see section 3 for
-   the engine; the web takes the same vars as Docker build args):
+   `GET /api/version` identifies the live build (the web takes these vars as
+   Docker build args):
    `VERSION=<major.minor>.<pr> PR_NUMBER=<pr> BUILD=<pr> COMMIT=$(git rev-parse HEAD)`
    before `docker compose up -d --build`.
    The web container also requires `REQUIRED_MCP_VERSION` (its compose file
@@ -232,4 +183,12 @@ Back up regularly:
    web accepts. Set it to the version your agents run; any other MCP version
    gets 426 `MCP_VERSION_MISMATCH` (see `apps/web/lib/mcp-version-gate.ts`).
 4. Check the release notes for breaking config changes (new required env vars
-   are documented in the `.env.example` files).
+   are documented in `.env.example`).
+
+## 6. Watching the scheduler
+
+`GET /api/version` reports `schedulerEnabled`; production turns the scheduler
+on by default (`NODE_ENV=production`), and `SCHEDULER_ENABLED=false` turns it
+off. The scheduler logs each job at startup and every publish tick to the web
+process logs; a publish failure also goes to the optional Discord webhook and
+the owner email.

@@ -432,7 +432,7 @@ describe('handleInstagramUpload', () => {
     expect(cleanupPublishMedia).toHaveBeenCalledWith('instagram');
   });
 
-  it('presigns the engine archive instead of uploading a copy', async () => {
+  it('presigns the archived upload instead of uploading a copy', async () => {
     const { uploadPublishMedia, cleanupPublishMedia, presignPublishMedia } = await import('@/lib/upload/publish-media');
     const { InstagramService } = await import('@/lib/instagram');
     const publishMedia = vi.fn(async (..._args: unknown[]) => ({ postId: 'p1', mediaId: 'm1', permalink: 'https://instagram.com/p/1' }));

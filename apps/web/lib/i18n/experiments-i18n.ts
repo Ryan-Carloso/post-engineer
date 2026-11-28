@@ -1,15 +1,8 @@
 export const experimentsStrings = {
   en: {
-    nav: {
-      experiments: 'Experiments',
-      experimentsHint: 'Compare your prompts',
-    },
     experiments: {
       title: 'Experiments',
       subtitle: 'Which of your prompts performs better, compared inside each account.',
-      entryTitle: 'Experiments — compare your prompts',
-      entryBody: 'Every video records the prompt it was written from. See which prompt does better in each account.',
-      entryAction: 'Compare',
       window24h: '24h',
       window7d: '7d',
       window28d: '28d',
@@ -38,16 +31,9 @@ export const experimentsStrings = {
     },
   },
   pt: {
-    nav: {
-      experiments: 'Experimentos',
-      experimentsHint: 'Compare seus prompts',
-    },
     experiments: {
       title: 'Experimentos',
       subtitle: 'Qual dos seus prompts performa melhor, comparado dentro de cada conta.',
-      entryTitle: 'Experimentos — compare seus prompts',
-      entryBody: 'Cada vídeo guarda o prompt com que foi escrito. Veja qual prompt vai melhor em cada conta.',
-      entryAction: 'Comparar',
       window24h: '24h',
       window7d: '7d',
       window28d: '28d',

@@ -2,7 +2,7 @@
 
 The mapper is a heuristic. A miss becomes a warning on the evidence table,
 not a failed job: numeric line coverage stays with Codecov in the existing
-web, engine, and mcp CI jobs.
+web and mcp CI jobs.
 """
 
 from __future__ import annotations
@@ -57,8 +57,6 @@ def is_product_code(path: str) -> bool:
     """True for app source whose coverage the evidence table should mention."""
     if is_test_path(path) or ".gen." in path or path.endswith(".d.ts"):
         return False
-    if path.startswith("apps/engine/app/") and path.endswith(".py"):
-        return True
     if path.startswith("apps/mcp/src/") and path.endswith((".ts", ".tsx")):
         return True
     if path.startswith("apps/web/") and "/cypress/" not in path and path.endswith((".ts", ".tsx")):
@@ -81,13 +79,6 @@ def production_candidates(path: str) -> list[str]:
             return []
         primary = "/".join(parent + [cleaned])
         return _unique([primary, *_ext_swaps(primary)])
-    if parts[:2] == ["apps", "engine"] and "test" in parts:
-        rest = parts[parts.index("test") + 1 :]
-        file_name = rest[-1]
-        if not file_name.startswith("test_") or not file_name.endswith(".py"):
-            return []
-        file_name = file_name[len("test_") :]
-        return ["/".join(["apps", "engine", "app", *rest[:-1], file_name])]
     cleaned = _strip_js_test_suffix(name)
     if cleaned == name:
         return []
@@ -108,9 +99,6 @@ def test_candidates(path: str) -> list[str]:
         test_name = f"{stem}.test{ext}"
         results.append("/".join(parent + ["__tests__", test_name]))
         results.append("/".join(parent + [test_name]))
-    if parts[:3] == ["apps", "engine", "app"] and ext == ".py":
-        rest = parts[3:]
-        results.append("/".join(["apps", "engine", "test", *rest[:-1], "test_" + rest[-1]]))
     return results
 
 
@@ -163,11 +151,6 @@ def delegated_suites(paths: list[str], exists) -> list[Delegated]:
         rows.append(Delegated("mcp", "CI / mcp", _scoped_command(
             "pnpm --dir apps/mcp exec vitest run", mcp, "apps/mcp/", exists
         )))
-    engine = [path for path in paths if path.startswith("apps/engine/")]
-    if engine:
-        rows.append(Delegated("engine", "CI / engine", _scoped_command(
-            "cd apps/engine && uv run pytest -q", engine, "apps/engine/", exists
-        )))
     if any(path.startswith("supabase/migrations/") for path in paths):
         rows.append(Delegated(
             "migrations",
@@ -177,7 +160,7 @@ def delegated_suites(paths: list[str], exists) -> list[Delegated]:
     if any(is_product_code(path) for path in paths):
         rows.append(Delegated(
             "coverage",
-            "CI / web, CI / engine, CI / mcp",
+            "CI / web, CI / mcp",
             "codecov patch target 80% and project threshold 2% (codecov.yml)",
         ))
     return rows

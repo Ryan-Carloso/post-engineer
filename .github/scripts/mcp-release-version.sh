@@ -2,8 +2,8 @@
 # Prints the npm version of post-engineer-mcp for the checked-out commit:
 #
 #   MAJOR.MINOR  from the repo-root VERSION file — the same release line the
-#                web and engine deploy versions use, so a PR that touches
-#                apps/mcp/ ships web, engine and MCP as one number
+#                the web deploy version uses, so a PR that touches
+#                apps/mcp/ ships web and MCP as one number
 #   PATCH        the ordinal of the LAST commit touching apps/mcp/ in the
 #                history main has: 1 for the first such commit, 2 for the
 #                next, and so on (git rev-list --count <that sha> -- apps/mcp/)

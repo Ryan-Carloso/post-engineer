@@ -12,6 +12,7 @@ import { resolveYouTubeMetricsTarget } from '@/lib/metrics/youtube-account-resol
 import { trackApiEvent } from '@/lib/analytics';
 import { flushPostHog } from '@/lib/posthog-server';
 import { logger } from '@/lib/logger';
+import { announcePublishScheduler, runPublishDueTick } from '@/lib/publisher/job';
 import { createScheduler, type SchedulerHandle, type SchedulerJob } from '@/lib/scheduler';
 import {
   createSupabaseVideoUploadStorage,
@@ -27,6 +28,7 @@ import { createTokenRefreshStore } from '@/lib/social-token-refresh-store';
 import {
   getSchedulerLastSuccess,
   recordSchedulerSuccess,
+  releaseSchedulerLease,
   tryAcquireSchedulerLease,
 } from '@/lib/scheduler-lease';
 
@@ -108,9 +110,17 @@ async function runSocialTokenRefreshTick(): Promise<void> {
   await flushPostHog();
 }
 
-const SCHEDULER_TICK_MS = 60 * 60 * 1000;
+const SCHEDULER_TICK_MS = 60 * 1000;
 
 export const SCHEDULER_JOBS: SchedulerJob[] = [
+  {
+    name: 'publish-due',
+    dueAfterMs: 0,
+    leaseTtlSeconds: 120,
+    successEvent: null,
+    routeLabel: 'internal:publish-due',
+    run: runPublishDueTick,
+  },
   {
     name: 'post-metrics',
     dueAfterMs: 60 * 60 * 1000,
@@ -151,16 +161,26 @@ export function startInternalScheduler(): SchedulerHandle | null {
     tickMs: SCHEDULER_TICK_MS,
     acquireLease: async (job, ttlSeconds, holder) => {
       const acquired = await tryAcquireSchedulerLease(job, ttlSeconds, holder);
-      const lastSuccessAt = await getSchedulerLastSuccess(job);
-      return { acquired, lastSuccessAt };
+      try {
+        return { acquired, lastSuccessAt: await getSchedulerLastSuccess(job) };
+      } catch (error) {
+        if (acquired) {
+          await releaseSchedulerLease(job, holder).catch((releaseError: unknown) => {
+            logger.error(`[scheduler] ${job}: lease release failed`, releaseError);
+          });
+        }
+        throw error;
+      }
     },
     recordSuccess: recordSchedulerSuccess,
+    releaseLease: releaseSchedulerLease,
     track: trackApiEvent,
     logger,
     holder: `${process.env.HOSTNAME ?? 'web'}:${process.pid}`,
     now: () => Date.now(),
   });
   handle.start();
+  announcePublishScheduler();
   logger.info('[scheduler] started', {
     jobs: SCHEDULER_JOBS.map((job) => job.name),
   });

@@ -12,7 +12,7 @@ vi.mock('@/lib/i18n/provider', () => {
   return { useI18n, I18nProvider };
 });
 
-import { CalendarLoadingSkeleton, CardsLoadingSkeleton } from '../loading-skeleton';
+import { CalendarLoadingSkeleton } from '../loading-skeleton';
 
 describe('CalendarLoadingSkeleton', () => {
   it('renders the 5-week grid with the month shape and the side panel', () => {
@@ -53,19 +53,5 @@ describe('CalendarLoadingSkeleton', () => {
     expect(container.querySelectorAll('[data-skeleton-day]')).toHaveLength(42);
     expect(container.querySelectorAll('[data-skeleton-day-number]')).toHaveLength(42);
     expect(container.querySelectorAll('.animate-pulse')).toHaveLength(56);
-  });
-});
-
-describe('CardsLoadingSkeleton', () => {
-  it('renders the title bar and six cards', () => {
-    const { container } = render(<CardsLoadingSkeleton />);
-    expect(screen.getByRole('status')).toBeInTheDocument();
-    expect(screen.getByText('posts.loadingPosts')).toBeInTheDocument();
-    expect(container.querySelector('.w-48')).not.toBeNull();
-    const cards = container.querySelectorAll('.h-36');
-    expect(cards).toHaveLength(6);
-    expect(cards[0]?.className).toContain('rounded-xl');
-    expect(cards[0]?.className).toContain('opacity-60');
-    expect(container.querySelectorAll('.animate-pulse')).toHaveLength(7);
   });
 });

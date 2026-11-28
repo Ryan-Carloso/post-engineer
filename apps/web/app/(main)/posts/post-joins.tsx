@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FilterX } from 'lucide-react';
 import { useSchedulesQuery, usePersonaListQuery, type ScheduleConfig, type ScheduledSlot } from '@/lib/api';
 import { SOCIAL_PROVIDERS, type SocialProvider } from '@/lib/contracts/providers';
@@ -85,6 +85,14 @@ export function usePostJoins(): PostJoins {
       accountsQuery.isError,
     refetch,
   };
+}
+
+export function useJoinsCoverSlots(slots: ScheduledSlot[] | undefined, joins: PostJoins): void {
+  const { scheduleById, isLoading, isError, refetch } = joins;
+  useEffect(() => {
+    if (slots === undefined || isLoading || isError) return;
+    if (slots.some((slot) => !scheduleById.has(slot.scheduleId))) refetch();
+  }, [slots, scheduleById, isLoading, isError, refetch]);
 }
 
 export interface PostFilters {

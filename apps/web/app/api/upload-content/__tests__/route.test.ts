@@ -38,6 +38,7 @@ vi.mock('@/lib/rate-limit', () => ({
   RATE_LIMITS: {
     youtubeUpload: { name: 'youtube-upload', limit: 5, windowMs: 60_000 },
     instagramPost: { name: 'instagram-post', limit: 10, windowMs: 60_000 },
+    pinterestUpload: { name: 'pinterest-upload', limit: 10, windowMs: 60_000 },
   },
   applyRateLimit: (...args: unknown[]) => mockApplyRateLimit(...args),
 }));
@@ -121,7 +122,6 @@ async function makeRequest(opts?: {
 describe('POST /api/upload-content', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.stubEnv('MONEYPRINT_API_SECRET', API_SECRET);
     mockRequireSupabaseSession.mockResolvedValue({
       auth: { userId: USER_ID, accessToken: 'sb-token' },
       error: null,
@@ -180,60 +180,128 @@ describe('POST /api/upload-content', () => {
     expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
   });
 
-  it('does not run the trial gate for the engine publish-back secret', async () => {
+  it('no longer accepts the removed engine shared secret', async () => {
     mockRequireSupabaseSession.mockResolvedValue({
       auth: null,
       error: NextResponse.json({ success: false }, { status: 401 }),
     });
-    const res = await POST(await makeRequest({ authorization: `Bearer ${API_SECRET}`, userId: USER_ID }));
-
-    expect(res.status).toBe(200);
-    expect(mockAssertTrialActive).not.toHaveBeenCalled();
-  });
-
-  it('accepts the shared secret (engine publish-back) with userId in the form', async () => {
-    mockRequireSupabaseSession.mockResolvedValue({
-      auth: null,
-      error: NextResponse.json({ success: false }, { status: 401 }),
-    });
+    vi.stubEnv('MONEYPRINT_API_SECRET', API_SECRET);
 
     const res = await POST(await makeRequest({
       authorization: `Bearer ${API_SECRET}`,
       userId: 'engine-owner',
     }));
 
-    expect(res.status).toBe(200);
-    const [, userId] = mockHandleYoutubeUpload.mock.calls[0] as unknown[];
-    expect(userId).toBe('engine-owner');
-  });
-
-  it('returns 401 with a valid secret but no userId in the form', async () => {
-    mockRequireSupabaseSession.mockResolvedValue({
-      auth: null,
-      error: NextResponse.json({ success: false }, { status: 401 }),
-    });
-
-    const res = await POST(await makeRequest({ authorization: `Bearer ${API_SECRET}` }));
-
     expect(res.status).toBe(401);
     expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
   });
 
-  it('returns 401 with a valid secret and an empty userId in the form', async () => {
+  it('ignores a form userId and publishes for the session user', async () => {
+    const res = await POST(await makeRequest({ userId: 'someone-else' }));
+
+    expect(res.status).toBe(200);
+    expect(mockHandleYoutubeUpload.mock.calls[0]?.[1]).toBe(USER_ID);
+    expect(mockRequireSupabaseSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('applies the access gate for an API-key caller', async () => {
+    mockRequireSupabaseSession.mockResolvedValue({
+      auth: { userId: 'key-user', accessToken: 'pe_live_abc123', isApiKey: true },
+      error: null,
+    });
+
+    const res = await POST(await makeRequest());
+
+    expect(res.status).toBe(200);
+    expect(mockAssertTrialActive).toHaveBeenCalledWith('key-user', {
+      route: 'POST /api/upload-content',
+    });
+    expect(mockHandleYoutubeUpload).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects an approval-mode API key before reading the body', async () => {
+    mockRequireSupabaseSession.mockResolvedValue({
+      auth: { userId: 'key-user', accessToken: 'pe_live_abc123', isApiKey: true, approvalMode: 'approval' },
+      error: null,
+    });
+    const formData = vi.spyOn(Request.prototype, 'formData');
+
+    const res = await POST(await makeRequest());
+
+    expect(res.status).toBe(403);
+    expect(formData).not.toHaveBeenCalled();
+    expect(mockApplyRateLimit).not.toHaveBeenCalled();
+    formData.mockRestore();
+  });
+
+  it('rate limits with the youtube profile and the caller id', async () => {
+    const req = await makeRequest();
+
+    await POST(req);
+
+    expect(mockApplyRateLimit).toHaveBeenCalledWith(req, RATE_LIMITS.youtubeUpload, USER_ID);
+    expect(mockHandleYoutubeUpload).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the pinterest upload profile for pinterest', async () => {
+    const req = await makeRequest({ provider: 'pinterest' });
+
+    await POST(req);
+
+    expect(mockApplyRateLimit).toHaveBeenCalledWith(req, RATE_LIMITS.pinterestUpload, USER_ID);
+    expect(mockApplyRateLimit).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses the removed engine secret before reading the body', async () => {
     mockRequireSupabaseSession.mockResolvedValue({
       auth: null,
       error: NextResponse.json({ success: false }, { status: 401 }),
     });
-    const form = new FormData();
-    form.append('provider', 'youtube');
-    form.append('userId', '');
-    const req = new NextRequest(await multipartRequest('http://localhost/api/upload-content', form));
-    req.headers.set('authorization', `Bearer ${API_SECRET}`);
+    const formData = vi.spyOn(Request.prototype, 'formData');
 
-    const res = await POST(req);
+    const res = await POST(await makeRequest({
+      authorization: `Bearer ${API_SECRET}`,
+      userId: 'engine-owner',
+    }));
 
     expect(res.status).toBe(401);
-    expect(await res.json()).toEqual({ success: false, error: 'Authentication required.' });
+    expect(formData).not.toHaveBeenCalled();
+    expect(mockRequireSupabaseSession).toHaveBeenCalled();
+    formData.mockRestore();
+  });
+
+  it('does not run the access gate for a denied caller', async () => {
+    mockRequireSupabaseSession.mockResolvedValue({
+      auth: null,
+      error: NextResponse.json({ success: false }, { status: 401 }),
+    });
+
+    await POST(await makeRequest());
+
+    expect(mockAssertTrialActive).not.toHaveBeenCalled();
+    expect(mockApplyRateLimit).not.toHaveBeenCalled();
+  });
+
+  it('logs nothing when authentication fails', async () => {
+    mockRequireSupabaseSession.mockResolvedValue({
+      auth: null,
+      error: NextResponse.json({ success: false }, { status: 401 }),
+    });
+
+    await POST(await makeRequest());
+
+    expect(vi.mocked(logger.info)).not.toHaveBeenCalled();
+    expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
+  });
+
+  it('rejects an empty provider without calling a handler', async () => {
+    mockBuildUploadErrorResponse.mockReturnValue(
+      NextResponse.json({ success: false }, { status: 400 }),
+    );
+
+    const res = await POST(await makeRequest({ provider: '' }));
+
+    expect(res.status).toBe(400);
     expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
   });
 
@@ -250,7 +318,7 @@ describe('POST /api/upload-content', () => {
     formData.mockRestore();
   });
 
-  it('rejects a bearer that is not the shared secret', async () => {
+  it('refuses a bearer that is not a valid API key', async () => {
     mockRequireSupabaseSession.mockResolvedValue({
       auth: null,
       error: NextResponse.json({ success: false }, { status: 401 }),
@@ -263,71 +331,10 @@ describe('POST /api/upload-content', () => {
     expect(await res.json()).toEqual({ success: false });
   });
 
-  it('a different-length bearer does not throw (timing-safe comparison)', async () => {
-    mockRequireSupabaseSession.mockResolvedValue({
-      auth: null,
-      error: NextResponse.json({ success: false }, { status: 401 }),
-    });
-
-    const res = await POST(await makeRequest({ authorization: 'Bearer x', userId: 'engine-owner' }));
-
-    expect(res.status).toBe(401);
-    expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
-  });
-
   it('returns the authentication-required fallback when the auth helper yields no auth and no error', async () => {
     mockRequireSupabaseSession.mockResolvedValue({ auth: null, error: null });
 
     const res = await POST(await makeRequest());
-    expect(res.status).toBe(401);
-    expect(await res.json()).toEqual({ success: false, error: 'Authentication required.' });
-    expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
-  });
-
-  it('rejects an uppercase BEARER scheme (the scheme check is case-sensitive)', async () => {
-    mockRequireSupabaseSession.mockResolvedValue({
-      auth: null,
-      error: NextResponse.json({ success: false }, { status: 401 }),
-    });
-
-    const res = await POST(await makeRequest({
-      authorization: `BEARER ${API_SECRET}`,
-      userId: 'engine-owner',
-    }));
-
-    expect(res.status).toBe(401);
-    expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
-  });
-
-  it('trims surrounding whitespace from the bearer token', async () => {
-    mockRequireSupabaseSession.mockResolvedValue({
-      auth: null,
-      error: NextResponse.json({ success: false }, { status: 401 }),
-    });
-
-    const res = await POST(await makeRequest({
-      authorization: `Bearer   ${API_SECRET}  `,
-      userId: 'engine-owner',
-    }));
-
-    expect(res.status).toBe(200);
-    const [, userId] = mockHandleYoutubeUpload.mock.calls[0] as unknown[];
-    expect(userId).toBe('engine-owner');
-  });
-
-  it('rejects a non-string userId on the engine-secret path', async () => {
-    mockRequireSupabaseSession.mockResolvedValue({ auth: null, error: null });
-
-    const form = new FormData();
-    form.append('provider', 'youtube');
-    form.append('userId', new Blob(['x'], { type: 'text/plain' }), 'id.txt');
-    const req = new NextRequest(
-      await multipartRequest('http://localhost/api/upload-content', form, {
-        authorization: `Bearer ${API_SECRET}`,
-      }),
-    );
-
-    const res = await POST(req);
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual({ success: false, error: 'Authentication required.' });
     expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
@@ -352,7 +359,7 @@ describe('POST /api/upload-content', () => {
       formData.mockRestore();
     });
 
-    it('answers 401 for a wrong bearer secret with a large body without reading the body', async () => {
+    it('answers 401 for an invalid bearer token with a large body without reading the body', async () => {
       mockRequireSupabaseSession.mockResolvedValue({
         auth: null,
         error: NextResponse.json({ success: false }, { status: 401 }),
@@ -401,20 +408,6 @@ describe('POST /api/upload-content', () => {
       expect(res.status).toBe(411);
       expect(await res.json()).toMatchObject({ success: false, code: 'LENGTH_REQUIRED' });
       expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
-    });
-
-    it('still reads userId from the form on the engine service-secret path', async () => {
-      mockRequireSupabaseSession.mockResolvedValue({
-        auth: null,
-        error: NextResponse.json({ success: false }, { status: 401 }),
-      });
-
-      const res = await POST(
-        await makeRequest({ authorization: `Bearer ${API_SECRET}`, userId: 'engine-owner' }),
-      );
-
-      expect(res.status).toBe(200);
-      expect(mockHandleYoutubeUpload.mock.calls[0]?.[1]).toBe('engine-owner');
     });
   });
 
@@ -572,7 +565,6 @@ describe('POST /api/upload-content with a personal API key', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.stubEnv('MONEYPRINT_API_SECRET', API_SECRET);
     mockApplyRateLimit.mockResolvedValue(null);
     mockHandleYoutubeUpload.mockResolvedValue({ success: true, provider: 'youtube', results: [] });
     mockHandleBlueskyUpload.mockResolvedValue({ success: true, provider: 'bluesky', results: [] });
@@ -607,21 +599,6 @@ describe('POST /api/upload-content with a personal API key', () => {
     expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
   });
 
-  it('still accepts the engine shared secret after the API-key change', async () => {
-    mockRequireSupabaseSession.mockResolvedValue({
-      auth: null,
-      error: NextResponse.json({ success: false }, { status: 401 }),
-    });
-
-    const res = await POST(await makeRequest({
-      authorization: `Bearer ${API_SECRET}`,
-      userId: 'engine-owner',
-    }));
-
-    expect(res.status).toBe(200);
-    const [, userId] = mockHandleYoutubeUpload.mock.calls[0] as unknown[];
-    expect(userId).toBe('engine-owner');
-  });
 });
 
 type LedgerRow = {
@@ -715,7 +692,6 @@ describe('POST /api/upload-content with a publish scope key', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.stubEnv('MONEYPRINT_API_SECRET', API_SECRET);
     mockRequireSupabaseSession.mockResolvedValue({
       auth: { userId: USER_ID, accessToken: 'sb-token' },
       error: null,

@@ -35,13 +35,13 @@ def analyze(path, status, base="", head="", exists=None):
 def test_truncated_findings_keep_their_fails():
     base = "def test_ok():\n    assert 1 == 1\n"
     skip = glue("    pytest.", "skip('hidden')\n")
-    findings = analyze("apps/engine/test/test_sample.py", "M", base, base + skip * 41)
+    findings = analyze(".github/scripts/tests/test_sample.py", "M", base, base + skip * 41)
     truncated = [finding for finding in findings if finding.code == "findings-truncated"]
     assert len(truncated) == 1
     assert truncated[0].severity == "fail"
     assert truncated[0].message == "1 additional findings omitted (1 fail)"
     conditional = glue("    @pytest.mark.", "skipif(True, reason='x')\n")
-    warned = analyze("apps/engine/test/test_sample.py", "M", base, base + conditional * 41)
+    warned = analyze(".github/scripts/tests/test_sample.py", "M", base, base + conditional * 41)
     truncated_warn = [finding for finding in warned if finding.code == "findings-truncated"]
     assert len(truncated_warn) == 1
     assert truncated_warn[0].severity == "warn"
@@ -50,7 +50,7 @@ def test_truncated_findings_keep_their_fails():
 
 def test_weakened_assertion_is_not_hidden_by_a_strong_addition_in_the_same_block():
     findings = analyze(
-        "apps/engine/test/test_sample.py",
+        ".github/scripts/tests/test_sample.py",
         "M",
         "def test_a():\n    assert x == 1\n",
         "def test_a():\n    assert y\n    assert other == 3\n",
@@ -61,7 +61,7 @@ def test_weakened_assertion_is_not_hidden_by_a_strong_addition_in_the_same_block
 def test_guarded_pytest_skip_warns_and_does_not_fail():
     base = "def test_ok():\n    assert 1 == 1\n"
     guarded = analyze(
-        "apps/engine/test/test_sample.py",
+        ".github/scripts/tests/test_sample.py",
         "M",
         base,
         base + "    if base.returncode != 0:\n" + glue("        pytest.", "skip('not in this clone')\n"),
@@ -69,7 +69,7 @@ def test_guarded_pytest_skip_warns_and_does_not_fail():
     assert fails(guarded) == []
     assert any(finding.code == "test-skip-conditional" for finding in guarded)
     single_line = analyze(
-        "apps/engine/test/test_sample.py",
+        ".github/scripts/tests/test_sample.py",
         "M",
         base,
         base + glue("    if True: pytest.", "skip('hidden')\n"),
@@ -77,21 +77,21 @@ def test_guarded_pytest_skip_warns_and_does_not_fail():
     assert any(finding.code == "test-skipped" for finding in fails(single_line))
     for guard in ("if 1:", "if not False:"):
         constant = analyze(
-            "apps/engine/test/test_sample.py",
+            ".github/scripts/tests/test_sample.py",
             "M",
             base,
             base + glue(f"    {guard} pytest.", "skip('hidden')\n"),
         )
         assert any(finding.code == "test-skipped" for finding in fails(constant)), guard
     block_true = analyze(
-        "apps/engine/test/test_sample.py",
+        ".github/scripts/tests/test_sample.py",
         "M",
         base,
         base + "    if True:\n" + glue("        pytest.", "skip('hidden')\n"),
     )
     assert any(finding.code == "test-skipped" for finding in fails(block_true))
     conditional_line = analyze(
-        "apps/engine/test/test_sample.py",
+        ".github/scripts/tests/test_sample.py",
         "M",
         base,
         base + glue("    if cond: pytest.", "skip('hidden')\n"),
@@ -99,7 +99,7 @@ def test_guarded_pytest_skip_warns_and_does_not_fail():
     assert fails(conditional_line) == []
     assert any(finding.code == "test-skip-conditional" for finding in conditional_line)
     unguarded = analyze(
-        "apps/engine/test/test_sample.py",
+        ".github/scripts/tests/test_sample.py",
         "M",
         base,
         base + glue("    pytest.", "skip('hidden')\n"),
@@ -120,26 +120,17 @@ def test_deleted_test_names_do_not_republish_titles():
 
 
 def test_rename_out_of_test_collection_is_a_deletion():
-    base = "def test_a():\n    assert 1 == 1\n"
+    source = "it('works', () => {})\n"
     renamed = honesty.FileChange(
-        "apps/engine/test/voice_service.py", "R", base, base, "apps/engine/test/test_voice.py"
+        "apps/web/lib/sample.ts", "R", source, source, "apps/web/lib/__tests__/sample.test.ts"
     )
-    with_product = honesty.analyze([renamed], lambda path: path == "apps/engine/app/voice.py")
+    with_product = honesty.analyze([renamed], lambda path: path == "apps/web/lib/sample.ts")
     assert any(finding.code == "tests-deleted-file" for finding in fails(with_product))
     gone = honesty.analyze([renamed], lambda _path: False)
     assert fails(gone) == []
     assert any(finding.code == "tests-deleted-unmapped" for finding in gone)
-    js = honesty.FileChange(
-        "apps/web/lib/sample.ts",
-        "R",
-        "it('works', () => {})\n",
-        "it('works', () => {})\n",
-        "apps/web/lib/__tests__/sample.test.ts",
-    )
-    js_findings = honesty.analyze([js], lambda path: path == "apps/web/lib/sample.ts")
-    assert any(finding.code == "tests-deleted-file" for finding in fails(js_findings))
     kept = honesty.FileChange(
-        "apps/engine/test/test_renamed.py", "R", base, base, "apps/engine/test/test_sample.py"
+        "apps/web/lib/__tests__/renamed.test.ts", "R", source, source, "apps/web/lib/__tests__/sample.test.ts"
     )
     assert fails(honesty.analyze([kept], lambda _path: True)) == []
 
@@ -165,6 +156,15 @@ def test_renaming_a_protected_file_fails_like_deleting_it():
     assert any(finding.code == "verifier-unsafe" for finding in fails(findings))
     other = honesty.FileChange("docs/moved.md", "R", "old\n", "old\n", "docs/original.md")
     assert fails(honesty.analyze([other], lambda _path: True)) == []
+
+
+def test_a_python_coverage_floor_no_longer_moves_the_grade():
+    change = honesty.FileChange(
+        "pyproject.toml", "M", "fail_under = 60\n", "fail_under = 50\n"
+    )
+    findings = honesty.analyze([change], lambda _path: False)
+    assert findings == []
+    assert honesty.analyze([change], lambda _path: True) == []
 
 
 def test_unpinned_verification_test_file_runs_the_whole_scripts_suite():

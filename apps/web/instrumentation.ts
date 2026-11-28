@@ -34,7 +34,7 @@ export async function register() {
           `NEXT_RUNTIME=${process.env.NEXT_RUNTIME ?? 'unset'} ` +
           `SCHEDULER_ENABLED=${process.env.SCHEDULER_ENABLED ?? 'unset'}. ` +
           'Set NODE_ENV=production or SCHEDULER_ENABLED=true and redeploy — ' +
-          'stuck-generation reconciliation and post metrics will not run.',
+          'post metrics, token refresh and scheduled publishing will not run.',
       );
     }
   }

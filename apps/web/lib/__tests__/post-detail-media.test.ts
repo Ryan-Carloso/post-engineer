@@ -127,7 +127,7 @@ describe('resolveSlotMedia', () => {
     expect(foreign?.url).toBeNull();
   });
 
-  it('returns null for an engine-generated slot', async () => {
+  it('returns null for a slot without a published video', async () => {
     const { service } = fakeService({});
     await expect(resolveSlotMedia(service, 'slot-1', 'user-1', {
       media_kind: null, media_ref: null, media_content_type: null, status: 'ready',

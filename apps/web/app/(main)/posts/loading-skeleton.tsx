@@ -53,19 +53,3 @@ export function CalendarLoadingSkeleton({ weeks }: { weeks: number }) {
     </div>
   );
 }
-
-export function CardsLoadingSkeleton() {
-  return (
-    <div role="status">
-      <LoadingLabel />
-      <div aria-hidden>
-        <div className={`h-5 w-48 rounded ${SHAPE}`} />
-        <div className="mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {Array.from({ length: 6 }, (_, i) => (
-            <div key={`card-${i}`} className={`h-36 rounded-xl opacity-60 ${SHAPE}`} />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}

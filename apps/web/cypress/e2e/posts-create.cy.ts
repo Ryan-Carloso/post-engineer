@@ -109,7 +109,7 @@ describe('Posts calendar', () => {
     cy.get('[data-testid=new-post-button]').should('have.attr', 'href', '/posts/new');
   });
 
-  it('drives the calendar: pick a day, change month, go to today, refresh', () => {
+  it('drives the calendar: pick a day, change month, go to today', () => {
     visitPosts();
     cy.get('[data-calendar-card]').find(`button[aria-label^="${day15FullDate()}"]`).click();
     cy.contains(`Publicações de ${day15ShortDate()}`).scrollIntoView().should('be.visible');
@@ -120,7 +120,6 @@ describe('Posts calendar', () => {
     cy.contains(`Publicações de ${monthLong(nextMonth)}`).scrollIntoView().should('be.visible');
     cy.get('[data-calendar-card]').contains('Ir para hoje').click();
     cy.contains(`Publicações de ${shortDate(new Date())}`).scrollIntoView().should('be.visible');
-    cy.get('button[aria-label="Atualizar"]').click();
     cy.contains('E2E scheduled topic').scrollIntoView().should('be.visible');
   });
 

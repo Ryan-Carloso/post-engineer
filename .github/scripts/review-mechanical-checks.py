@@ -6,7 +6,7 @@ Reads the PR diff and the list of changed files and reports:
 1. FAIL — duplicate migration numbers in supabase/migrations/
    (a collision like 009 happened for real and broke a rebase).
 2. WARN — production files changed with no test file changed in the same PR
-   (heuristic: paths containing /app/, /lib/, /src/ or apps/engine/app/
+   (heuristic: paths containing /app/, /lib/ or /src/
    without any changed counterpart in __tests__, test/, *.test.*, *.cy.ts).
 3. FAIL — added diff lines containing obvious secret material
    (sk-, ghp_, xox[baprs]-, AKIA, AIza, private key blocks, ...).
@@ -32,7 +32,7 @@ from pathlib import Path
 
 MIGRATION_RE = re.compile(r"^(\d+)[_-]")
 
-PROD_HINTS = ("/app/", "/lib/", "/src/", "apps/engine/app/")
+PROD_HINTS = ("/app/", "/lib/", "/src/")
 TEST_HINTS = ("__tests__", "/test/", ".test.", ".spec.", ".cy.ts", "__mocks__")
 
 SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [

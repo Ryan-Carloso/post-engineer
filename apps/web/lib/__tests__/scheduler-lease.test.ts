@@ -9,6 +9,7 @@ vi.mock('@/lib/supabase/service', () => ({
 import {
   getSchedulerLastSuccess,
   recordSchedulerSuccess,
+  releaseSchedulerLease,
   tryAcquireSchedulerLease,
 } from '../scheduler-lease';
 
@@ -82,6 +83,28 @@ describe('recordSchedulerSuccess', () => {
     rpcMock.mockResolvedValue({ data: null, error: { message: 'db down' } });
     await expect(recordSchedulerSuccess('post-metrics')).rejects.toThrow(
       'record-success rpc failed: db down',
+    );
+  });
+});
+
+describe('releaseSchedulerLease', () => {
+  beforeEach(() => {
+    rpcMock.mockReset();
+  });
+
+  it('calls the release RPC with the job and the holder', async () => {
+    rpcMock.mockResolvedValue({ data: null, error: null });
+    await expect(releaseSchedulerLease('publish-due', 'h1')).resolves.toBeUndefined();
+    expect(rpcMock).toHaveBeenCalledWith('release_scheduler_lease', { p_job: 'publish-due', p_holder: 'h1' });
+  });
+
+  it('throws a tagged, scrubbed error when the RPC fails', async () => {
+    rpcMock.mockResolvedValue({
+      data: null,
+      error: { message: 'connect failed: https://user:secret@db.internal:5432/postgres' },
+    });
+    await expect(releaseSchedulerLease('publish-due', 'h1')).rejects.toThrow(
+      'publish-due: release rpc failed: connect failed: https://[redacted]@db.internal:5432/postgres',
     );
   });
 });

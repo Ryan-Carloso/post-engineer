@@ -56,7 +56,7 @@ describe('shouldRunAll', () => {
     assert.equal(shouldRunAll(['README.md']), false);
     assert.equal(shouldRunAll(['supabase/migrations/048_scheduled-posts-music-mood.sql']), true);
     assert.equal(shouldRunAll(['supabase/schema.snapshot.json']), true);
-    assert.equal(shouldRunAll(['apps/engine/app/models/schema.py']), true);
+    assert.equal(shouldRunAll(['apps/mcp/src/index.ts']), true);
   });
 });
 

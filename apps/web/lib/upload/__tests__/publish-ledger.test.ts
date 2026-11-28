@@ -37,7 +37,7 @@ describe('publishLedgerKey', () => {
 });
 
 describe('isValidPublishScopeKey', () => {
-  it('accepts the engine slot key and direct keys', () => {
+  it('accepts the scheduled-publish slot key and direct keys', () => {
     expect(isValidPublishScopeKey('slot:slot-1:video:final.mp4')).toBe(true);
     expect(isValidPublishScopeKey('direct:550e8400-e29b-41d4-a716-446655440000')).toBe(true);
   });
@@ -419,7 +419,7 @@ describe('releaseClaimsForRequestRejection', () => {
 });
 
 describe('publishInProgressResult', () => {
-  it('is a failure the engine waits on, not a user error', () => {
+  it('is a failure the scheduler waits on, not a user error', () => {
     const result = publishInProgressResult('acc-1');
     expect(result.accountId).toBe('acc-1');
     expect(result.success).toBe(false);

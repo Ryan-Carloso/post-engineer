@@ -1,7 +1,7 @@
 [
   { "file": "apps/web/app/.well-known/jwks.json/route.ts", "method": "GET", "kind": "oauth-discovery", "reason": "Serves the public signing keys from memory; MCP clients fetch it to verify tokens and it touches no database." },
-  { "file": "apps/web/app/.well-known/oauth-authorization-server/route.ts", "method": "GET", "kind": "oauth-discovery", "reason": "Static RFC 8414 metadata built from config; no database or engine call." },
-  { "file": "apps/web/app/.well-known/oauth-protected-resource/route.ts", "method": "GET", "kind": "oauth-discovery", "reason": "Static RFC 9728 metadata built from config; no database or engine call." },
+  { "file": "apps/web/app/.well-known/oauth-authorization-server/route.ts", "method": "GET", "kind": "oauth-discovery", "reason": "Static RFC 8414 metadata built from config; no database call." },
+  { "file": "apps/web/app/.well-known/oauth-protected-resource/route.ts", "method": "GET", "kind": "oauth-discovery", "reason": "Static RFC 9728 metadata built from config; no database call." },
   { "file": "apps/web/app/auth/callback/route.ts", "method": "GET", "kind": "oauth-callback", "reason": "Supabase sign-in redirect exchanging a single-use code; throttling it would fail logins with no retry path." },
   { "file": "apps/web/app/api/facebook-auth/callback/route.ts", "method": "GET", "kind": "oauth-callback", "reason": "Provider redirect with a single-use code and a signed state cookie; the start route is rate limited." },
   { "file": "apps/web/app/api/fanvue-auth/callback/route.ts", "method": "GET", "kind": "oauth-callback", "reason": "Provider redirect with a single-use code and a signed state cookie; the start route is rate limited." },

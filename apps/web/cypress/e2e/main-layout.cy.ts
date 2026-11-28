@@ -67,7 +67,7 @@ describe('Main Layout — Sidebar', () => {
     visitHomeAsReturningUser();
     cy.get('[data-testid=nav-brand]').should('be.visible');
 
-    cy.contains('a', 'Contas').click();
+    cy.contains('a', 'Redes').click();
     cy.url().should('include', '/accounts');
     cy.wait('@getAccounts');
 
@@ -79,7 +79,7 @@ describe('Main Layout — Sidebar', () => {
     cy.visit('/accounts');
     cy.wait('@getAccounts');
 
-    cy.contains('a', 'Contas')
+    cy.contains('a', 'Redes')
       .should('have.attr', 'class')
       .and('contain', 'bg-brand-soft');
 

@@ -17,8 +17,6 @@
 api_paths:
   - "apps/web/app/api/**/route.ts"
   - "apps/mcp/src/tools.ts"
-  - "apps/engine/app/models/**/*.py"
-  - "apps/engine/app/controllers/**/*.py"
 
 # Deterministic denylist.
 # Match rule: case-insensitive EXACT match on the full identifier.

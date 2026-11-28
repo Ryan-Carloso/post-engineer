@@ -42,26 +42,23 @@ Contas novas têm 7 dias de teste grátis.
 
 ## Estrutura do repositório
 
-Este é um monorepo pnpm/Nx — web, engine e MCP vivem juntos:
+Este é um monorepo pnpm/Nx — o app web e o servidor MCP vivem juntos:
 
 ```text
-apps/web/       Painel Next.js 15 + rotas de API (TypeScript)
-apps/engine/    Worker de publicação em Python/FastAPI
+apps/web/       Painel Next.js 15, rotas de API e agendador de publicação (TypeScript)
 apps/mcp/       Servidor MCP para agentes de IA (pacote npm: post-engineer-mcp)
 ```
 
 O app web cuida de autenticação, personas, agendamento, uploads, OAuth, do
-teste grátis e da API. O motor é o worker de publicação: a cada minuto publica
-os posts agendados que venceram, enviando cada um pela API de upload do web
-(autenticada com um segredo compartilhado, `MONEYPRINT_API_SECRET`). O servidor
-MCP fala com a API web usando uma chave de API do usuário. O Postgres (via
-Supabase) é o sistema de registro: personas, agendamentos, uploads, tokens OAuth
-(criptografados em repouso) e chaves de API.
+teste grátis, da API e da publicação: um agendador no próprio processo pega
+cada slot vencido no Postgres e publica pelo mesmo núcleo de upload que a API
+usa. O servidor MCP fala com a API web usando uma chave de API do usuário. O
+Postgres (via Supabase) é o sistema de registro: personas, agendamentos,
+uploads, tokens OAuth (criptografados em repouso) e chaves de API.
 
 ## Pré-requisitos
 
 - **Node.js** 20+ e **pnpm** 10 (`npm install -g pnpm` ou via corepack)
-- **Python** 3.11–3.12 e **uv** (`curl -LsSf astral.sh/uv/install.sh | sh`)
 - Um projeto **Supabase** (hospedado em [supabase.com](https://supabase.com) ou
   self-hosted) com um banco Postgres
 - Chaves de API para os serviços externos que você pretende usar (veja a tabela
@@ -91,22 +88,18 @@ pnpm install
    > **E-mail:** [ryan@post-engineer.com](mailto:ryan@post-engineer.com) ·
    > **WhatsApp:** [+351 962 248 268](https://wa.me/351962248268)
 
-### 3. Crie os três arquivos de env (nunca faça commit deles)
+### 3. Crie o arquivo de env (nunca faça commit dele)
 
-Por design existem exatamente três arquivos de env — copie cada um a partir do
-seu exemplo e preencha com seus próprios valores:
+Por design existe exatamente um arquivo de env — copie-o a partir do exemplo e
+preencha com seus próprios valores:
 
 ```bash
 cp apps/web/.env.example apps/web/.env
-cp apps/engine/.env.example apps/engine/.env
-cp apps/engine/config.example.toml apps/engine/config.toml
 ```
 
 | Arquivo | Finalidade | Variáveis principais |
 |---|---|---|
-| `apps/web/.env` | App web + rotas de API | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (somente servidor), `R2_ACCOUNT_ID` + `R2_ACCESS_KEY_ID` + `R2_SECRET_ACCESS_KEY` (iguais aos do engine; Instagram/Threads/Facebook baixam o vídeo de uma URL assinada do R2), `TOKEN_ENCRYPTION_KEY` (gere com: `openssl rand -base64 32`), `MONEYPRINT_API_SECRET`, `MONEYPRINT_API_URL`, client ids/secrets de OAuth + redirect URIs, chaves do Stripe, `MCP_OAUTH_PRIVATE_KEY_PEM` |
-| `apps/engine/.env` | Runtime do motor | `MONEYPRINT_API_SECRET` (deve ser **idêntico** ao valor do web), `MPT_UPLOAD_API_BASE_URL` (URL do web para onde o worker publica), `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (agendador de publicação), `DISCORD_WEBHOOK_URL` opcional, `RESEND_API_KEY` + `ACCOUNT_BREAK_FROM` opcionais, `POSTHOG_API_KEY` opcional |
-| `apps/engine/config.toml` | Configuração do servidor do motor | `listen_host`, `listen_port` (padrão `8080`), `log_level` |
+| `apps/web/.env` | App web, rotas de API e agendador | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (somente servidor), `R2_ACCOUNT_ID` + `R2_ACCESS_KEY_ID` + `R2_SECRET_ACCESS_KEY` (Instagram/Threads/Facebook baixam o vídeo de uma URL assinada do R2), `TOKEN_ENCRYPTION_KEY` (gere com: `openssl rand -base64 32`), client ids/secrets de OAuth + redirect URIs, chaves do Stripe, `MCP_OAUTH_PRIVATE_KEY_PEM`, `DISCORD_WEBHOOK_URL` opcional, `RESEND_API_KEY` + `ACCOUNT_BREAK_FROM` opcionais, `POSTHOG_API_KEY` opcional |
 
 O app falha rapidamente em caso de variáveis ausentes (sem fallbacks silenciosos)
 — veja `apps/web/.env.example` para a lista completa documentada.
@@ -169,9 +162,6 @@ OAuth cujos **redirect URIs correspondam exatamente** aos valores em
 Esses você mesmo cria — nada a registrar:
 
 ```bash
-# Segredo compartilhado web <-> motor (idêntico nos dois arquivos .env)
-openssl rand -hex 32
-
 # Chave de criptografia dos tokens OAuth (AES-256-GCM)
 openssl rand -base64 32
 
@@ -183,21 +173,19 @@ openssl ecparam -genkey -name prime256v1 -noout | openssl pkcs8 -topk8 -nocrypt
 
 ```bash
 pnpm dev:web      # painel em http://localhost:3434
-pnpm dev:engine   # API do motor de vídeo em http://127.0.0.1:8080 (veja /docs lá)
 ```
 
 Comandos úteis (todos verificados em `package.json` / `project.json`):
 
 ```bash
-pnpm test        # todos os testes (web + engine + MCP, via Nx)
-pnpm lint        # ESLint (web + MCP) + ruff (engine)
-pnpm typecheck   # tsc --noEmit (web + MCP) + checagens do engine
+pnpm test        # todos os testes (web + MCP, via Nx)
+pnpm lint        # ESLint (web + MCP)
+pnpm typecheck   # tsc --noEmit (web + MCP)
 pnpm build       # build de produção do app web
 pnpm graph       # grafo de projetos do Nx
 ```
 
 Detalhes por app: [apps/web/README.md](apps/web/README.md),
-[apps/engine/README.md](apps/engine/README.md),
 [apps/mcp/README.md](apps/mcp/README.md).
 
 ## Servidor MCP
@@ -238,7 +226,6 @@ lista completa de tools, dicas de timeout no OpenCode e desenvolvimento local).
 | App OAuth Google | Para publicar no YouTube | OAuth client id/secret | Google Cloud Console |
 | App Instagram (Meta) | Para publicar no Instagram | OAuth client id/secret | developers.facebook.com |
 | App LinkedIn | Para publicar no LinkedIn | OAuth client id/secret | developer.linkedin.com |
-| `MONEYPRINT_API_SECRET` | **Sim** | Autenticação web ↔ motor | Gere você mesmo (`openssl rand -hex 32`) |
 | `TOKEN_ENCRYPTION_KEY` | **Sim** | Criptografa tokens OAuth em repouso | Gere você mesmo (`openssl rand -base64 32`) |
 | `MCP_OAUTH_PRIVATE_KEY_PEM` | Para OAuth do servidor MCP | Assina tokens MCP | Gere você mesmo (chave EC, veja acima) |
 | Chave de projeto PostHog (`NEXT_PUBLIC_POSTHOG_KEY`) | Opcional | Rastreamento de erros + analytics de produto | Configurações do projeto PostHog |
@@ -256,9 +243,3 @@ Dúvidas, entre em contato:
 
 Licenciado sob a [Apache License, Version 2.0](LICENSE) — veja
 [CONTRIBUTING.md](CONTRIBUTING.md) e [SECURITY.md](SECURITY.md).
-
-## Créditos
-
-O motor é derivado de
-[MoneyPrinterTurbo](https://github.com/harry0703/MoneyPrinterTurbo)
-(MIT © 2024 Harry). Hoje ele só agenda e publica.

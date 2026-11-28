@@ -10,8 +10,7 @@ The review prompt requires, per finding:
     ```
 
 On PR #224 the only finding was a real CRITICAL, and this script dropped it.
-The model wrote ``**Location:** `apps/engine/app/services/task_publish.py:61-66` ``
-with backticks. The old regex treated the whole backticked token as the
+The model wrapped the location in backticks and cited a diff-hunk range. The old regex treated the whole backticked token as the
 path, the path "did not exist", and the posted comment said no findings
 survived — which reads as a clean review. The cited lines (61-66) were
 also diff-hunk offsets, not HEAD lines; the old check only required the

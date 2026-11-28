@@ -123,7 +123,7 @@ describe('uploadPublishMedia', () => {
 });
 
 describe('presignPublishMedia', () => {
-  it('signs the engine archive key directly with a 1h expiry and no publish-media prefix', async () => {
+  it('signs the archive key directly with a 1h expiry and no publish-media prefix', async () => {
     const url = await presignPublishMedia('user-1/voiceover/task-7/final-1.mp4');
     const signed = new URL(url);
     expect(`${signed.origin}${signed.pathname}`).toBe(`${BUCKET_URL}/user-1/voiceover/task-7/final-1.mp4`);
@@ -237,11 +237,11 @@ describe('cleanupPublishMedia', () => {
 });
 
 describe('PUBLISH_MEDIA_BUCKET', () => {
-  it('matches the bucket the engine publish worker downloads uploads from', () => {
+  it('matches the bucket the scheduler downloads uploads from', () => {
     const source = readFileSync(
-      path.join(findRepoRoot(import.meta.url), 'apps/engine/app/services/publisher/publish_existing_media.py'),
+      path.join(findRepoRoot(import.meta.url), 'apps/web/lib/publisher/constants.ts'),
       'utf8',
     );
-    expect(source.includes(`store.download_storage_object("${PUBLISH_MEDIA_BUCKET}", storage_path)`)).toBe(true);
+    expect(source).toContain(`export const VIDEOS_BUCKET = '${PUBLISH_MEDIA_BUCKET}'`);
   });
 });

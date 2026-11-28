@@ -10,6 +10,24 @@ vi.mock('@/lib/api', () => ({
   useSocialAccountsQuery: vi.fn(),
 }));
 
+const navigation = vi.hoisted(() => ({ search: new URLSearchParams(), replace: vi.fn() }));
+
+vi.mock('next/navigation', () => ({
+  useSearchParams: () => navigation.search,
+  useRouter: () => ({ replace: navigation.replace }),
+  usePathname: () => '/metrics',
+}));
+
+vi.mock('@/lib/experiments/comparison-query', () => ({
+  usePromptComparisonQuery: vi.fn(() => ({
+    isLoading: false,
+    isError: false,
+    isFetching: false,
+    refetch: vi.fn(),
+    data: { success: true, window: '7d', truncated: false, accounts: [] },
+  })),
+}));
+
 vi.mock('@/lib/i18n/provider', () => {
   function I18nProvider({ children }: { children: ReactNode }) {
     return <>{children}</>;
@@ -178,6 +196,8 @@ async function applyProviderFilter(label: string): Promise<void> {
 }
 
 beforeEach(() => {
+  navigation.search = new URLSearchParams();
+  navigation.replace.mockClear();
   window.localStorage.clear();
   window.localStorage.setItem('metrics-view-mode', 'list');
   setLocale('en');
@@ -209,14 +229,47 @@ describe('MetricsPage', () => {
     expect(screen.getByText('metrics.title')).toBeInTheDocument();
   });
 
-  it('links the experiments entry card to /experiments', () => {
+  it('switches to the experiments tab through the URL and keeps the performance view otherwise', () => {
     vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})));
     renderPage();
-    const link = screen.getByText('experiments.entryTitle').closest('a');
-    expect(link).toHaveAttribute('href', '/experiments');
-    expect(link?.className).toContain('justify-between');
-    expect(screen.getByText('experiments.entryBody')).toBeInTheDocument();
-    expect(screen.getByText('experiments.entryAction')).toBeInTheDocument();
+    expect(screen.getByText('metrics.tabPerformance')).toBeInTheDocument();
+    expect(screen.queryByText('experiments.empty')).not.toBeInTheDocument();
+    activateTab('metrics.tabExperiments');
+    expect(navigation.replace).toHaveBeenCalledWith('/metrics?view=experiments', { scroll: false });
+  });
+
+  it('renders the experiments view when the URL selects it', async () => {
+    navigation.search = new URLSearchParams('view=experiments');
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})));
+    renderPage();
+    expect(await screen.findByText('experiments.empty')).toBeInTheDocument();
+    expect(screen.getByText('experiments.subtitle')).toBeInTheDocument();
+    expect(screen.queryByText('metrics.windowCaption')).not.toBeInTheDocument();
+  });
+
+  it('switching back to performance drops the view param and leaves a bare /metrics URL', () => {
+    navigation.search = new URLSearchParams('view=experiments');
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})));
+    renderPage();
+    activateTab('metrics.tabPerformance');
+    expect(navigation.replace).toHaveBeenCalledWith('/metrics', { scroll: false });
+  });
+
+  it('switching tabs keeps the other query params', () => {
+    navigation.search = new URLSearchParams('view=experiments&ref=nav');
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})));
+    renderPage();
+    activateTab('metrics.tabPerformance');
+    expect(navigation.replace).toHaveBeenCalledWith('/metrics?ref=nav', { scroll: false });
+  });
+
+  it('does not fetch the metrics while the experiments tab is open', async () => {
+    navigation.search = new URLSearchParams('view=experiments');
+    const fetchMock = vi.fn(() => new Promise<Response>(() => {}));
+    vi.stubGlobal('fetch', fetchMock);
+    renderPage();
+    expect(await screen.findByText('experiments.empty')).toBeInTheDocument();
+    expect(fetchMock.mock.calls.map((call: unknown[]) => String(call[0])).filter((url) => url.includes('/api/metrics'))).toEqual([]);
   });
 
   it('renders total tiles and the per-video rows sorted by views, highest first', async () => {

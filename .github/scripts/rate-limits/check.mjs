@@ -12,7 +12,6 @@ export const EXEMPTION_KINDS = {
   'health-probe': 'liveness or build-info probe with no per-user data',
   'oauth-callback': 'one-shot provider redirect carrying a single-use code and a signed state',
   'signed-webhook': 'server-to-server call verified by a provider signature',
-  'engine-callback': 'engine-to-web call authenticated by the shared engine secret',
   'session-teardown': 'signs the caller out; throttling it would trap a session',
   'test-only': 'serves test instrumentation and touches no service',
   'oauth-discovery': 'static OAuth metadata or public keys',

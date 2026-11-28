@@ -14,8 +14,10 @@ function makeDeps(
     recordSuccess: vi.fn(async () => {
       last = new Date(Date.now());
     }),
+    releaseLease: vi.fn(async () => undefined),
     track: vi.fn(),
     logger: {
+      debug: vi.fn(),
       info: vi.fn(),
       error: vi.fn(),
     },
@@ -201,6 +203,141 @@ describe('createScheduler', () => {
     await vi.advanceTimersByTimeAsync(HOUR);
     expect(deps.jobs[0].run).toHaveBeenCalledTimes(1);
     expect(deps.recordSuccess).toHaveBeenCalledWith('billing-reconcile');
+    scheduler.stop();
+  });
+
+  it('releases the lease after a successful run, with this holder', async () => {
+    const deps = makeDeps({ lastSuccessAt: null, jobs: [makeJob()] });
+    const scheduler = createScheduler(deps);
+    scheduler.start();
+
+    await settleImmediateTick();
+    expect(deps.releaseLease).toHaveBeenCalledTimes(1);
+    expect(deps.releaseLease).toHaveBeenCalledWith('billing-reconcile', 'test-holder');
+    scheduler.stop();
+  });
+
+  it('releases the lease when the run throws', async () => {
+    const run = vi.fn().mockRejectedValue(new Error('boom'));
+    const deps = makeDeps({ lastSuccessAt: null, jobs: [makeJob({ run })] });
+    const scheduler = createScheduler(deps);
+    scheduler.start();
+
+    await settleImmediateTick();
+    expect(deps.releaseLease).toHaveBeenCalledWith('billing-reconcile', 'test-holder');
+    scheduler.stop();
+  });
+
+  it('releases the lease when the job is not due, and logs that at debug level', async () => {
+    const deps = makeDeps({ lastSuccessAt: new Date(Date.now() - HOUR), jobs: [makeJob()] });
+    const scheduler = createScheduler(deps);
+    scheduler.start();
+
+    await settleImmediateTick();
+    expect(deps.jobs[0].run).not.toHaveBeenCalled();
+    expect(deps.releaseLease).toHaveBeenCalledTimes(1);
+    expect(deps.logger.debug).toHaveBeenCalledWith(expect.stringContaining('not due yet'), expect.anything());
+    expect(deps.logger.info).not.toHaveBeenCalledWith(expect.stringContaining('not due yet'), expect.anything());
+    scheduler.stop();
+  });
+
+  it('never releases a lease it did not acquire', async () => {
+    const deps = makeDeps({
+      jobs: [makeJob()],
+      acquireLease: vi.fn().mockResolvedValue({ acquired: false, lastSuccessAt: null } satisfies LeaseAcquisition),
+    });
+    const scheduler = createScheduler(deps);
+    scheduler.start();
+
+    await settleImmediateTick();
+    expect(deps.releaseLease).not.toHaveBeenCalled();
+    scheduler.stop();
+  });
+
+  it('logs a failed release and keeps ticking', async () => {
+    const releaseLease = vi.fn().mockRejectedValueOnce(new Error('release rpc failed')).mockResolvedValue(undefined);
+    const deps = makeDeps({ lastSuccessAt: null, jobs: [makeJob({ dueAfterMs: 0 })], releaseLease });
+    const scheduler = createScheduler(deps);
+    scheduler.start();
+
+    await settleImmediateTick();
+    expect(deps.logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('lease release failed'),
+      expect.any(Error),
+      {},
+    );
+    await vi.advanceTimersByTimeAsync(HOUR);
+    expect(deps.jobs[0].run).toHaveBeenCalledTimes(2);
+    scheduler.stop();
+  });
+
+  it('never overlaps a job with itself: a tick skips a job whose previous run has not ended', async () => {
+    let finish: () => void = () => undefined;
+    const run = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+    const deps = makeDeps({ lastSuccessAt: null, tickMs: 60_000, jobs: [makeJob({ run, dueAfterMs: 0 })] });
+    const scheduler = createScheduler(deps);
+    scheduler.start();
+
+    await settleImmediateTick();
+    await vi.advanceTimersByTimeAsync(3 * 60_000);
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(deps.acquireLease).toHaveBeenCalledTimes(1);
+    expect(deps.logger.debug).toHaveBeenCalledWith(expect.stringContaining('previous run still going'), {});
+
+    finish();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(run).toHaveBeenCalledTimes(2);
+    scheduler.stop();
+  });
+
+  it('a slow job does not hold back the other jobs of the tick', async () => {
+    const slow = vi.fn(() => new Promise<void>(() => undefined));
+    const fast = vi.fn().mockResolvedValue(undefined);
+    const deps = makeDeps({
+      lastSuccessAt: null,
+      tickMs: 60_000,
+      jobs: [makeJob({ name: 'slow', run: slow, dueAfterMs: 0 }), makeJob({ name: 'fast', run: fast, dueAfterMs: 0 })],
+    });
+    const scheduler = createScheduler(deps);
+    scheduler.start();
+
+    await vi.advanceTimersByTimeAsync(2 * 60_000);
+    expect(slow).toHaveBeenCalledTimes(1);
+    expect(fast).toHaveBeenCalledTimes(3);
+    scheduler.stop();
+  });
+
+  it('a 1h job at a 60 s tick runs once per hour, not every other hour', async () => {
+    let t = 0;
+    const deps = makeDeps({
+      lastSuccessAt: null,
+      tickMs: 60_000,
+      now: () => Date.now(),
+      jobs: [makeJob({ name: 'post-metrics', dueAfterMs: HOUR })],
+    });
+    const scheduler = createScheduler(deps);
+    scheduler.start();
+
+    while (t < 3 * HOUR) {
+      await vi.advanceTimersByTimeAsync(60_000);
+      t += 60_000;
+    }
+    const runs = vi.mocked(deps.jobs[0].run).mock.calls.length;
+    expect(runs).toBeGreaterThanOrEqual(3);
+    expect(runs).toBeLessThanOrEqual(4);
+    scheduler.stop();
+  });
+
+  it('does not track a success event for a job without one', async () => {
+    const deps = makeDeps({ lastSuccessAt: null, jobs: [makeJob({ successEvent: null, name: 'publish-due', dueAfterMs: 0 })] });
+    const scheduler = createScheduler(deps);
+    scheduler.start();
+    vi.mocked(deps.track).mockClear();
+
+    await settleImmediateTick();
+    expect(deps.jobs[0].run).toHaveBeenCalledTimes(1);
+    expect(deps.recordSuccess).toHaveBeenCalledWith('publish-due');
+    expect(deps.track).not.toHaveBeenCalled();
     scheduler.stop();
   });
 

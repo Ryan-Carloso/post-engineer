@@ -72,9 +72,8 @@ jobs:
           bash .github/scripts/test-mcp-release-version.sh
           bash .github/scripts/test-release-mcp-registry-wait.sh
 
-  # Fails if secret-bearing files are tracked in git. config.toml may hold
-  # provider API keys and real .env files must never be committed (see the
-  # env-files policy in AGENTS.md).
+  # Fails if secret-bearing files are tracked in git. Real .env files must
+  # never be committed (see the env-files policy in AGENTS.md).
   secrets-hygiene:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -89,10 +88,6 @@ jobs:
       - name: Fail if secret-bearing files are tracked
         run: |
           set -euo pipefail
-          if git ls-files | grep -qx 'apps/engine/config.toml'; then
-            echo "::error::apps/engine/config.toml is tracked in git. Untrack it: git rm --cached apps/engine/config.toml"
-            exit 1
-          fi
           tracked_env=$(git ls-files | grep -E '(^|/)\.env(\..+)?$' | grep -v '\.example$' || true)
           if [ -n "$tracked_env" ]; then
             echo "::error::Real .env files are tracked in git:"
@@ -189,71 +184,10 @@ jobs:
           fail_ci_if_error: true
           verbose: true
 
-  engine:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: read
-    defaults:
-      run:
-        working-directory: apps/engine
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-
-      # Build metadata (same contract as the web job): exported so the
-      # engine test suite exercises the injected-VERSION/BUILD/COMMIT path
-      # that /version and /health report in production.
-      - name: Set build metadata
-        run: |
-          echo "VERSION=$(tr -d '[:space:]' < "$GITHUB_WORKSPACE/VERSION")" >> "$GITHUB_ENV"
-          echo "BUILD=${{ github.run_number }}" >> "$GITHUB_ENV"
-          echo "COMMIT=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg imagemagick librsvg2-bin
-
-      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4
-        with:
-          version: latest
-
-      - name: Lockfile freshness (fail if uv.lock is stale vs pyproject.toml)
-        run: uv lock --check
-
-      - name: Sync dependencies
-        run: uv sync --frozen
-
-      - name: Lint
-        run: uv run ruff check app test
-
-      - name: Typecheck
-        run: uv run python -m compileall -q app main.py
-
-      - name: Mypy (import-not-found fatal, selected codes disabled)
-        run: uv run mypy app main.py
-
-      - name: Import smoke test (catches ModuleNotFoundError from removed deps)
-        run: uv run python -c "import main; from app import asgi; print('imports OK')"
-
-      - name: Tests
-        run: uv run coverage run -m pytest -q && uv run coverage xml -o coverage.xml
-
-      # Codecov is the coverage gate (GitHub's native coverage needs a paid
-      # plan): fail the job if the upload fails so a silent miss can never
-      # bypass the codecov/project and codecov/patch status checks.
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5
-        with:
-          files: apps/engine/coverage.xml
-          flags: engine
-          fail_ci_if_error: true
-          verbose: true
-
   # Full Cypress E2E suite (cypress/e2e/**): real Next.js server, real
   # Supabase session (the middleware validates the cookie server-side, so
   # intercepts alone cannot authenticate), network-level mocks only for
-  # what cannot run in CI (social OAuth, engine task polling).
+  # what cannot run in CI (social OAuth).
   #
   # Supabase is a throwaway local stack started in the runner
   # (.github/actions/local-supabase): the migration chain is applied and the
@@ -319,8 +253,28 @@ jobs:
       - name: Install Cypress binary
         run: pnpm exec cypress install
 
+      # webpack's persistent cache: a warm cache cut the instrumented compile
+      # from 3.2 min to 20s locally. Only main saves it (after its build), so
+      # pull requests restore main's cache and never evict each other's.
+      - name: Restore Next.js build cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: apps/web/.next/cache
+          key: next-build-cypress-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            next-build-cypress-${{ hashFiles('pnpm-lock.yaml') }}-
+            next-build-cypress-
+
+      # Lint already runs in web-ci (its build and its lint job).
       - name: Production build
-        run: pnpm build
+        run: pnpm build --no-lint
+
+      - name: Save Next.js build cache
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: apps/web/.next/cache
+          key: next-build-cypress-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
 
       - name: Start app server
         shell: bash
@@ -448,10 +402,30 @@ jobs:
           }
           EOF
 
+      # webpack's persistent cache: a warm cache cut the instrumented compile
+      # from 3.2 min to 20s locally. Only main saves it (after its build), so
+      # pull requests restore main's cache and never evict each other's.
+      - name: Restore Next.js build cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: apps/web/.next/cache
+          key: next-build-cypress-coverage-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            next-build-cypress-coverage-${{ hashFiles('pnpm-lock.yaml') }}-
+            next-build-cypress-coverage-
+
       # CYPRESS_COVERAGE=1 comes from the job-level env: the build must
       # be instrumented (and use the layout.tsx font fallback).
+      # Lint already runs in web-ci (its build and its lint job).
       - name: Instrumented production build
-        run: pnpm build
+        run: pnpm build --no-lint
+
+      - name: Save Next.js build cache
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: apps/web/.next/cache
+          key: next-build-cypress-coverage-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
 
       - name: Start instrumented app server
         shell: bash
@@ -668,6 +642,21 @@ jobs:
           # refusal to guess an unknown status or customer, the operator
           # revoke, and the service-role-only grants of 089_access-entitlement.sql.
           psql "postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable" -v ON_ERROR_STOP=1 -f scripts/db/check-access-entitlement.sql
+
+      - name: Check publish slot claim behaviour
+        run: |
+          set -euo pipefail
+          # Which slots claim_next_publish_slot may claim (status filter, access,
+          # lease lapse incl. a null lease), the inactive-owner expiry and the
+          # lease release of 094_publish-due-scheduler.sql.
+          psql "postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable" -v ON_ERROR_STOP=1 -f scripts/db/check-publish-claim.sql
+
+      - name: Check publish slot claim under concurrency
+        run: |
+          set -euo pipefail
+          # Two sessions claim the same due slot: exactly one gets it, the other
+          # skips the locked row and gets nothing.
+          scripts/db/check-publish-claim-concurrency.sh "postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable"
 
       - name: Check the schema snapshot is up to date
         run: |
