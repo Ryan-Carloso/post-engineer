@@ -91,11 +91,15 @@ export async function fetchMetrics(query: MetricsQuery): Promise<MetricsFetchRes
   }
 }
 
-export function useMetricsQuery(query: MetricsQuery): UseQueryResult<MetricsFetchResult, Error> {
+export function useMetricsQuery(
+  query: MetricsQuery,
+  options: { enabled?: boolean } = {},
+): UseQueryResult<MetricsFetchResult, Error> {
   return useQuery<MetricsFetchResult, Error>({
     queryKey: ['metrics', query.window, query.personaId, query.accountId, query.provider],
     queryFn: () => fetchMetrics(query),
     staleTime: 60_000,
+    enabled: options.enabled ?? true,
   });
 }
 

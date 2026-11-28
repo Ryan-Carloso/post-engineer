@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { RefreshCw, TriangleAlert } from 'lucide-react';
+import { TriangleAlert } from 'lucide-react';
 import { useI18n } from '@/lib/i18n/provider';
 import type { TranslationKey } from '@/lib/i18n';
 import { RANGE_MAX_SLOTS, useHasAnyPostQuery, useScheduleRangeQuery } from '@/lib/schedule-range';
@@ -28,10 +28,9 @@ import {
 } from './calendar-days';
 import { AccountEmptyState, DayEmptyState, DayListRow, NewPostButton } from './day-section';
 import { CALENDAR_LAYOUT_CLASS, CalendarLoadingSkeleton } from './loading-skeleton';
-import { PostFiltersBar, SlotCard, usePostFilters, usePostJoins } from './post-joins';
+import { PostFiltersBar, SlotCard, useJoinsCoverSlots, usePostFilters, usePostJoins } from './post-joins';
 import { ApprovalQueue } from './approval-queue';
 import { PageHeader } from '@/components/ui/page-header';
-import { Button } from '@/components/ui/button';
 import { OnboardingWizard, OnboardingWizardButton } from './onboarding-wizard';
 
 const MOBILE_QUERY = '(max-width: 767px)';
@@ -87,6 +86,7 @@ export default function PostsPage() {
     }
     prevActiveRef.current = active;
   }, [accessQuery.data?.active, rangeRefetch]);
+  useJoinsCoverSlots(rangeQuery.data?.slots, joins);
   const passes = filters.passes;
   const slotsByDay = useMemo(
     () => bucketByDay((rangeQuery.data?.slots ?? []).filter(passes)),
@@ -195,7 +195,6 @@ export default function PostsPage() {
   const handleRefresh = () => {
     void rangeQuery.refetch();
     joins.refetch();
-    if (askHasAnyPost) void hasAnyPostQuery.refetch();
   };
   const dayFormat = new Intl.DateTimeFormat(INTL_TAG[locale], { weekday: 'short', day: 'numeric', month: 'short' });
   const monthLabel = new Intl.DateTimeFormat(INTL_TAG[locale], { month: 'long', year: 'numeric' }).format(
@@ -222,19 +221,6 @@ export default function PostsPage() {
         actions={
           <>
             <NewPostButton testId="new-post-button" />
-            {!isError && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleRefresh}
-                disabled={rangeQuery.isFetching}
-                aria-label={t('posts.refresh')}
-              >
-                <RefreshCw className={cn('size-4', rangeQuery.isFetching && 'animate-spin')} aria-hidden />
-                {t('posts.refresh')}
-              </Button>
-            )}
             <OnboardingWizardButton testId="onboarding-reopen-button" />
           </>
         }

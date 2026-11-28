@@ -4,7 +4,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 
 vi.mock('@/lib/i18n/provider', () => {
   const translations: Record<string, string> = {
-    'recipes.title': 'Get your prompts',
+    'recipes.title': 'Prompts',
     'recipes.subtitle':
       'Persona videos, published by your agent. MCP-first: create your key, install the MCP, and send the post.',
     'recipes.whyMcpTitle': 'Why MCP-first?',
@@ -75,7 +75,7 @@ describe('/recipes prompts hub', () => {
 
   it('renders the hub title and subtitle', () => {
     renderHub(true);
-    expect(screen.getByRole('heading', { level: 1, name: 'Get your prompts' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Prompts' })).toBeInTheDocument();
     expect(
       screen.getByText(
         'Persona videos, published by your agent. MCP-first: create your key, install the MCP, and send the post.',

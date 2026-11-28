@@ -50,9 +50,29 @@ describe('i18n dictionaries', () => {
     expect(enDictionary).not.toHaveProperty('fillSchedule');
   });
 
+  it('sends metrics readers to the networks destination by its nav name in both locales', () => {
+    for (const dictionary of [ptDictionary, enDictionary]) {
+      const destination = dictionary.nav.accounts;
+      for (const copy of [
+        dictionary.metrics.reconnectBody,
+        dictionary.metrics.reconnectAction,
+        dictionary.metrics.coverageYoutubeHint,
+      ]) {
+        expect(copy).toContain(destination);
+        expect(copy).not.toMatch(/\b(Accounts|Contas)\b/);
+      }
+    }
+  });
+
+  it('names the prompts destination the same on the page as in the nav in both locales', () => {
+    for (const dictionary of [ptDictionary, enDictionary]) {
+      expect(dictionary.recipes.title).toBe(dictionary.nav.prompts);
+    }
+  });
+
   it('carries the prompts tab copy in both locales', () => {
-    expect(ptDictionary.nav.prompts).toBe('Chave de API e MCP');
-    expect(enDictionary.nav.prompts).toBe('API key and MCP');
+    expect(ptDictionary.nav.prompts).toBe('Prompts');
+    expect(enDictionary.nav.prompts).toBe('Prompts');
     expect(ptDictionary.nav.posts).toBe('Publicações');
     expect(enDictionary.nav.posts).toBe('Posts');
     expect(ptDictionary.posts.title).toBe('Publicações');

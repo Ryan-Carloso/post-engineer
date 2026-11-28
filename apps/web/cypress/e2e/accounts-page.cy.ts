@@ -17,7 +17,7 @@ describe('Accounts — UI', () => {
     cy.visit('/accounts');
     cy.wait('@getAccounts');
 
-    cy.contains('h1', 'Contas').should('be.visible');
+    cy.contains('h1', 'Redes conectadas').should('be.visible');
     cy.get('button[aria-label="Conectar uma conta"]').should('have.length', 11);
   });
 
@@ -225,7 +225,7 @@ describe('Accounts — UI', () => {
     cy.visit('/accounts');
     cy.wait('@getAccounts');
 
-    cy.contains('h1', 'Contas').should('be.visible');
+    cy.contains('h1', 'Redes conectadas').should('be.visible');
     cy.get('button[aria-label="Conectar uma conta"]').first().scrollIntoView().should('be.visible');
     cy.window().then((browserWindow) => {
       expect(browserWindow.document.documentElement.scrollWidth).to.be.at.most(browserWindow.innerWidth);

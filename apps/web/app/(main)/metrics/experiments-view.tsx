@@ -5,7 +5,6 @@ import { AlertTriangle, FlaskConical } from 'lucide-react';
 import { ProviderIcon } from '@/components/provider-icon';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/empty-state';
-import { PageHeader } from '@/components/ui/page-header';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { accountOption } from '@/lib/account-options';
 import { useSocialAccountsQuery } from '@/lib/api';
@@ -44,7 +43,7 @@ function labelTone(prompt: PromptView): string {
   return 'bg-surface text-muted-text';
 }
 
-export default function ExperimentsPage(): React.ReactElement {
+export function ExperimentsView(): React.ReactElement {
   const { t, locale } = useI18n();
   const [window, setWindow] = useState<MetricsWindow>('7d');
   const query = usePromptComparisonQuery(window);
@@ -59,9 +58,7 @@ export default function ExperimentsPage(): React.ReactElement {
     value.toLocaleString(locale === 'pt' ? 'pt-BR' : 'en-US', { maximumFractionDigits: digits });
 
   return (
-    <div className="mx-auto flex w-full max-w-375 flex-col gap-5 lg:gap-6">
-      <PageHeader title={t('experiments.title')} description={t('experiments.subtitle')} />
-
+    <div className="flex flex-col gap-5 lg:gap-6">
       <section className={cn(CARD_CLASS, 'flex flex-col gap-3 p-4 lg:p-5')}>
         <Tabs
           value={window}

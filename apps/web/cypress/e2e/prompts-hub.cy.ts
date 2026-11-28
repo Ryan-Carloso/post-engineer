@@ -29,7 +29,7 @@ describe('Prompts hub', () => {
   it('lists the public prompts from the API with links to their detail pages', () => {
     stubPrompts();
     visitEnglish('/recipes');
-    cy.contains('h1', 'Get your prompts').should('be.visible');
+    cy.contains('h1', 'Prompts').should('be.visible');
     cy.wait('@listPrompts');
     cy.get('[data-testid="public-prompts-section"]')
       .scrollIntoView()

@@ -525,6 +525,56 @@ describe('PostsPage', () => {
     expect(accountsRefetch).toHaveBeenCalledTimes(1);
   });
 
+  it('refetches the schedule joins when the calendar returns a slot of a schedule it does not know yet', () => {
+    const schedulesRefetch = vi.fn();
+    const personasRefetch = vi.fn();
+    vi.mocked(useScheduleRangeQuery).mockReturnValue({
+      data: { slots: [UPCOMING_SLOT, { ...UPCOMING_SLOT, id: 'u2', scheduleId: 's-new', title: 'New schedule topic' }], truncated: false },
+      isLoading: false,
+      isFetching: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as never);
+    vi.mocked(useSchedulesQuery).mockReturnValue({ data: [SCHEDULE], isLoading: false, isError: false, refetch: schedulesRefetch } as never);
+    vi.mocked(usePersonaListQuery).mockReturnValue({
+      data: [{ id: 'p1', name: 'Viva Leve' }],
+      isLoading: false,
+      isError: false,
+      refetch: personasRefetch,
+    } as never);
+
+    render(<PostsPage />);
+
+    expect(schedulesRefetch).toHaveBeenCalledTimes(1);
+    expect(personasRefetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not refetch the schedule joins while every calendar slot belongs to a known schedule', () => {
+    const schedulesRefetch = vi.fn();
+    vi.mocked(useSchedulesQuery).mockReturnValue({ data: [SCHEDULE], isLoading: false, isError: false, refetch: schedulesRefetch } as never);
+
+    render(<PostsPage />);
+
+    expect(dayPanelCardText('Upcoming topic')).toBeDefined();
+    expect(schedulesRefetch).not.toHaveBeenCalled();
+  });
+
+  it('does not refetch the schedule joins for an unknown schedule while the joins are still loading', () => {
+    const schedulesRefetch = vi.fn();
+    vi.mocked(useScheduleRangeQuery).mockReturnValue({
+      data: { slots: [{ ...UPCOMING_SLOT, scheduleId: 's-new' }], truncated: false },
+      isLoading: false,
+      isFetching: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as never);
+    vi.mocked(useSchedulesQuery).mockReturnValue({ data: undefined, isLoading: true, isError: false, refetch: schedulesRefetch } as never);
+
+    render(<PostsPage />);
+
+    expect(schedulesRefetch).not.toHaveBeenCalled();
+  });
+
   it('moves "today" past midnight without a reload', async () => {
     const user = userEvent.setup();
     const { rerender } = render(<PostsPage />);
@@ -904,33 +954,6 @@ describe('PostsPage calendar view', () => {
     expect(card?.querySelector('[data-thumb]')).toBeNull();
   });
 
-  it('disables the refresh button while a refetch is in flight', () => {
-    vi.mocked(useScheduleRangeQuery).mockReturnValue({
-      data: { slots: [UPCOMING_SLOT], truncated: false },
-      isLoading: false,
-      isFetching: true,
-      isError: false,
-      refetch: vi.fn(),
-    } as never);
-    render(<PostsPage />);
-
-    for (const button of screen.getAllByRole('button', { name: 'posts.refresh' })) {
-      expect(button).toBeDisabled();
-    }
-  });
-
-  it('refetches the has-any-post read too when the month is empty', async () => {
-    mockQueries({ range: [] });
-    const hasAnyRefetch = vi.fn();
-    vi.mocked(useHasAnyPostQuery).mockReturnValue({ data: false, isLoading: false, isError: false, refetch: hasAnyRefetch } as never);
-    const user = userEvent.setup();
-    render(<PostsPage />);
-
-    const refresh = screen.getAllByRole('button', { name: 'posts.refresh' })[0];
-    await user.click(refresh as HTMLElement);
-    expect(hasAnyRefetch).toHaveBeenCalledTimes(1);
-  });
-
   it('shows a bare recovery frame on a load error with a single in-card retry and no day-selection copy', async () => {
     mockQueries();
     const refetch = vi.fn();
@@ -944,7 +967,6 @@ describe('PostsPage calendar view', () => {
     expect(within(alert).queryByText('posts.loadErrorSideQuiet')).not.toBeInTheDocument();
     expect(alert.closest('[data-calendar-card]')).not.toBeNull();
     expect(screen.getByText('posts.subtitleLoadError')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'posts.refresh' })).not.toBeInTheDocument();
     const retry = within(alert).getByRole('button', { name: 'posts.loadErrorRetry' });
     await user.click(retry);
     expect(refetch).toHaveBeenCalledTimes(1);
@@ -989,16 +1011,6 @@ describe('PostsPage calendar view', () => {
     }
   });
 
-  it('hides the header refresh on a load error so only the in-card retry remains', () => {
-    const { unmount } = render(<PostsPage />);
-    expect(screen.getAllByRole('button', { name: 'posts.refresh' }).length).toBeGreaterThanOrEqual(1);
-    unmount();
-    vi.mocked(useScheduleRangeQuery).mockReturnValue({ data: undefined, isLoading: false, isFetching: false, isError: true, refetch: vi.fn() } as never);
-    render(<PostsPage />);
-    expect(screen.queryByRole('button', { name: 'posts.refresh' })).not.toBeInTheDocument();
-    expect(screen.getByTestId('new-post-button')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'posts.loadErrorRetry' })).toBeInTheDocument();
-  });
 });
 
 describe('PostsPage day pick on a phone', () => {
