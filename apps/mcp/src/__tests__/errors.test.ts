@@ -70,23 +70,23 @@ describe('apiErrorFromResponse', () => {
   });
 });
 
-describe('TRIAL_EXPIRED responses', () => {
-  function trialResponse(body: Record<string, unknown>): Response {
-    return new Response(JSON.stringify({ success: false, error: 'Your free trial has ended.', code: 'TRIAL_EXPIRED', ...body }), { status: 402 });
+describe('BETA_ACCESS_REQUIRED responses', () => {
+  function betaResponse(body: Record<string, unknown>): Response {
+    return new Response(JSON.stringify({ success: false, error: 'Your account has not joined the closed beta yet.', code: 'BETA_ACCESS_REQUIRED', ...body }), { status: 402 });
   }
 
   it('names the contact link the API returns', async () => {
-    const error = await apiErrorFromResponse(trialResponse({ contactUrl: 'https://wa.me/0000000000' }), 'publish existing media');
-    expect(error.code).toBe('TRIAL_EXPIRED');
+    const error = await apiErrorFromResponse(betaResponse({ contactUrl: 'https://discord.gg/test' }), 'publish existing media');
+    expect(error.code).toBe('BETA_ACCESS_REQUIRED');
     expect(error.status).toBe(402);
     expect(error.message).toBe(
-      'Failed to publish existing media: 402 The 7-day free trial has ended: scheduling and publishing are blocked, reading your data still works. Contact the Post Engineer team to continue: https://wa.me/0000000000',
+      'Failed to publish existing media: 402 This account has not joined the closed beta yet: scheduling and publishing are blocked, reading your data still works. Request access on the Post Engineer Discord: https://discord.gg/test',
     );
   });
 
   it('drops a contact link that is not https', async () => {
-    const error = await apiErrorFromResponse(trialResponse({ contactUrl: 'javascript:alert(1)' }), 'publish existing media');
-    expect(error.message).toContain('Contact the Post Engineer team to continue.');
+    const error = await apiErrorFromResponse(betaResponse({ contactUrl: 'javascript:alert(1)' }), 'publish existing media');
+    expect(error.message).toContain('Request access on the Post Engineer Discord.');
     expect(error.message).not.toContain('javascript');
   });
 
@@ -105,14 +105,14 @@ describe('SUBSCRIPTION_INACTIVE responses', () => {
     );
   }
 
-  it('says the subscription is inactive, never that the trial ended', async () => {
+  it('says the subscription is inactive, never that the account has not joined the beta', async () => {
     const error = await apiErrorFromResponse(
       inactiveResponse({ contactUrl: 'https://wa.me/0000000000' }),
       'publish existing media',
     );
     expect(error.code).toBe('SUBSCRIPTION_INACTIVE');
     expect(error.message).toContain('The subscription covering this account is not active');
-    expect(error.message).not.toContain('free trial');
+    expect(error.message).not.toContain('closed beta');
     expect(error.message).toContain('https://wa.me/0000000000');
   });
 

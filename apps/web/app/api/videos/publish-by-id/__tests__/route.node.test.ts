@@ -198,9 +198,9 @@ describe('POST /api/videos/publish-by-id', () => {
     expect(((await response.json()) as Record<string, unknown>).error).toBe('provider down');
   });
 
-  it('answers 402 and publishes nothing once the free trial has ended', async () => {
+  it('answers 402 and publishes nothing while the account has not joined the beta', async () => {
     vi.mocked(assertAccessActive).mockResolvedValueOnce(
-      NextResponse.json({ success: false, code: 'TRIAL_EXPIRED' }, { status: 402 }) as never,
+      NextResponse.json({ success: false, code: 'BETA_ACCESS_REQUIRED' }, { status: 402 }) as never,
     );
     const response = await POST(
       jsonRequest({ uploadId: UPLOAD_ID, provider: 'instagram', accountIds: ['ig-1'], caption: 'hi' }),

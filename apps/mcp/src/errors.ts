@@ -59,19 +59,24 @@ export class VideoTooLargeError extends Error {
 
 const MAX_ERROR_BODY_CHARS = 200;
 
-const TRIAL_EXPIRED_CODE = 'TRIAL_EXPIRED';
+const BETA_ACCESS_REQUIRED_CODE = 'BETA_ACCESS_REQUIRED';
 const SUBSCRIPTION_INACTIVE_CODE = 'SUBSCRIPTION_INACTIVE';
 
-const ACCESS_BLOCKED_MESSAGES: Record<string, string> = {
-  TRIAL_EXPIRED: 'The 7-day free trial has ended: scheduling and publishing are blocked, reading your data still works.',
-  SUBSCRIPTION_INACTIVE:
-    'The subscription covering this account is not active: scheduling and publishing are blocked, reading your data still works.',
+const ACCESS_BLOCKED_MESSAGES: Record<string, { base: string; callToAction: string }> = {
+  BETA_ACCESS_REQUIRED: {
+    base: 'This account has not joined the closed beta yet: scheduling and publishing are blocked, reading your data still works.',
+    callToAction: 'Request access on the Post Engineer Discord',
+  },
+  SUBSCRIPTION_INACTIVE: {
+    base: 'The subscription covering this account is not active: scheduling and publishing are blocked, reading your data still works.',
+    callToAction: 'Contact the Post Engineer team to continue',
+  },
 };
 
 function accessBlockedMessage(code: string, contactUrl: unknown): string {
-  const base = ACCESS_BLOCKED_MESSAGES[code];
-  if (typeof contactUrl !== 'string' || !contactUrl.startsWith('https://')) return `${base} Contact the Post Engineer team to continue.`;
-  return `${base} Contact the Post Engineer team to continue: ${contactUrl.slice(0, 200)}`;
+  const { base, callToAction } = ACCESS_BLOCKED_MESSAGES[code];
+  if (typeof contactUrl !== 'string' || !contactUrl.startsWith('https://')) return `${base} ${callToAction}.`;
+  return `${base} ${callToAction}: ${contactUrl.slice(0, 200)}`;
 }
 
 function listedErrorMessages(value: unknown): string[] {
@@ -107,7 +112,7 @@ export function readApiFailure(errorText: string): {
       if (typeof record.field === 'string') field = record.field;
       if (record.delivered === true) delivered = true;
       if (typeof record.postUrl === 'string') postUrl = record.postUrl;
-      if (code === TRIAL_EXPIRED_CODE || code === SUBSCRIPTION_INACTIVE_CODE) {
+      if (code === BETA_ACCESS_REQUIRED_CODE || code === SUBSCRIPTION_INACTIVE_CODE) {
         detail = accessBlockedMessage(code, record.contactUrl);
       }
     }

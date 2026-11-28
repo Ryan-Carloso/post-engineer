@@ -1,3 +1,5 @@
+import { DISCORD_INVITE_URL } from '@/lib/public-links';
+
 export const ERROR_CODES = {
   PERSONA_NOT_FOUND: 'PERSONA_NOT_FOUND',
   PERSONA_ACCESS_DENIED: 'PERSONA_ACCESS_DENIED',
@@ -9,7 +11,7 @@ export const ERROR_CODES = {
   PERSONA_NO_BOUND_ACCOUNTS: 'PERSONA_NO_BOUND_ACCOUNTS',
   SCHEDULE_OUT_OF_RANGE: 'SCHEDULE_OUT_OF_RANGE',
   VALIDATION_FAILED: 'VALIDATION_FAILED',
-  TRIAL_EXPIRED: 'TRIAL_EXPIRED',
+  BETA_ACCESS_REQUIRED: 'BETA_ACCESS_REQUIRED',
   SUBSCRIPTION_INACTIVE: 'SUBSCRIPTION_INACTIVE',
   SLOT_EXPIRED: 'SLOT_EXPIRED',
   SLOT_NOT_AWAITING_APPROVAL: 'SLOT_NOT_AWAITING_APPROVAL',
@@ -45,7 +47,7 @@ const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
   PERSONA_NO_BOUND_ACCOUNTS: 'This persona has no accounts bound. Bind at least one account before scheduling.',
   SCHEDULE_OUT_OF_RANGE: 'Publishing must be scheduled between {minHours} hours and {maxDays} days from now.',
   VALIDATION_FAILED: 'Request validation failed.',
-  TRIAL_EXPIRED: 'Your free trial has ended. Contact us to keep scheduling and publishing.',
+  BETA_ACCESS_REQUIRED: `Your account has not joined the closed beta yet. Request access on Discord: ${DISCORD_INVITE_URL}`,
   SUBSCRIPTION_INACTIVE: 'Your subscription is not active. Contact us to keep scheduling and publishing.',
   SLOT_EXPIRED: 'The scheduled time for this post has passed. Move it to a new time, then approve it.',
   SLOT_NOT_AWAITING_APPROVAL: 'Only an awaiting-approval slot can be approved or rejected.',

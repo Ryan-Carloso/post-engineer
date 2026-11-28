@@ -15,7 +15,8 @@ describe('schema-expectations.gen.ts', () => {
 
   it('lists the columns the scheduling product reads', () => {
     expect(REQUIRED_COLUMNS.scheduled_posts).toContain('media_ref');
-    expect(REQUIRED_COLUMNS.user_profiles).toContain('trial_ends_at');
+    expect(REQUIRED_COLUMNS.user_profiles).toContain('access_until');
+    expect(REQUIRED_COLUMNS.user_profiles).not.toContain('trial_ends_at');
     expect(REQUIRED_COLUMNS.post_metrics).toContain('analytics_status');
   });
 

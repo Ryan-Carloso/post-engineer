@@ -1421,11 +1421,11 @@ describe('POST /api/media/publish-existing', () => {
     expect(limited.status).toBe(429);
   });
 
-  it('answers 402 and neither claims nor schedules once the free trial has ended', async () => {
+  it('answers 402 and neither claims nor schedules while the account has not joined the beta', async () => {
     const client = fakeSupabase({ socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }] });
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
     vi.mocked(assertAccessActive).mockResolvedValueOnce(
-      NextResponse.json({ success: false, code: 'TRIAL_EXPIRED' }, { status: 402 }),
+      NextResponse.json({ success: false, code: 'BETA_ACCESS_REQUIRED' }, { status: 402 }),
     );
     const response = await POST(jsonRequest({ media: { kind: 'upload', uploadId: UPLOAD_ID }, title: 'T', description: 'D', publishing: { mode: 'asap', providers: ['youtube'], accounts: { youtube: ['UC1'] } }, tags: ['t'], privacyStatus: 'public' }));
     expect(response.status).toBe(402);

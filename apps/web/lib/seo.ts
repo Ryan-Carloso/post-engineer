@@ -5,7 +5,7 @@ export { GITHUB_URL, SITE_URL };
 
 export const OG_IMAGE_PATH = '/og.png';
 
-export const LEGAL_UPDATED_AT = '2026-11-26';
+export const LEGAL_UPDATED_AT = '2026-11-28';
 
 export const LANDING_TITLE =
   'Post Engineer — Vídeos com IA publicados automaticamente no YouTube e Instagram';

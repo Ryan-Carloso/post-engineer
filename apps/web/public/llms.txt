@@ -4,7 +4,7 @@
 > they made elsewhere to YouTube, Instagram, LinkedIn, Threads, Facebook Pages,
 > Bluesky, Rumble and more. Personas group the publishing accounts of one
 > brand or character. Post Engineer does not generate media: bring the file
-> from your own tool. New accounts get a 7-day free trial for publishing.
+> from your own tool. Publishing is free during the closed beta; request access on Discord.
 > Post Engineer is open source under the Apache-2.0 license
 > (https://github.com/Ryan-Carloso/post-engineer): self-host it on your own
 > VPS or use the hosted platform.

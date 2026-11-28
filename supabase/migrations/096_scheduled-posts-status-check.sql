@@ -1,5 +1,5 @@
 -- ============================================================================
--- 095 — scheduled_posts gains the status check the code already assumes.
+-- 096 — scheduled_posts gains the status check the code already assumes.
 --
 -- Production carries a scheduled_posts_status_check that no repo migration
 -- defines (094 even states the table has no status check constraint), and

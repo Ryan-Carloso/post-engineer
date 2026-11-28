@@ -17,7 +17,7 @@ hosted platform.
 - Connect YouTube / Instagram / LinkedIn / Threads / Facebook Pages / Bluesky / 3Speak / Rumble / Fanvue / Pinterest / Telegram accounts.
 - Upload finished videos and images, publish them now or schedule them.
 - Measure the posts and compare prompts.
-- Start with a 7-day free trial; after it ends, scheduling and publishing stop (reading stays) until you contact the team.
+- Publishing is free during the closed beta: until your account is admitted (request access on Discord), scheduling and publishing are blocked (reading stays).
 - Generate and manage API keys at [https://post-engineer.com/recipes](https://post-engineer.com/recipes).
 
 ## Requirements
@@ -192,9 +192,9 @@ The server offers **10 intent tools**, not one tool per API endpoint. A tool is 
 
 Actions that read a file from the disk (`publish_video` `from_file`, a local `imagePath` and a persona `avatarPath`) exist only on the stdio server: a path served over HTTP would resolve on the server's host. Over HTTP a video or an image goes through the signed upload of `publish_video`.
 
-### Free trial
+### Closed beta access
 
-Every account starts with a 7-day free trial. While it runs, every action works. After it ends, the actions that publish or schedule (`publish_video`) fail with `TRIAL_EXPIRED`, and the error names the contact link; reading (posts, insights, experiments, personas, prompts) keeps working.
+An account admitted to the closed beta can use every action. Until it is admitted, the actions that publish or schedule (`publish_video`) fail with `BETA_ACCESS_REQUIRED`, and the error names the Discord invite; reading (posts, insights, experiments, personas, prompts) keeps working.
 
 ### Names instead of ids
 

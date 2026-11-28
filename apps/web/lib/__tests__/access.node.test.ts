@@ -13,6 +13,8 @@ import { logger } from '@/lib/logger';
 
 const NOW = new Date('2026-11-20T12:00:00.000Z');
 const CONTACT = 'https://wa.me/351962248268';
+const DISCORD = 'https://discord.gg/ukmCXMCDJ';
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 interface FakeOptions {
   upsertError?: { message: string } | null;
@@ -45,7 +47,7 @@ beforeEach(() => {
 });
 
 describe('assertAccessActive', () => {
-  it('lets the action through during the trial', async () => {
+  it('lets the action through while the access window is open', async () => {
     const fake = fakeClient({ accessUntil: '2026-11-21T12:00:00.000Z' });
     const result = await assertAccessActive('user-1', { route: 'POST /x', supabase: fake.client, now: () => NOW });
     expect(result).toBeNull();
@@ -54,25 +56,44 @@ describe('assertAccessActive', () => {
     expect(fake.eq).toHaveBeenCalledWith('id', 'user-1');
   });
 
-  it('lets a paid subscription through well past the trial', async () => {
+  it.each([8, 15, 30])('lets an admitted beta account through at day %i', async (day) => {
+    const fake = fakeClient({ accessUntil: '2099-01-01T00:00:00.000Z', subscriptionStatus: 'beta' });
+    const result = await assertAccessActive('user-1', {
+      route: 'POST /x',
+      supabase: fake.client,
+      now: () => new Date(NOW.getTime() + day * DAY_MS),
+    });
+    expect(result).toBeNull();
+  });
+
+  it('lets a paid subscription through well past the window', async () => {
     const fake = fakeClient({ accessUntil: '2027-06-01T00:00:00.000Z', subscriptionStatus: 'active' });
     const result = await assertAccessActive('user-1', { route: 'POST /x', supabase: fake.client, now: () => NOW });
     expect(result).toBeNull();
   });
 
-  it('answers 402 TRIAL_EXPIRED with the contact link when the trial lapses', async () => {
+  it('answers 402 BETA_ACCESS_REQUIRED with the Discord link for an account that has not joined the beta', async () => {
     const fake = fakeClient({ accessUntil: '2026-11-20T12:00:00.000Z' });
     const result = await assertAccessActive('user-1', { route: 'POST /x', supabase: fake.client, now: () => NOW });
-    expect(result).not.toBeNull();
     expect(result?.status).toBe(402);
     const body = (await result?.json()) as Record<string, unknown>;
     expect(body).toMatchObject({
       success: false,
-      code: 'TRIAL_EXPIRED',
-      contactUrl: CONTACT,
+      code: 'BETA_ACCESS_REQUIRED',
+      contactUrl: DISCORD,
       accessEndedAt: '2026-11-20T12:00:00.000Z',
-      reason: 'trial',
+      reason: 'beta',
     });
+    expect(body.code).not.toBe('TRIAL_EXPIRED');
+    expect(String(body.error)).toContain(DISCORD);
+  });
+
+  it('answers 402 BETA_ACCESS_REQUIRED when a beta admission was revoked', async () => {
+    const fake = fakeClient({ accessUntil: '2026-11-20T12:00:00.000Z', subscriptionStatus: 'beta' });
+    const result = await assertAccessActive('user-1', { route: 'POST /x', supabase: fake.client, now: () => NOW });
+    expect(result?.status).toBe(402);
+    const body = (await result?.json()) as Record<string, unknown>;
+    expect(body).toMatchObject({ code: 'BETA_ACCESS_REQUIRED', contactUrl: DISCORD, reason: 'beta' });
   });
 
   it('answers 402 SUBSCRIPTION_INACTIVE when a cancelled subscription lapses', async () => {

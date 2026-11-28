@@ -693,15 +693,9 @@
                     "notNull": true
                 },
                 {
-                    "name": "trial_ends_at",
-                    "type": "timestamp with time zone",
-                    "default": "(now() + '7 days'::interval)",
-                    "notNull": true
-                },
-                {
                     "name": "access_until",
                     "type": "timestamp with time zone",
-                    "default": "(now() + '7 days'::interval)",
+                    "default": "now()",
                     "notNull": true
                 },
                 {
@@ -720,7 +714,7 @@
             },
             "constraints": {
                 "user_profiles_pkey": "PRIMARY KEY (id)",
-                "user_profiles_subscription_status_check": "CHECK (((subscription_status IS NULL) OR (subscription_status = ANY (ARRAY['trialing'::text, 'active'::text, 'past_due'::text, 'canceled'::text, 'unpaid'::text, 'incomplete'::text, 'incomplete_expired'::text, 'paused'::text]))))"
+                "user_profiles_subscription_status_check": "CHECK (((subscription_status IS NULL) OR (subscription_status = ANY (ARRAY['trialing'::text, 'active'::text, 'past_due'::text, 'canceled'::text, 'unpaid'::text, 'incomplete'::text, 'incomplete_expired'::text, 'paused'::text, 'beta'::text]))))"
             }
         },
         "video_uploads": {

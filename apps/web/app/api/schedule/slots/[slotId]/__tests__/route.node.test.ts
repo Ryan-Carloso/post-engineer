@@ -417,7 +417,7 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
     expect(body).toEqual({ success: true, slotAt });
   });
 
-  it('rejects rescheduling with 402 when the trial is inactive but allows a title edit', async () => {
+  it('rejects rescheduling with 402 when access is inactive but allows a title edit', async () => {
     const slotAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     const client = mockSlotsClient({
       slot: { id: 'slot-1', schedule_id: 's1', status: 'ready', title: 'Old' },
@@ -425,7 +425,7 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
     });
     mockAuth();
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
-    vi.mocked(assertAccessActive).mockResolvedValueOnce(NextResponse.json({ success: false, error: 'Trial expired' }, { status: 402 }));
+    vi.mocked(assertAccessActive).mockResolvedValueOnce(NextResponse.json({ success: false, error: 'Beta access required' }, { status: 402 }));
     const blocked = await patchSlot(SLOT_ID, { slotAt });
     expect(blocked.status).toBe(402);
     expect(client.calls.some((c) => c.op === 'update')).toBe(false);
