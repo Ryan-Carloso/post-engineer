@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
-import { generateRawApiKey, hashApiKey, extractKeyPrefix, isApprovalMode, type ApprovalMode } from '@/lib/api-keys';
+import { generateRawApiKey, hashApiKey, extractKeyPrefix, isApprovalMode } from '@/lib/api-keys';
+import { parseApprovalMode, parsePersonaScope, rejectUnownedPersonas, serializeKey } from './key-input';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
@@ -10,27 +11,6 @@ interface CreateKeyBody {
   name?: unknown;
   personaIds?: unknown;
   approvalMode?: unknown;
-}
-
-function parseApprovalMode(value: unknown): { ok: true; approvalMode: ApprovalMode } | { ok: false; error: string } {
-  if (value === undefined || value === null) return { ok: true, approvalMode: 'approval' };
-  if (isApprovalMode(value)) return { ok: true, approvalMode: value };
-  return { ok: false, error: 'approvalMode must be "yolo" or "approval".' };
-}
-
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function parsePersonaScope(value: unknown): { ok: true; personaIds: string[] | null } | { ok: false; error: string } {
-  if (value === undefined || value === null) return { ok: true, personaIds: null };
-  if (!Array.isArray(value)) return { ok: false, error: 'personaIds must be an array of persona IDs.' };
-  const ids = [...new Set(value.filter((item): item is string => typeof item === 'string' && UUID_PATTERN.test(item)))];
-  if (ids.length !== value.length) {
-    return { ok: false, error: 'personaIds must contain only valid persona IDs.' };
-  }
-  if (ids.length === 0) {
-    return { ok: false, error: 'Select at least one persona or leave the key unrestricted.' };
-  }
-  return { ok: true, personaIds: ids };
 }
 
 async function getHandler(request: Request): Promise<NextResponse> {
@@ -63,16 +43,7 @@ async function getHandler(request: Request): Promise<NextResponse> {
 
   return NextResponse.json({
     success: true,
-    keys: (data ?? []).map((k) => ({
-      id: k.id,
-      name: k.name,
-      keyPrefix: k.key_prefix,
-      personaIds: Array.isArray(k.persona_ids) ? k.persona_ids : null,
-      approvalMode: isApprovalMode(k.approval_mode) ? k.approval_mode : 'approval',
-      createdAt: k.created_at,
-      lastUsedAt: k.last_used_at,
-      revokedAt: k.revoked_at,
-    })),
+    keys: (data ?? []).map(serializeKey),
   });
 }
 
@@ -110,7 +81,10 @@ async function postHandler(request: Request): Promise<NextResponse> {
     );
   }
 
-  const mode = parseApprovalMode(body.approvalMode);
+  const mode =
+    body.approvalMode === undefined || body.approvalMode === null
+      ? ({ ok: true, value: 'approval' } as const)
+      : parseApprovalMode(body.approvalMode);
   if (!mode.ok) {
     return NextResponse.json(
       { success: false, error: mode.error },
@@ -120,19 +94,9 @@ async function postHandler(request: Request): Promise<NextResponse> {
 
   const supabase = createSupabaseServiceClient();
 
-  if (scope.personaIds !== null) {
-    const { data: owned, error: ownedError } = await supabase
-      .from('personas')
-      .select('id')
-      .eq('user_id', auth.userId)
-      .in('id', scope.personaIds);
-    const ownedIds = new Set((owned ?? []).map((p) => p.id as string));
-    if (ownedError || scope.personaIds.some((id) => !ownedIds.has(id))) {
-      return NextResponse.json(
-        { success: false, error: 'personaIds must reference only your own personas.' },
-        { status: 400 },
-      );
-    }
+  if (scope.value !== null) {
+    const rejection = await rejectUnownedPersonas(supabase, auth.userId, scope.value);
+    if (rejection) return rejection;
   }
 
   const rawKey = generateRawApiKey();
@@ -146,8 +110,8 @@ async function postHandler(request: Request): Promise<NextResponse> {
       name,
       key_hash: keyHash,
       key_prefix: keyPrefix,
-      persona_ids: scope.personaIds,
-      approval_mode: mode.approvalMode,
+      persona_ids: scope.value,
+      approval_mode: mode.value,
     })
     .select('id, name, key_prefix, persona_ids, approval_mode, created_at')
     .single();

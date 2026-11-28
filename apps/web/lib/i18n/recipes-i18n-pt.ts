@@ -20,7 +20,7 @@ export const recipesI18nPt = {
       'Ela conecta seu agente à sua conta. Você pode criar várias, uma por agente.',
   stepSetupTitle: 'Mande o prompt de setup ao seu agente',
   stepSetupHint:
-      'Cole no Claude, Cursor, OpenCode ou outro agente: ele instala o servidor MCP do Post Engineer. Se você acabou de criar uma key, ela já vem preenchida.',
+      'Cole no Claude, Cursor, OpenCode ou outro agente: ele instala o servidor MCP do Post Engineer. O prompt nunca leva a sua chave: coloque a chave você mesmo na configuração do agente.',
   stepRecipesTitle: 'Prompts públicos',
   stepRecipesHint: 'Com o setup feito, copie um prompt e cole no seu agente.',
   noPublicPrompts: 'Ainda não há prompts públicos.',

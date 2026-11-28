@@ -1,4 +1,5 @@
 import type { Dictionary } from './pt';
+import { apiKeysI18nEn } from './api-keys-i18n-en';
 import { mcpToolDescEn } from './mcp-tools-i18n-en';
 import { accountI18nEn } from './account-i18n-en';
 import { accountsI18nEn } from './accounts-i18n-en';
@@ -121,17 +122,12 @@ export const enDictionary: Dictionary = {
   apiKeys: {
     title: 'API Keys',
     subtitle: 'Generate API keys to connect AI agents, OpenCode CLI, and MCP servers to your account.',
-    generateButton: '+ Generate new API Key',
-    nameLabel: 'Key name',
-    namePlaceholder: 'e.g. MCP Server, Local Agent',
     createSuccess: 'Key generated successfully!',
     warningCopyOnce: 'Copy this key now. For your security, it will not be shown again.',
     copied: 'Copied!',
     copyKey: 'Copy key',
-    noKeys: 'No API keys generated yet.',
     emptyTitle: 'No API keys yet',
     emptyDesc: 'Generate your first key to connect AI agents and MCP servers to your account.',
-    emptyCta: 'Generate API key',
     lastUsed: 'Last used: {date}',
     neverUsed: 'Never used',
     revoked: 'Revoked',
@@ -159,10 +155,10 @@ export const enDictionary: Dictionary = {
     needHelp: 'Need help?',
     docsHelpMessage: 'Hi! I need help connecting my AI agent to Post Engineer via MCP.',
     installPromptTitle: 'Install prompt',
-    copy: 'Copy',
     toolsTitle: 'Available tools',
     toolsSubtitle: 'Here are the tools your AI agent gets access to after connecting.',
     ...mcpToolDescEn,
+    ...apiKeysI18nEn,
   },
   persona: {
     title: 'Create persona',

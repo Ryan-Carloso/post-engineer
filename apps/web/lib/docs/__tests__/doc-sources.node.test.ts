@@ -57,7 +57,7 @@ describe('lib/docs — docs facts are imported, never retyped', () => {
   });
 
   it('embeds the install prompt only in its code block, never in prose', () => {
-    const prompt = buildInstallPrompt('en', null);
+    const prompt = buildInstallPrompt('en');
     const codeBlocks = DOC_PAGES.flatMap((page) =>
       page.blocks.filter((block) => block.kind === 'code'),
     );

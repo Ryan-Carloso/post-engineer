@@ -40,25 +40,25 @@ const MCP_TOOL_CARDS: McpToolCard[] = [
   { id: 'prompts', actions: ['list', 'get', 'create', 'update', 'delete', 'versions', 'restore'], descKey: 'apiKeys.toolDescPrompts', Icon: GlobeIcon },
 ];
 
-export default function McpDocsSection({ apiKey }: { apiKey: string | null }): ReactNode {
+export default function McpDocsSection({ onPromptCopied }: { onPromptCopied?: () => void }): ReactNode {
   const { t, locale } = useI18n();
-  const { copied, copy } = useCopyText();
-  const prompt = buildInstallPrompt(locale, apiKey);
+  const { copied, copy } = useCopyText(onPromptCopied);
+  const prompt = buildInstallPrompt(locale);
   const helpHref = whatsappUrl(t('apiKeys.docsHelpMessage'));
 
   return (
     <section className="overflow-hidden rounded-2xl border border-line bg-card shadow-[0_1px_2px_rgba(16,23,40,0.02)]">
       <div className="p-4 lg:p-6">
         <div className="overflow-hidden rounded-xl bg-code shadow-[0_8px_24px_rgba(16,23,40,0.25)]">
-          <div className="flex items-center justify-between border-b border-white/10 px-4 py-2.5">
+          <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
             <span className="text-xs font-semibold text-code-text">{t('apiKeys.installPromptTitle')}</span>
             <Button
               type="button"
               data-testid="copy-mcp-prompt-btn"
               onClick={() => copy(prompt)}
-              className="rounded-lg bg-code-text/20 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-code-text/30"
+              className="h-auto rounded-lg bg-card px-5 py-2.5 text-sm font-bold text-ink shadow-md transition-colors hover:bg-surface"
             >
-              {copied ? t('apiKeys.docsCopied') : t('apiKeys.copy')}
+              {copied ? t('apiKeys.docsCopied') : t('apiKeys.copyPrompt')}
             </Button>
           </div>
           <pre
@@ -108,7 +108,11 @@ export default function McpDocsSection({ apiKey }: { apiKey: string | null }): R
           </div>
         </details>
 
-        <p className="mt-5 rounded-xl border border-warning/30 bg-warning-soft p-3 text-xs leading-5 text-warning">
+        <p data-testid="mcp-prompt-key-note" className="mt-5 rounded-xl border border-warning/30 bg-warning-soft p-3 text-xs leading-5 text-warning">
+          {t('apiKeys.promptKeyNote')}
+        </p>
+
+        <p className="mt-3 rounded-xl border border-warning/30 bg-warning-soft p-3 text-xs leading-5 text-warning">
           {t('apiKeys.docsSecurityNote')}
         </p>
 

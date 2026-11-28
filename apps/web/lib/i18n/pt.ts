@@ -1,3 +1,4 @@
+import { apiKeysI18nPt } from './api-keys-i18n-pt';
 import { mcpToolDescPt } from './mcp-tools-i18n-pt';
 import { accountI18nPt } from './account-i18n-pt';
 import { accountsI18nPt } from './accounts-i18n-pt';
@@ -120,17 +121,12 @@ export const ptDictionary = {
   apiKeys: {
     title: 'API Keys',
     subtitle: 'Gere chaves de API para integrar agentes de IA, OpenCode CLI e servidores MCP à sua conta.',
-    generateButton: '+ Gerar nova API Key',
-    nameLabel: 'Nome da chave',
-    namePlaceholder: 'ex: MCP Server, Agente Local',
     createSuccess: 'Chave criada com sucesso!',
     warningCopyOnce: 'Copie a chave agora. Por segurança, você não poderá vê-la novamente.',
     copied: 'Copiado!',
     copyKey: 'Copiar chave',
-    noKeys: 'Nenhuma chave de API gerada ainda.',
     emptyTitle: 'Nenhuma API key ainda',
     emptyDesc: 'Gere sua primeira chave para conectar agentes de IA e servidores MCP à sua conta.',
-    emptyCta: 'Gerar API key',
     lastUsed: 'Último uso: {date}',
     neverUsed: 'Nunca usada',
     revoked: 'Revogada',
@@ -158,10 +154,10 @@ export const ptDictionary = {
     needHelp: 'Precisa de ajuda?',
     docsHelpMessage: 'Olá! Preciso de ajuda para conectar meu agente de IA ao Post Engineer via MCP.',
     installPromptTitle: 'Prompt de instalação',
-    copy: 'Copiar',
     toolsTitle: 'Tools disponíveis',
     toolsSubtitle: 'Estas são as tools que seu agente de IA recebe acesso após conectar.',
     ...mcpToolDescPt,
+    ...apiKeysI18nPt,
   },
   persona: {
     title: 'Criar persona',
