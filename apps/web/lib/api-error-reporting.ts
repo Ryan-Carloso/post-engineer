@@ -111,6 +111,7 @@ async function reportApiIssue(
   request: Request | undefined,
   getUserId?: ApiErrorReportingOptions['getUserId'],
 ): Promise<void> {
+  if (status === 401) return;
   try {
     const client = getPostHogServer();
     if (!client) return;
