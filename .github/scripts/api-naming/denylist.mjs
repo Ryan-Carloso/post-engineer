@@ -1,8 +1,3 @@
-/**
- * @param {Array<{ file: string, line: number, name: string, context: string, renamedFrom: string | null }>} candidates
- * @param {{ denylist: Record<string, { severity: 'error' | 'warn', reason: string }>, allowlist: string[] }} config
- * @returns {Array<{ file: string, line: number, name: string, severity: 'error' | 'warn', reason: string, alternatives: string[], source: 'denylist', renamedFrom: string | null }>}
- */
 export function checkDenylist(candidates, config) {
   const allowed = new Set(config.allowlist.map((n) => n.toLowerCase()));
   const findings = [];

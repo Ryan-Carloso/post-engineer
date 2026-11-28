@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { useState } from 'react';
 import { Check, Clock, Film, Image as ImageIcon, TriangleAlert, X } from 'lucide-react';
 import { useApprovalQueue, isSlotExpired } from '@/lib/approval-queue';
@@ -26,8 +27,7 @@ function ApprovalMedia({ slot }: { slot: ScheduledSlot }) {
   if (media?.kind === 'image' && media.url !== null) {
     return (
       <div className="relative size-14 shrink-0 overflow-hidden rounded-lg bg-sunken">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={media.url} alt={displayTitle} className="size-full object-cover" />
+        <Image src={media.url} alt={displayTitle} width={56} height={56} unoptimized className="size-full object-cover" />
       </div>
     );
   }

@@ -4,11 +4,6 @@ function escapeAnnotation(text) {
   return String(text).replace(/%/g, '%25').replace(/\n/g, '%0A').replace(/\r/g, '%0D');
 }
 
-/**
- * @param {Array<{ file: string, line: number, name: string, severity: 'error' | 'warn', reason: string, alternatives: string[], source: string }>} findings
- * @param {string[]} warnings
- * @returns {string}
- */
 export function formatAnnotations(findings, warnings) {
   const lines = [];
   for (const f of findings) {
@@ -25,12 +20,6 @@ export function formatAnnotations(findings, warnings) {
   return lines.join('\n');
 }
 
-/**
- * @param {Array<{ file: string, line: number, name: string, severity: 'error' | 'warn', reason: string, alternatives: string[], source: string, renamedFrom: string | null }>} findings
- * @param {string[]} warnings
- * @param {{ headSha: string }} meta
- * @returns {string}
- */
 export function buildCommentBody(findings, warnings, meta) {
   const parts = [COMMENT_MARKER, ''];
   if (findings.length === 0) {

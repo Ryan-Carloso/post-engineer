@@ -14,21 +14,9 @@ const REPO_ROOT = path.resolve(HERE, '../../..');
 
 const SOURCE = /\.(tsx?|jsx?|mjs|cjs|py)$/;
 
-const CODE_OWNED = [
-  'apps/mcp/src/__tests__/web-api-parity.test.ts',
-  'apps/mcp/src/__tests__/parity-verifier.test.ts',
-  'apps/mcp/src/__tests__/parity/',
-  'apps/web/app/api/__tests__/parity-exclusion-bearer.test.ts',
-  'apps/web/vitest.config.',
-  'apps/mcp/vitest.config.',
-  'apps/mcp/vite.config.',
-  '.github/scripts/parity-exclusions/',
-];
-
 export function isExempt(p) {
   if (isVendoredCalendarCN(p)) return true;
   if (isVendoredUiDiff(p)) return true;
-  if (CODE_OWNED.some((owned) => p.startsWith(owned))) return true;
   if (/\.gen\.[^.]+$/.test(p)) return true;
   if (p.endsWith('next-env.d.ts')) return true;
   return p.split('/').includes('node_modules');
@@ -53,33 +41,12 @@ function parseArgs(argv) {
   return { fix, files };
 }
 
-export function bareDirectives(text, comments) {
-  let out = text;
-  for (const c of [...comments].reverse()) {
-    if (c.directive && c.problem === null && c.bare !== c.text) out = out.slice(0, c.start) + c.bare + out.slice(c.end);
-  }
-  return out;
-}
-
-const PROBLEM_HINT = {
-  blanket: (c) => `blanket suppression \`${c.detail}\`: name the exact rule or code`,
-  correctness: (c) => `suppresses a correctness or safety rule (${c.detail}): fix the code instead`,
-};
-
 export function findings(text, file) {
-  const out = [];
-  for (const c of findComments(text, file)) {
-    const preview = c.text.split('\n')[0].slice(0, 100);
-    if (!c.directive) out.push({ c, fixable: true, message: `comment: ${preview}` });
-    else if (c.problem !== null) out.push({ c, fixable: false, message: PROBLEM_HINT[c.problem](c) });
-    else if (c.bare !== c.text) out.push({ c, fixable: true, message: `directive carries prose, keep only \`${c.bare.replace(/\s+/g, ' ').slice(0, 100)}\`: ${preview}` });
-  }
-  return out;
+  return findComments(text, file).map((c) => ({ c, message: `comment: ${c.text.split('\n')[0].slice(0, 100)}` }));
 }
 
 function fixFile(text, file) {
-  const debared = bareDirectives(text, findComments(text, file));
-  const stripped = stripComments(debared, findComments(debared, file));
+  const stripped = stripComments(text, findComments(text, file));
   const unchanged = file.endsWith('.py') ? pySameAst(text, stripped) : sameCode(text, stripped, file);
   return unchanged ? stripped : null;
 }
@@ -95,7 +62,6 @@ export function run(argv, root = REPO_ROOT, log = console.log) {
   let fixedFiles = 0;
   let refused = 0;
   let unreadable = 0;
-  let unfixable = 0;
   for (const file of targets) {
     const abs = path.join(root, file);
     if (!fs.existsSync(abs)) continue;
@@ -110,11 +76,6 @@ export function run(argv, root = REPO_ROOT, log = console.log) {
     }
     if (all.length === 0) continue;
     if (fix) {
-      for (const f of all.filter((x) => !x.fixable)) {
-        unfixable++;
-        report(file, text, f);
-      }
-      if (!all.some((x) => x.fixable)) continue;
       const fixed = fixFile(text, file);
       if (fixed === null) {
         refused++;
@@ -132,7 +93,7 @@ export function run(argv, root = REPO_ROOT, log = console.log) {
   }
   if (fix) {
     log(`comments: stripped comments from ${fixedFiles} file(s)`);
-    return refused > 0 || unreadable > 0 || unfixable > 0 ? 1 : 0;
+    return refused > 0 || unreadable > 0 ? 1 : 0;
   }
   if (found > 0 || unreadable > 0) {
     log(`comments: ${found} finding(s). Remove them, or run: node .github/scripts/comments/check.mjs --fix`);

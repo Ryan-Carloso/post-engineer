@@ -3,23 +3,11 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { endpointSite } from './mcp-calls.js';
 
-//---------------
-// Behavioural proof for the parity gate: call a tool action through a real
-// MCP client and record the HTTP requests it sends. The syntax-tree proof says
-// an action's handler *can* reach an endpoint; this proves that invoking it
-// does. `fetch` is replaced for the duration of the call only, so no request
-// leaves the process; the stub answers 200 `{ success, body, data }` (or the
-// JSON given for that `METHOD /path`, for an action that must read a listing
-// before it sends its request) and the tool may then fail on the empty body,
-// which does not matter: the request is what is asserted.
-//---------------
-
 export interface RecordedRequest {
   method: string;
   pathname: string;
 }
 
-/** Calls `tool` with `args` and returns every request it sent, in order. */
 export async function callToolRecordingRequests(
   server: McpServer,
   tool: string,
@@ -50,7 +38,6 @@ export async function callToolRecordingRequests(
   }
 }
 
-/** Whether a recorded request matches an endpoint key (`GET /api/posts/[id]`): same method, same path shape. */
 export function requestReaches(recorded: readonly RecordedRequest[], key: string): boolean {
   const wanted = endpointSite(key);
   const wantedSegments = wanted.path.split('/');

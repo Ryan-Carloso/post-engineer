@@ -5,11 +5,6 @@ import { callToolRecordingRequests, requestReaches } from './behaviour.js';
 import { buildMcpCallGraph, toolActionCallsEndpoint, toolCallsEndpoint } from './mcp-calls.js';
 import { EndpointMappingSchema, endpointToolNames, uncoveredEndpoints, verifyMapping } from './mappings.js';
 
-// Parity gate v2 (issue #566, §6): an endpoint maps to `{ tool, action? }`,
-// and the gate proves that the named action's handler reaches the endpoint.
-// Every test below is a negative control — a mapping that claims coverage it
-// does not have — plus the accepted shapes that keep the gate usable.
-
 const SOURCES = [
   {
     file: 'client.ts',
@@ -170,7 +165,6 @@ describe('parity gate v2: mappings are proven, not labelled', () => {
   });
 
   it('rejects an action whose handler does not reach the endpoint, even if a sibling action does', () => {
-    // `create` reaches POST /api/persona; DELETE /api/persona is reached only by `remove`.
     const errors = verifyMapping('DELETE /api/persona', [{ tool: 'personas', action: 'create' }], graph);
     expect(errors).toContainEqual(expect.stringContaining('action "create" never calls DELETE /api/persona'));
   });
