@@ -190,6 +190,7 @@ function normalizePublishResponse(
     if (typeof item.mediaId === 'string') result.mediaId = item.mediaId;
     if (typeof item.permalink === 'string') result.permalink = item.permalink;
     if (typeof item.error === 'string') result.error = item.error;
+    if (typeof item.errorCode === 'string') result.errorCode = item.errorCode;
     const warnings = narrowFirstCommentWarnings(item.warnings);
     if (warnings.length > 0) result.warnings = warnings;
     results.push(result);

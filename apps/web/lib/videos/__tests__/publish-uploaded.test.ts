@@ -538,6 +538,7 @@ describe('publishUploadedVideo', () => {
           mediaId: 'm',
           permalink: 'https://v.example/p',
           error: 'e',
+          errorCode: 'token_expired',
         },
         {
           accountId: 'ig-2',
@@ -548,6 +549,7 @@ describe('publishUploadedVideo', () => {
           mediaId: {},
           permalink: 0,
           error: 5,
+          errorCode: 7,
         },
       ],
     } as never);
@@ -575,6 +577,7 @@ describe('publishUploadedVideo', () => {
           mediaId: 'm',
           permalink: 'https://v.example/p',
           error: 'e',
+          errorCode: 'token_expired',
         },
         { accountId: 'ig-2', success: false },
       ],
