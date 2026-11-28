@@ -3,7 +3,7 @@
 import Link from 'next/link';
 
 import { useI18n } from '@/lib/i18n/provider';
-import { INPUT_CLASS } from '@/lib/ui';
+import { SelectField } from '@/components/ui/select';
 import type { PersonaRecord } from '@/lib/persona-record';
 
 export function PersonaField({
@@ -29,20 +29,17 @@ export function PersonaField({
       <label htmlFor="composer-persona" className="block text-xs font-medium text-ink-soft">
         {t('composer.personaLabel')}
       </label>
-      <select
+      <SelectField
         id="composer-persona"
         value={value ?? ''}
         disabled={disabled || loading}
-        onChange={(event) => onChange(event.target.value === '' ? null : event.target.value)}
-        className={INPUT_CLASS}
-      >
-        <option value="">{t('composer.personaNone')}</option>
-        {personas.map((persona) => (
-          <option key={persona.id} value={persona.id}>
-            {persona.name}
-          </option>
-        ))}
-      </select>
+        onValueChange={(next) => onChange(next === '' ? null : next)}
+        options={[
+          { value: '', label: t('composer.personaNone') },
+          ...personas.map((persona) => ({ value: persona.id, label: persona.name })),
+        ]}
+        className="mt-1.5"
+      />
       <p className="mt-1 text-[11px] text-muted-text">{t('composer.personaHint')}</p>
       {empty ? (
         <div className="mt-2 rounded-xl border border-dashed border-line bg-surface px-3 py-2.5">

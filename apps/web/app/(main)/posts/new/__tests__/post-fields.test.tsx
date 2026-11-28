@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 
 vi.mock('@/lib/i18n/provider', () => {
@@ -103,14 +104,17 @@ describe('PostFields', () => {
     expect(onChange).toHaveBeenCalledWith({ caption: 'A caption' });
   });
 
-  it('shows the youtube tags and privacy fields with all privacy options', () => {
+  it('shows the youtube tags and privacy fields with all privacy options', async () => {
     renderFields({ providers: ['youtube'], draft: { mode: 'asap' } });
     expect(screen.getByLabelText('composer.tagsLabel')).toBeInTheDocument();
     expect(screen.getByText('composer.tagsHint')).toBeInTheDocument();
-    expect(screen.getByLabelText('composer.privacyLabel')).toBeInTheDocument();
-    expect(screen.getByText('composer.privacyPublic')).toBeInTheDocument();
-    expect(screen.getByText('composer.privacyUnlisted')).toBeInTheDocument();
-    expect(screen.getByText('composer.privacyPrivate')).toBeInTheDocument();
+    const privacy = screen.getByLabelText('composer.privacyLabel');
+    await userEvent.setup().click(privacy);
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual([
+      'composer.privacyPublic',
+      'composer.privacyUnlisted',
+      'composer.privacyPrivate',
+    ]);
   });
 
   it('hides the youtube fields for a non-youtube provider', () => {
@@ -119,12 +123,14 @@ describe('PostFields', () => {
     expect(screen.queryByLabelText('composer.privacyLabel')).not.toBeInTheDocument();
   });
 
-  it('calls onChange for tags and privacy', () => {
+  it('calls onChange for tags and privacy', async () => {
     const { onChange } = renderFields({ providers: ['youtube'], draft: { mode: 'asap' } });
     fireEvent.change(screen.getByLabelText('composer.tagsLabel'), { target: { value: 'a, b' } });
     expect(onChange).toHaveBeenCalledWith({ tags: 'a, b' });
-    fireEvent.change(screen.getByLabelText('composer.privacyLabel'), { target: { value: 'private' } });
-    expect(onChange).toHaveBeenCalledWith({ privacyStatus: 'private' });
+    const user = userEvent.setup();
+    await user.click(screen.getByLabelText('composer.privacyLabel'));
+    await user.click(screen.getByRole('option', { name: 'composer.privacyPrivate' }));
+    expect(onChange).toHaveBeenLastCalledWith({ privacyStatus: 'private' });
   });
 
   it('shows the tags issue', () => {
@@ -141,19 +147,25 @@ describe('PostFields', () => {
     expect(screen.getByLabelText('composer.descriptionLabel')).toBeInTheDocument();
   });
 
-  it('shows the pinterest board select with the boards', () => {
+  it('shows the pinterest board select with the chosen board and every board once opened', async () => {
     renderFields({ providers: ['pinterest'], boards: BOARDS, draft: { pinterestBoardId: 'board-2' } });
-    const select = screen.getByLabelText('composer.boardLabel') as HTMLSelectElement;
-    expect(select).toHaveValue('board-2');
-    expect(screen.getByText('Summer')).toBeInTheDocument();
-    expect(screen.getByText('Recipes')).toBeInTheDocument();
+    const select = screen.getByLabelText('composer.boardLabel');
+    expect(select).toHaveTextContent('Recipes');
     expect(screen.getByText('composer.boardHint')).toBeInTheDocument();
-    expect(screen.getByText('composer.boardSelect')).toBeInTheDocument();
+    await userEvent.setup().click(select);
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual(['Summer', 'Recipes']);
   });
 
-  it('calls onBoardChange when a board is picked', () => {
+  it('shows the select placeholder while no board is chosen', () => {
+    renderFields({ providers: ['pinterest'], boards: BOARDS });
+    expect(screen.getByLabelText('composer.boardLabel')).toHaveTextContent('composer.boardSelect');
+  });
+
+  it('calls onBoardChange when a board is picked', async () => {
     const { onBoardChange } = renderFields({ providers: ['pinterest'], boards: BOARDS });
-    fireEvent.change(screen.getByLabelText('composer.boardLabel'), { target: { value: 'board-1' } });
+    const user = userEvent.setup();
+    await user.click(screen.getByLabelText('composer.boardLabel'));
+    await user.click(screen.getByRole('option', { name: 'Summer' }));
     expect(onBoardChange).toHaveBeenCalledTimes(1);
     expect(onBoardChange).toHaveBeenCalledWith('board-1');
   });

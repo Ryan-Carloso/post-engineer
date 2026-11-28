@@ -73,7 +73,8 @@ describe('Account — public share links', () => {
     visitAccount();
 
     cy.get('[data-testid=share-links-empty-state]').should('be.visible');
-    cy.get('[data-testid=share-link-persona]').select('Maria');
+    cy.get('[data-testid=share-link-persona]').click();
+    cy.get('[role="option"]').contains('Maria').click();
     cy.get('[data-testid=create-share-link-btn]').click();
     cy.wait('@create').its('request.body').should('deep.equal', { personaIds: [PERSONA_ID] });
     cy.get('[data-testid=share-link-url]').should('have.value', `${Cypress.config('baseUrl')}/s/${TOKEN}`);

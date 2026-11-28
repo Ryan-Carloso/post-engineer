@@ -16,13 +16,7 @@ import {
 } from '@/components/ui/command';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { SelectField } from '@/components/ui/select';
 import {
   Sheet,
   SheetContent,
@@ -102,17 +96,14 @@ export function MetricsFilterSheet({
             onChange={(value) => setDraft((current) => ({ ...current, personaId: value === FILTER_ALL ? null : value }))}
           />
           <FilterSelectField
+            options={providerOptions}
             label={t('metrics.filterProvider')}
             value={draft.provider ?? FILTER_ALL}
             onChange={(value) => setDraft((current) => ({
               ...current,
               provider: isSocialProvider(value) ? value : null,
             }))}
-          >
-            {providerOptions.map((option) => (
-              <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-            ))}
-          </FilterSelectField>
+          />
         </div>
         <SheetFooter>
           <Button type="button" variant="outline" onClick={() => setDraft(EMPTY_FILTERS)}>
@@ -194,24 +185,21 @@ function FilterCombobox({ label, value, options, searchPlaceholder, onChange }: 
 interface FilterSelectFieldProps {
   label: string;
   value: string;
+  options: FilterOption[];
   onChange: (value: string) => void;
-  children: React.ReactNode;
 }
 
-function FilterSelectField({ label, value, onChange, children }: FilterSelectFieldProps): React.ReactElement {
+function FilterSelectField({ label, value, options, onChange }: FilterSelectFieldProps): React.ReactElement {
   const { t } = useI18n();
   return (
     <div className="flex flex-col gap-1.5">
       <Label>{label}</Label>
-      <Select value={value} onValueChange={onChange}>
-        <SelectTrigger aria-label={label} className="w-full">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={FILTER_ALL}>{t('metrics.filterAll')}</SelectItem>
-          {children}
-        </SelectContent>
-      </Select>
+      <SelectField
+        aria-label={label}
+        value={value}
+        onValueChange={onChange}
+        options={[{ value: FILTER_ALL, label: t('metrics.filterAll') }, ...options]}
+      />
     </div>
   );
 }

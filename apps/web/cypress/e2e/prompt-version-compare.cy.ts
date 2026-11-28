@@ -73,7 +73,8 @@ describe('Comparing prompt versions', () => {
     cy.get('[data-testid="text-diff"] [data-diff="removed"]').should('have.text', 'short');
     cy.get('[data-testid="text-diff"] [data-diff="added"]').should('have.text', 'punchy');
 
-    cy.get('[data-testid="prompt-version-compare-from"]').select('2');
+    cy.get('[data-testid="prompt-version-compare-from"]').click();
+    cy.get('[role="option"]').contains(/^Version 2$/).click();
     cy.get('[data-testid="text-diff-summary"]').should('have.text', 'Both versions have the same text.');
   });
 });

@@ -2,6 +2,8 @@ import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { chooseOption } from '@/test/choose-option';
 
 vi.mock('@/lib/i18n/provider', async () => {
   const { dictionaries } = await import('@/lib/i18n');
@@ -120,9 +122,10 @@ describe('PromptVersionHistory compare', () => {
   it('compares any two versions picked in the selects', async () => {
     renderHistory();
     fireEvent.click(await screen.findByTestId('prompt-version-compare-open'));
-    const from = await screen.findByTestId<HTMLSelectElement>('prompt-version-compare-from');
-    expect(Array.from(from.options).map((option) => option.textContent)).toEqual(['Version 3 (current)', 'Version 2', 'Version 1']);
-    fireEvent.change(from, { target: { value: '1' } });
+    const from = await screen.findByTestId('prompt-version-compare-from');
+    await userEvent.setup().click(from);
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual(['Version 3 (current)', 'Version 2', 'Version 1']);
+    await userEvent.setup().click(screen.getByRole('option', { name: 'Version 1' }));
     expect(await screen.findByText('Version 1 → version 3')).toBeInTheDocument();
     expect(await screen.findByTestId('text-diff-summary')).toHaveTextContent('+2 words, −1 words');
     expect(changes('removed')).toEqual(['short']);
@@ -131,7 +134,7 @@ describe('PromptVersionHistory compare', () => {
   it('says the texts are the same when one version is compared with itself', async () => {
     renderHistory();
     fireEvent.click(await screen.findByTestId('prompt-version-compare-open'));
-    fireEvent.change(await screen.findByTestId('prompt-version-compare-from'), { target: { value: '3' } });
+    await chooseOption(await screen.findByTestId('prompt-version-compare-from'), 'Version 3 (current)');
     expect(await screen.findByTestId('text-diff-summary')).toHaveTextContent('Both versions have the same text.');
     expect(changes('added')).toEqual([]);
   });

@@ -8,13 +8,7 @@ import { useSocialAccountsQuery } from '@/lib/social-accounts-queries';
 import { useI18n } from '@/lib/i18n/provider';
 import { PROVIDER_LABELS, accountOption, type AccountOption } from '@/lib/account-options';
 import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { SelectField } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { resolveSlotAccounts } from './post-card';
 import { PostRow } from './post-row';
@@ -161,59 +155,47 @@ export function PostFiltersBar({
     >
       <div className={LABEL_CLASS}>
         <span>{t('posts.filterProvider')}</span>
-        <Select
+        <SelectField
+          id="posts-filter-provider"
+          aria-label={t('posts.filterProvider')}
           value={filters.provider}
           disabled={inert}
           onValueChange={(value) => {
             const next = SOCIAL_PROVIDERS.find((item) => item === value) ?? 'all';
             filters.setProvider(next);
           }}
-        >
-          <SelectTrigger
-            aria-label={t('posts.filterProvider')}
-            className={cn(
-              TRIGGER_CLASS,
-              filters.provider !== 'all' && !unavailable && SELECT_ACTIVE_CLASS,
-              inert && SELECT_DISABLED_CLASS,
-              inert && SELECT_CHEVRON_HIDDEN_CLASS,
-            )}
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t('posts.allProviders')}</SelectItem>
-            {SOCIAL_PROVIDERS.map((item) => (
-              <SelectItem key={item} value={item}>
-                {PROVIDER_LABELS[item]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          options={[
+            { value: 'all', label: t('posts.allProviders') },
+            ...SOCIAL_PROVIDERS.map((item) => ({ value: item, label: PROVIDER_LABELS[item] })),
+          ]}
+          className={cn(
+            TRIGGER_CLASS,
+            filters.provider !== 'all' && !unavailable && SELECT_ACTIVE_CLASS,
+            inert && SELECT_DISABLED_CLASS,
+            inert && SELECT_CHEVRON_HIDDEN_CLASS,
+          )}
+        />
       </div>
       <div className={LABEL_CLASS}>
         <span>{t('posts.filterPersona')}</span>
-        <Select value={filters.persona} disabled={inert} onValueChange={(value) => filters.setPersona(value)}>
-          <SelectTrigger
-            aria-label={t('posts.filterPersona')}
-            className={cn(
-              TRIGGER_CLASS,
-              filters.persona !== 'all' && !unavailable && SELECT_ACTIVE_CLASS,
-              inert && SELECT_DISABLED_CLASS,
-              inert && SELECT_CHEVRON_HIDDEN_CLASS,
-            )}
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t('posts.allPersonas')}</SelectItem>
-            {filters.personas.map((item) => (
-              <SelectItem key={item.id} value={item.id}>
-                {item.name}
-              </SelectItem>
-            ))}
-            <SelectItem value={POSTS_NO_PERSONA}>{t('posts.noPersona')}</SelectItem>
-          </SelectContent>
-        </Select>
+        <SelectField
+          id="posts-filter-persona"
+          aria-label={t('posts.filterPersona')}
+          value={filters.persona}
+          disabled={inert}
+          onValueChange={filters.setPersona}
+          options={[
+            { value: 'all', label: t('posts.allPersonas') },
+            ...filters.personas.map((item) => ({ value: item.id, label: item.name })),
+            { value: POSTS_NO_PERSONA, label: t('posts.noPersona') },
+          ]}
+          className={cn(
+            TRIGGER_CLASS,
+            filters.persona !== 'all' && !unavailable && SELECT_ACTIVE_CLASS,
+            inert && SELECT_DISABLED_CLASS,
+            inert && SELECT_CHEVRON_HIDDEN_CLASS,
+          )}
+        />
       </div>
       {filters.hasActiveFilter && (
         <Button type="button" variant="ghost" className="col-span-2 h-10 gap-1.5 justify-self-start text-primary hover:bg-sunken hover:text-primary" onClick={filters.clear}>
