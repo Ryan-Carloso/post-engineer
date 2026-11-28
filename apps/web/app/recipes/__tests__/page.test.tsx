@@ -183,6 +183,17 @@ describe('/recipes prompts hub', () => {
     }
   });
 
+  it('scrolls to step 2 again when a second key is created', () => {
+    const scrollIntoView = vi.fn();
+    window.HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    renderHub(true);
+
+    fireEvent.click(screen.getByTestId('api-keys-section'));
+    fireEvent.click(screen.getByTestId('api-keys-section'));
+
+    expect(scrollIntoView).toHaveBeenCalledTimes(2);
+  });
+
   it('dims the steps after the setup prompt until it is copied, and keeps them usable', async () => {
     renderHub(true);
     for (const step of ['hub-step-3', 'hub-step-4']) {
