@@ -281,6 +281,18 @@ def main() -> int:
     }
     referenced_ids = set(re.findall(r"steps\.([A-Za-z0-9_-]+)\.", text))
     check(
+        "the default-agent fallback is detected from stderr only",
+        "grep -q 'Falling back to default agent' \"attempt-$i.stderr.txt\"; then" in text
+        and "grep -q 'Falling back to default agent' pass2-stderr.txt; then" in text
+        and "Falling back to default agent' \"attempt-$i.md\"" not in text
+        and "Falling back to default agent' pass2-raw.md" not in text,
+        "a review that quotes this workflow contains the phrase",
+    )
+    check(
+        "a bold Verdict line is normalized in both passes",
+        text.count("s/^\\*\\*Verdict: (APPROVE|REQUEST_CHANGES)\\*\\*[[:space:]]*$/Verdict: \\1/") == 2,
+    )
+    check(
         "an attempt without a Verdict line fails in both passes",
         text.count("grep -qE '^Verdict: (APPROVE|REQUEST_CHANGES)'") == 2
         and '"attempt-$i.md"; then' in text

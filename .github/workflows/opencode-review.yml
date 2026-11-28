@@ -12,7 +12,9 @@ name: opencode-review
 # - The review runs as the `reviewer` agent (`opencode run --agent reviewer`).
 #   That agent is `mode: primary`. A missing agent, or one whose mode is
 #   `subagent`, makes `opencode run` fall back to the default build agent
-#   ("Falling back to default agent"); that attempt is discarded.
+#   ("Falling back to default agent", read from stderr only: a review that
+#   quotes this workflow contains the phrase); that attempt is discarded.
+#   A bold **Verdict: ...** line is normalized to the plain form first.
 # - Project config and the root AGENTS.md are not loaded
 #   (OPENCODE_DISABLE_PROJECT_CONFIG=1). Providers and the short reviewer
 #   instructions live in a temp OPENCODE_CONFIG / OPENCODE_CONFIG_DIR so the
@@ -378,11 +380,12 @@ jobs:
             local rc
             rc=$(cat "attempt-$i.rc")
             echo "$model: exit $rc, $(wc -c < "attempt-$i.md") bytes of review output" >&2
-            if grep -q 'Falling back to default agent' "attempt-$i.md" "attempt-$i.stderr.txt"; then
+            if grep -q 'Falling back to default agent' "attempt-$i.stderr.txt"; then
               echo "OpenCode fell back to the default agent for $model; discarding this attempt." >&2
               return 1
             fi
             [ "$rc" -eq 0 ] && [ -s "attempt-$i.md" ] || return 1
+            sed -i -E 's/^\*\*Verdict: (APPROVE|REQUEST_CHANGES)\*\*[[:space:]]*$/Verdict: \1/' "attempt-$i.md"
             if ! grep -qE '^Verdict: (APPROVE|REQUEST_CHANGES)' "attempt-$i.md"; then
               echo "$model wrote no Verdict line; discarding this attempt." >&2
               return 1
@@ -551,7 +554,7 @@ jobs:
             "$(cat .github/review/verify-prompt.md)" < /dev/null > pass2-raw.md 2> pass2-stderr.txt
           rc=$?
           set -e
-          if grep -q 'Falling back to default agent' pass2-raw.md pass2-stderr.txt; then
+          if grep -q 'Falling back to default agent' pass2-stderr.txt; then
             echo "Pass 2 fell back to the default agent." >&2
             exit 1
           fi
@@ -560,6 +563,7 @@ jobs:
             tail -c 2000 pass2-stderr.txt >&2 || true
             exit 1
           fi
+          sed -i -E 's/^\*\*Verdict: (APPROVE|REQUEST_CHANGES)\*\*[[:space:]]*$/Verdict: \1/' pass2-raw.md
           if ! grep -qE '^Verdict: (APPROVE|REQUEST_CHANGES)' pass2-raw.md; then
             echo "Pass 2 wrote no Verdict line; keeping pass 1." >&2
             exit 1
