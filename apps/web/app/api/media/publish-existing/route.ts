@@ -230,7 +230,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         code: ERROR_CODES.INTERNAL_ERROR,
       });
     }
-    if (!hasGrantedAccounts(ledger)) return asapReplayResponse(input, userId, logId, ledger);
+    if (!hasGrantedAccounts(ledger)) return asapReplayResponse(input, userId, logId, ledger, reconnectWarning);
   }
 
   const verified = await verifyMedia(supabase, auth, input);

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import type { AccountNeedsReconnectWarning } from '@/lib/account-needs-reconnect';
 import { apiErrorResponse } from '@/lib/api-error';
 import { trackApiEvent } from '@/lib/analytics';
 import { logger } from '@/lib/logger';
@@ -90,6 +91,7 @@ function asapResponse(
   logId: string,
   publishes: ProviderPublish[],
   replayed: boolean,
+  reconnectWarning: AccountNeedsReconnectWarning | null,
 ): NextResponse {
   const derived = publishes.map((publish) => ({ ...publish, success: publish.results.some((result) => result.success) }));
   const success = derived.every((publish) => publish.success);
@@ -100,7 +102,15 @@ function asapResponse(
     success,
     replayed,
   });
-  return NextResponse.json({ success, mode: 'asap', mediaKind: input.media.kind, replayed, publishes: derived, logId });
+  return NextResponse.json({
+    success,
+    mode: 'asap',
+    mediaKind: input.media.kind,
+    replayed,
+    publishes: derived,
+    logId,
+    ...(reconnectWarning === null ? {} : { warnings: [reconnectWarning] }),
+  });
 }
 
 export function asapReplayResponse(
@@ -108,13 +118,14 @@ export function asapReplayResponse(
   userId: string,
   logId: string,
   ledger: AsapLedger,
+  reconnectWarning: AccountNeedsReconnectWarning | null = null,
 ): NextResponse {
   const publishes = [...ledger.partitions.entries()].map(([provider, partition]) => ({
     provider,
     success: false,
     results: mergePartitionResults(partition, []),
   }));
-  return asapResponse(input, userId, logId, publishes, true);
+  return asapResponse(input, userId, logId, publishes, true, reconnectWarning);
 }
 
 async function publishToProvider(
@@ -208,7 +219,7 @@ export async function publishHeldMedia(ctx: PublishExistingContext, ledger: Asap
 export async function publishExistingMediaAsap(ctx: PublishExistingContext, ledger: AsapLedger | null): Promise<NextResponse> {
   try {
     const publishes = await publishHeldMedia(ctx, ledger);
-    return asapResponse(ctx.input, ctx.userId, ctx.logId, publishes, false);
+    return asapResponse(ctx.input, ctx.userId, ctx.logId, publishes, false, ctx.reconnectWarning);
   } catch (error) {
     return mediaErrorResponse(error, ctx);
   }

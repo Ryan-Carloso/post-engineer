@@ -364,6 +364,7 @@ describe('POST /api/media/publish-existing', () => {
     const body = await response.json();
     expect(response.status).toBe(200);
     expect(body.success).toBe(true);
+    expect(body).not.toHaveProperty('warnings');
     expect(vi.mocked(dispatchPublish)).toHaveBeenCalledTimes(2);
     expect(vi.mocked(claimUploadForPublish)).toHaveBeenCalledTimes(1);
     expect(vi.mocked(claimUploadForPublish).mock.calls[0]?.[5]).toEqual(['youtube', 'instagram']);
@@ -611,6 +612,32 @@ describe('POST /api/media/publish-existing', () => {
       { code: 'account_needs_reconnect', accounts: [{ provider: 'youtube', accountId: 'UC1' }] },
     ]);
     expect(client.__insertedSchedules).toHaveLength(1);
+  });
+
+  it('publishes a dead account ASAP and returns account_needs_reconnect', async () => {
+    const client = fakeSupabase({
+      socialRows: [{ provider: 'youtube', provider_account_id: 'UC1', needs_reconnect: true }],
+    });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    mockUploadStore({ uploadRow: uploadRow() });
+
+    const response = await POST(
+      jsonRequest({
+        media: { kind: 'upload', uploadId: UPLOAD_ID },
+        title: 'Ready video',
+        description: 'Edited outside.',
+        publishing: { mode: 'asap', providers: ['youtube'], accounts: { youtube: ['UC1'] } },
+        tags: ['ready'],
+        privacyStatus: 'public',
+      }),
+    );
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.mode).toBe('asap');
+    expect(body.warnings).toEqual([
+      { code: 'account_needs_reconnect', accounts: [{ provider: 'youtube', accountId: 'UC1' }] },
+    ]);
   });
 
   it('schedules a ready upload, holding the row until the slot time', async () => {
