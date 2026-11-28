@@ -2,14 +2,12 @@
 
 import type { ReactNode } from 'react';
 import { useI18n } from '@/lib/i18n/provider';
-import { GITHUB_URL } from '@/lib/site-urls';
-import { whatsappUrl } from '@/lib/whatsapp';
+import { DISCORD_INVITE_URL, GITHUB_URL, whatsappUrl } from '@/lib/public-links';
 
 export const SUPPORT_EMAIL = 'madebyryandev@gmail.com';
 
 export function PricingContactCard(): ReactNode {
   const { t } = useI18n();
-  const whatsappHref = whatsappUrl(t('landing.pricingWhatsappBeta'));
   return (
     <div
       data-testid="pricing-contact"
@@ -23,17 +21,24 @@ export function PricingContactCard(): ReactNode {
           {t('landing.pricingContactText')}
         </p>
         <div className="mt-auto flex flex-col gap-3 pt-6 sm:flex-row sm:flex-wrap">
-          {whatsappHref && (
-            <a
-              href={whatsappHref}
-              target="_blank"
-              rel="noreferrer"
-              data-testid="pricing-whatsapp-cta"
-              className="inline-flex items-center justify-center rounded-xl bg-brand px-5 py-3 text-sm font-bold text-white hover:bg-brand-hover"
-            >
-              {t('landing.pricingWhatsappCta')} ↗
-            </a>
-          )}
+          <a
+            href={whatsappUrl(t('landing.pricingWhatsappBeta'))}
+            target="_blank"
+            rel="noreferrer"
+            data-testid="pricing-whatsapp-cta"
+            className="inline-flex items-center justify-center rounded-xl bg-brand px-5 py-3 text-sm font-bold text-white hover:bg-brand-hover"
+          >
+            {t('landing.pricingWhatsappCta')} ↗
+          </a>
+          <a
+            href={DISCORD_INVITE_URL}
+            target="_blank"
+            rel="noreferrer"
+            data-testid="pricing-discord-cta"
+            className="inline-flex items-center justify-center rounded-xl bg-brand px-5 py-3 text-sm font-bold text-white hover:bg-brand-hover"
+          >
+            {t('landing.pricingDiscordCta')} ↗
+          </a>
           <a
             href={`mailto:${SUPPORT_EMAIL}`}
             data-testid="pricing-email-cta"

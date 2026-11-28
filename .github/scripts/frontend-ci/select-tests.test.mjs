@@ -209,7 +209,7 @@ describe('WEB_VITEST_INCLUDE', () => {
   it('matches the include list in apps/web/vitest.config.ts', () => {
     const config = readFileSync(path.join(repoRoot, 'apps/web/vitest.config.ts'), 'utf8');
     assert.ok(
-      config.includes(`include: ['${WEB_VITEST_INCLUDE}']`),
+      config.includes(`const ALL_TESTS = '${WEB_VITEST_INCLUDE}';`) && config.includes('include: [ALL_TESTS]'),
       'vitest include drifted from WEB_VITEST_INCLUDE',
     );
   });

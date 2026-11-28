@@ -4,12 +4,7 @@ const isWord = (c) => c !== undefined && /[\w$]/.test(c);
 function removalSpans(comments) {
   const spans = new Map();
   for (const c of comments) {
-    if (c.directive) continue;
-    const wrapper = c.jsxWrapper;
-    const keepsDirective =
-      wrapper !== null &&
-      comments.some((o) => o.directive && o.start > wrapper[0] && o.end <= wrapper[1]);
-    const [start, end] = wrapper !== null && !keepsDirective ? wrapper : [c.start, c.end];
+    const [start, end] = c.jsxWrapper ?? [c.start, c.end];
     spans.set(start, { start, end });
   }
   return [...spans.values()].sort((a, b) => a.start - b.start);

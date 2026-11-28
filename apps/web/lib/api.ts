@@ -253,6 +253,7 @@ export {
   useApiKeysQuery,
   useCreateApiKeyMutation,
   useRevokeApiKeyMutation,
+  useUpdateApiKeyMutation,
 } from './api-keys-client';
 
 export { fetchScheduleStatus, mapSlot } from './schedule-status';

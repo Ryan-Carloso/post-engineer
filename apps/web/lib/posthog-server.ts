@@ -46,7 +46,7 @@ function loadSdk(): Promise<PostHogNodeClient | null> {
       const config = getConfig();
       if (!config) return null;
       try {
-        const { PostHog } = await import(/* webpackIgnore: true */ 'posthog-node');
+        const { PostHog } = await import('posthog-node');
         return new PostHog(config.key, {
           host: config.host,
         }) as unknown as PostHogNodeClient;

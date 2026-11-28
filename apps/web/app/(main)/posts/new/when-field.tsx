@@ -3,6 +3,7 @@
 import { useI18n } from '@/lib/i18n/provider';
 import { InlineFieldError } from '@/components/ui/form-field';
 import { INPUT_CLASS } from '@/lib/ui';
+import { SelectField } from '@/components/ui/select';
 import {
   SCHEDULE_MAX_AHEAD_DAYS,
   SCHEDULE_MIN_ADVANCE_HOURS,
@@ -85,19 +86,14 @@ export function WhenField({
             <label htmlFor="composer-timezone" className="block text-xs font-medium text-ink-soft">
               {t('composer.scheduleTimezoneLabel')}
             </label>
-            <select
+            <SelectField
               id="composer-timezone"
               value={timezone}
               disabled={disabled}
-              onChange={(event) => onTimezoneChange(event.target.value)}
-              className={INPUT_CLASS}
-            >
-              {zones.map((zone) => (
-                <option key={zone} value={zone}>
-                  {zone}
-                </option>
-              ))}
-            </select>
+              onValueChange={onTimezoneChange}
+              options={zones.map((zone) => ({ value: zone, label: zone }))}
+              className="mt-1.5"
+            />
           </div>
           <p className="text-[11px] text-muted-text">
             {t('composer.scheduleWindowHint', {

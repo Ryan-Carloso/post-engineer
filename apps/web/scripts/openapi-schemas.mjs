@@ -258,7 +258,7 @@ export const operationSchemas = {
       410: 'The video upload expired before publishing. Mint a new one.',
       413: 'The finished video is over the 2GB limit.',
       502: 'The video service is unavailable.',
-      402: 'TRIAL_EXPIRED: the free trial ended; publishing and scheduling are blocked.',
+      402: 'BETA_ACCESS_REQUIRED: the account has not joined the closed beta; publishing and scheduling are blocked.',
     },
   },
   ...metricsOperationSchemas({ success, object, anyObject, str }), ...videoOperationSchemas({ success, object, str }), ...promptOperationSchemas({ success, object, str }), ...shareLinkOperationSchemas({ success, object, str }), ...personaCardOperationSchemas({ success, object, str }),
@@ -304,6 +304,6 @@ export const operationSchemas = {
     description: 'Provider-specific form fields (video file, title, caption) are read by the provider handler; see the MCP publish_video (action: from_file) tool.',
     request: object({ provider: { type: 'string', enum: providers }, userId: str }, ['provider']),
     response: object({ success: { type: 'boolean' } }, ['success']),
-    extraResponses: { 402: 'TRIAL_EXPIRED: the free trial ended; publishing is blocked.' },
+    extraResponses: { 402: 'BETA_ACCESS_REQUIRED: the account has not joined the closed beta; publishing is blocked.' },
   },
 };

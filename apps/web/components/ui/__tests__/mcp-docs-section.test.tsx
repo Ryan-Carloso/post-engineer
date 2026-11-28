@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import McpDocsSection from '@/components/ui/mcp-docs-section';
 import { buildInstallPrompt } from '@/lib/mcp-install-prompt';
@@ -11,7 +11,8 @@ vi.mock('@/lib/i18n/provider', () => {
     'apiKeys.needHelp': 'Need help?',
     'apiKeys.installPromptTitle': 'Install prompt',
     'apiKeys.docsHelpMessage': 'I need help',
-    'apiKeys.copy': 'Copy',
+    'apiKeys.copyPrompt': 'Copy prompt',
+    'apiKeys.promptKeyNote': 'The prompt never carries your key.',
     'apiKeys.docsCopied': 'Copied!',
     'apiKeys.toolsTitle': 'Available tools',
     'apiKeys.toolsSubtitle': 'Tools your agent gets.',
@@ -28,13 +29,10 @@ vi.mock('@/lib/i18n/provider', () => {
   };
 });
 
-const KEY = 'pe_live_abcdef1234567890abcdef1234567890';
-
 describe('McpDocsSection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockLocale = 'en';
-    vi.stubEnv('NEXT_PUBLIC_WHATSAPP_NUMBER', '15551234567');
     Object.defineProperty(window.navigator, 'clipboard', {
       value: { writeText: vi.fn().mockResolvedValue(undefined) },
       writable: true,
@@ -47,20 +45,26 @@ describe('McpDocsSection', () => {
   });
 
   it('renders the install prompt, tools, security note, and help link', () => {
-    render(<McpDocsSection apiKey={null} />);
+    render(<McpDocsSection />);
 
     expect(screen.getByText('Install prompt')).toBeInTheDocument();
     expect(screen.getByText('Available tools')).toBeInTheDocument();
     expect(screen.getByText('Tools your agent gets.')).toBeInTheDocument();
     expect(screen.getByText('Keep your key secret.')).toBeInTheDocument();
-    expect(screen.getByTestId('copy-mcp-prompt-btn')).toHaveTextContent('Copy');
+    expect(screen.getByTestId('copy-mcp-prompt-btn')).toHaveTextContent('Copy prompt');
     const help = screen.getByRole('link', { name: 'Need help?' });
-    expect(help).toHaveAttribute('href', expect.stringContaining('https://wa.me/15551234567'));
+    expect(help).toHaveAttribute('href', expect.stringContaining('https://wa.me/351962248268'));
     expect(help).toHaveAttribute('href', expect.stringContaining('text=I%20need%20help'));
   });
 
+  it('always renders the help link', () => {
+    render(<McpDocsSection />);
+    expect(screen.getByTestId('mcp-docs-help-cta')).toHaveAttribute('href', expect.stringContaining('https://wa.me/351962248268'));
+    expect(screen.getByTestId('mcp-docs-help-cta')).toHaveAttribute('target', '_blank');
+  });
+
   it('keeps the tools grid collapsed by default so the prompt stays the focus', () => {
-    render(<McpDocsSection apiKey={null} />);
+    render(<McpDocsSection />);
     const tools = screen.getByTestId('mcp-tools');
     expect(tools.tagName).toBe('DETAILS');
     expect(tools).not.toHaveAttribute('open');
@@ -68,16 +72,8 @@ describe('McpDocsSection', () => {
     expect(within(tools).getByText('Available tools').closest('summary')).not.toBeNull();
   });
 
-  it('hides the WhatsApp help link when the support number is not configured', () => {
-    vi.stubEnv('NEXT_PUBLIC_WHATSAPP_NUMBER', undefined);
-    render(<McpDocsSection apiKey={null} />);
-
-    expect(screen.getByText('Install prompt')).toBeInTheDocument();
-    expect(screen.queryByTestId('mcp-docs-help-cta')).toBeNull();
-  });
-
   it('renders the tools grid with the 10 intent tools and the actions of each', () => {
-    render(<McpDocsSection apiKey={null} />);
+    render(<McpDocsSection />);
 
     const grid = screen.getByTestId('mcp-tools-grid');
     expect(grid).toBeInTheDocument();
@@ -130,8 +126,8 @@ describe('McpDocsSection', () => {
   it('shows and copies the localized prompt with the placeholder when there is no key', async () => {
     for (const locale of ['en', 'pt'] as const) {
       mockLocale = locale;
-      const { unmount } = render(<McpDocsSection apiKey={null} />);
-      const expected = buildInstallPrompt(locale, null);
+      const { unmount } = render(<McpDocsSection />);
+      const expected = buildInstallPrompt(locale);
       expect(screen.getByTestId('mcp-install-prompt').textContent).toBe(expected);
 
       fireEvent.click(screen.getByTestId('copy-mcp-prompt-btn'));
@@ -141,21 +137,37 @@ describe('McpDocsSection', () => {
     }
   });
 
-  it('shows and copies the prompt with a created key filled in', async () => {
-    render(<McpDocsSection apiKey={KEY} />);
-    const expected = buildInstallPrompt('en', KEY);
-    expect(expected).toContain(KEY);
-    expect(screen.getByTestId('mcp-install-prompt').textContent).toBe(expected);
+  it('shows the key note and never embeds a key in the prompt', () => {
+    render(<McpDocsSection />);
+    expect(screen.getByTestId('mcp-prompt-key-note')).toHaveTextContent('The prompt never carries your key.');
+    expect(screen.getByTestId('mcp-install-prompt').textContent).not.toContain('pe_live_');
+    expect(screen.getByTestId('mcp-install-prompt').textContent).toContain('<MY_API_KEY>');
+  });
 
+  it('reports the copy to the page only after the clipboard write succeeds', async () => {
+    const onPromptCopied = vi.fn();
+    render(<McpDocsSection onPromptCopied={onPromptCopied} />);
+    expect(onPromptCopied).not.toHaveBeenCalled();
     fireEvent.click(screen.getByTestId('copy-mcp-prompt-btn'));
-    expect(window.navigator.clipboard.writeText).toHaveBeenCalledExactlyOnceWith(expected);
     expect(await screen.findByText('Copied!')).toBeInTheDocument();
+    expect(onPromptCopied).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not report a copy when the clipboard write is rejected', async () => {
+    const onPromptCopied = vi.fn();
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.mocked(window.navigator.clipboard.writeText).mockRejectedValueOnce(new Error('denied'));
+    render(<McpDocsSection onPromptCopied={onPromptCopied} />);
+    fireEvent.click(screen.getByTestId('copy-mcp-prompt-btn'));
+    await waitFor(() => expect(error).toHaveBeenCalled());
+    expect(onPromptCopied).not.toHaveBeenCalled();
+    error.mockRestore();
   });
 
   it('resets the copy button label after the confirmation timeout', async () => {
     vi.useFakeTimers();
     try {
-      render(<McpDocsSection apiKey={null} />);
+      render(<McpDocsSection />);
 
       await act(async () => {
         fireEvent.click(screen.getByTestId('copy-mcp-prompt-btn'));
@@ -165,7 +177,7 @@ describe('McpDocsSection', () => {
       act(() => {
         vi.advanceTimersByTime(2500);
       });
-      expect(screen.getByTestId('copy-mcp-prompt-btn')).toHaveTextContent('Copy');
+      expect(screen.getByTestId('copy-mcp-prompt-btn')).toHaveTextContent('Copy prompt');
     } finally {
       vi.useRealTimers();
     }

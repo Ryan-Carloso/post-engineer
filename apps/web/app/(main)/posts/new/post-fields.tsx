@@ -9,6 +9,7 @@ import { useI18n } from '@/lib/i18n/provider';
 import type { TranslationKey } from '@/lib/i18n';
 import { InlineFieldError } from '@/components/ui/form-field';
 import { INPUT_CLASS } from '@/lib/ui';
+import { SelectField } from '@/components/ui/select';
 import {
   DESCRIPTION_MAX_LENGTH,
   TITLE_MAX_LENGTH,
@@ -150,21 +151,17 @@ export function PostFields({
               <label htmlFor="composer-privacy" className="block text-xs font-medium text-ink-soft">
                 {t('composer.privacyLabel')}
               </label>
-              <select
+              <SelectField
                 id="composer-privacy"
                 value={draft.privacyStatus}
                 disabled={disabled}
-                onChange={(event) =>
-                  onChange({ privacyStatus: event.target.value as ComposerPrivacy })
-                }
-                className={INPUT_CLASS}
-              >
-                {PRIVACY_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {t(option.key)}
-                  </option>
-                ))}
-              </select>
+                onValueChange={(next) => {
+                  const option = PRIVACY_OPTIONS.find((candidate) => candidate.value === next);
+                  if (option !== undefined) onChange({ privacyStatus: option.value });
+                }}
+                options={PRIVACY_OPTIONS.map((option) => ({ value: option.value, label: t(option.key) }))}
+                className="mt-1.5"
+              />
             </div>
           </div>
         ) : null}
@@ -174,22 +171,15 @@ export function PostFields({
             <label htmlFor="composer-board" className="block text-xs font-medium text-ink-soft">
               {t('composer.boardLabel')}
             </label>
-            <select
+            <SelectField
               id="composer-board"
-              value={draft.pinterestBoardId}
+              value={draft.pinterestBoardId === '' ? null : draft.pinterestBoardId}
               disabled={disabled || boardsLoading || boardsError}
-              onChange={(event) => onBoardChange(event.target.value)}
-              className={INPUT_CLASS}
-            >
-              <option value="" disabled>
-                {boardsLoading ? t('composer.boardLoading') : t('composer.boardSelect')}
-              </option>
-              {boards.map((board) => (
-                <option key={board.id} value={board.id}>
-                  {board.name}
-                </option>
-              ))}
-            </select>
+              placeholder={boardsLoading ? t('composer.boardLoading') : t('composer.boardSelect')}
+              onValueChange={onBoardChange}
+              options={boards.map((board) => ({ value: board.id, label: board.name }))}
+              className="mt-1.5"
+            />
             <p className="mt-1 text-[11px] text-muted-text">{t('composer.boardHint')}</p>
             {boardsError ? <InlineFieldError message={t('composer.boardError')} /> : null}
             {issueFor('board') !== null && <InlineFieldError message={issueFor('board') ?? ''} />}

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Build pr-context.md for the OpenCode reviewer.
 
 The review used to give the model only the PR title and the diff. It never

@@ -3,7 +3,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { NextResponse } from 'next/server';
 import { apiErrorResponse } from '@/lib/api-error';
-import { CONTACT_WHATSAPP_URL } from '@/lib/contact';
+import { DISCORD_INVITE_URL, whatsappUrl } from '@/lib/public-links';
 import { ERROR_CODES, errorMessage, type ErrorCode } from '@/lib/error-codes';
 import { logger } from '@/lib/logger';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
@@ -36,7 +36,7 @@ async function readAccessWindow(supabase: SupabaseClient<Database>, userId: stri
 }
 
 function blockedCode(reason: AccessReason): ErrorCode {
-  return reason === 'trial' ? ERROR_CODES.TRIAL_EXPIRED : ERROR_CODES.SUBSCRIPTION_INACTIVE;
+  return reason === 'beta' ? ERROR_CODES.BETA_ACCESS_REQUIRED : ERROR_CODES.SUBSCRIPTION_INACTIVE;
 }
 
 export async function assertAccessActive(
@@ -62,6 +62,6 @@ export async function assertAccessActive(
   return apiErrorResponse(402, errorMessage(code), {
     route: options.route,
     code,
-    extra: { contactUrl: CONTACT_WHATSAPP_URL, accessEndedAt: window.accessUntil, reason: status.reason },
+    extra: { contactUrl: code === ERROR_CODES.BETA_ACCESS_REQUIRED ? DISCORD_INVITE_URL : whatsappUrl(), accessEndedAt: window.accessUntil, reason: status.reason },
   });
 }

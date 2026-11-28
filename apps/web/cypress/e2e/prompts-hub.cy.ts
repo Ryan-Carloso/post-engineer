@@ -46,7 +46,7 @@ describe('Prompts hub', () => {
     cy.get('[data-testid="recipes-sign-in-cta"]')
       .should('be.visible')
       .and('have.attr', 'href', '/login?next=/recipes');
-    cy.get('[data-testid="generate-api-key-btn"]').should('not.exist');
+    cy.get('[data-testid="create-api-key-form"]').should('not.exist');
     cy.get('[data-testid="mcp-install-prompt"]')
       .scrollIntoView()
       .should('contain', '<MY_API_KEY>');

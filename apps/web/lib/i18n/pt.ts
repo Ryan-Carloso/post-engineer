@@ -1,3 +1,4 @@
+import { apiKeysI18nPt } from './api-keys-i18n-pt';
 import { mcpToolDescPt } from './mcp-tools-i18n-pt';
 import { accountI18nPt } from './account-i18n-pt';
 import { accountsI18nPt } from './accounts-i18n-pt';
@@ -120,17 +121,12 @@ export const ptDictionary = {
   apiKeys: {
     title: 'API Keys',
     subtitle: 'Gere chaves de API para integrar agentes de IA, OpenCode CLI e servidores MCP à sua conta.',
-    generateButton: '+ Gerar nova API Key',
-    nameLabel: 'Nome da chave',
-    namePlaceholder: 'ex: MCP Server, Agente Local',
     createSuccess: 'Chave criada com sucesso!',
     warningCopyOnce: 'Copie a chave agora. Por segurança, você não poderá vê-la novamente.',
     copied: 'Copiado!',
     copyKey: 'Copiar chave',
-    noKeys: 'Nenhuma chave de API gerada ainda.',
     emptyTitle: 'Nenhuma API key ainda',
     emptyDesc: 'Gere sua primeira chave para conectar agentes de IA e servidores MCP à sua conta.',
-    emptyCta: 'Gerar API key',
     lastUsed: 'Último uso: {date}',
     neverUsed: 'Nunca usada',
     revoked: 'Revogada',
@@ -158,10 +154,10 @@ export const ptDictionary = {
     needHelp: 'Precisa de ajuda?',
     docsHelpMessage: 'Olá! Preciso de ajuda para conectar meu agente de IA ao Post Engineer via MCP.',
     installPromptTitle: 'Prompt de instalação',
-    copy: 'Copiar',
     toolsTitle: 'Tools disponíveis',
     toolsSubtitle: 'Estas são as tools que seu agente de IA recebe acesso após conectar.',
     ...mcpToolDescPt,
+    ...apiKeysI18nPt,
   },
   persona: {
     title: 'Criar persona',
@@ -246,7 +242,7 @@ export const ptDictionary = {
     check2: 'Agendamento automático',
     check3: 'Publicação nas redes',
     cta: 'Começar agora',
-    noCard: 'Teste grátis de 7 dias · Sem cartão de crédito',
+    noCard: 'Grátis durante o beta · Sem cartão de crédito',
     statsVideos: 'Vídeos publicados',
     statsViews: 'Visualizações',
     statsEngagement: 'Engajamento',
@@ -272,9 +268,9 @@ export const ptDictionary = {
     featureScheduleHint: 'Escolha os horários e o Post Engineer publica sozinho.',
     featureGrow: 'Consistência que cresce',
     featureGrowHint: 'Conteúdo frequente para você alcançar mais pessoas e crescer seu canal.',
-    pricingBadge: 'Teste grátis',
-    pricingTitle: 'Comece com 7 dias grátis',
-    pricingSubtitle: 'Toda conta começa com 7 dias grátis. Quando o teste terminar, fale com a gente no WhatsApp ou por e-mail para continuar agendando e publicando.',
+    pricingBadge: 'Beta fechado, grátis',
+    pricingTitle: 'Beta fechado grátis para os 30 primeiros usuários',
+    pricingSubtitle: 'Publicar é grátis durante o beta. Entre pelo Discord.',
     planStarterFeature1: '30 vídeos por mês',
     planStarterFeature2: 'Até 3 canais (YouTube, Instagram, etc.)',
     planStarterFeature3: 'Todas as ferramentas de IA',
@@ -289,12 +285,12 @@ export const ptDictionary = {
     faq1Q: 'O Post Engineer faz os vídeos?',
     faq1A: 'Não. Você faz seus vídeos e imagens com a ferramenta que preferir. O Post Engineer envia, agenda e publica, e mede como cada post se saiu.',
     faq2Q: 'O Post Engineer já foi lançado?',
-    faq2A: 'Ainda estamos em beta: toda conta ganha um teste grátis de 7 dias. Depois disso, fale com a gente no WhatsApp ou por e-mail para continuar.',
+    faq2A: 'Estamos em um beta fechado com 30 vagas grátis. Entre no Discord para pedir acesso: as contas liberadas publicam de graça, até 100 posts por mês durante o beta.',
     faq4Q: 'Quais plataformas são suportadas?',
     faq4A: 'YouTube, Instagram, LinkedIn, Threads, Páginas do Facebook, Bluesky, Pinterest, Telegram, 3Speak, Rumble e Fanvue.',
     ctaFinalTitle: 'Seu próximo post pode estar no ar amanhã.',
     ctaFinalSubtitle: 'Junte-se a criadores que já agendam seu conteúdo com o Post Engineer.',
-    ctaFinalNote: 'Teste grátis de 7 dias · Sem cartão de crédito',
+    ctaFinalNote: 'Grátis durante o beta · Sem cartão de crédito',
   },
 
   footer: {

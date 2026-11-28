@@ -46,6 +46,7 @@ vi.mock('@/lib/post-composer/request', async (importOriginal) => {
 
 import { PostComposer } from '../post-composer';
 import NewPostPage from '../page';
+import { chooseOption } from '@/test/choose-option';
 import { usePersonaListQuery, useSocialAccountsQuery } from '@/lib/api';
 import { I18nProvider } from '@/lib/i18n/provider';
 import { ComposerRequestError, publishExisting, uploadMediaFile } from '@/lib/post-composer/request';
@@ -251,7 +252,7 @@ describe('PostComposer', () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['schedules'] });
   });
 
-  it('preselects the accounts bound to the chosen persona', () => {
+  it('preselects the accounts bound to the chosen persona', async () => {
     const bound = emptyPersonaDefaultAccounts();
     bound.youtube = ['ch-1'];
     vi.mocked(usePersonaListQuery).mockReturnValue({
@@ -259,9 +260,7 @@ describe('PostComposer', () => {
       isLoading: false,
     } as never);
     render(<PostComposer />, { wrapper: wrapper() });
-    fireEvent.change(screen.getByLabelText('composer.personaLabel'), {
-      target: { value: 'persona-1' },
-    });
+    await chooseOption('composer.personaLabel', 'Ana');
     expect(screen.getByTestId('account-card-select')).toBeChecked();
   });
 
@@ -554,21 +553,19 @@ describe('PostComposer', () => {
     expect(await screen.findByText('composer.successAsapTitle')).toBeInTheDocument();
   });
 
-  it('shows the persona empty state for a persona without bound accounts', () => {
+  it('shows the persona empty state for a persona without bound accounts', async () => {
     vi.mocked(usePersonaListQuery).mockReturnValue({
       data: [{ id: 'persona-1', name: 'Ana', createdAt: '2026-01-01T00:00:00Z', aiLabel: false }],
       isLoading: false,
     } as never);
     render(<PostComposer />, { wrapper: wrapper() });
-    fireEvent.change(screen.getByLabelText('composer.personaLabel'), {
-      target: { value: 'persona-1' },
-    });
+    await chooseOption('composer.personaLabel', 'Ana');
     expect(screen.getByText('composer.accountsBoundEmptyTitle')).toBeInTheDocument();
     expect(screen.getByText('composer.personaNoBound')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'composer.accountsEmptyAction' })).not.toBeInTheDocument();
   });
 
-  it('shows the connect action when the persona has no bound accounts and nothing is connected', () => {
+  it('shows the connect action when the persona has no bound accounts and nothing is connected', async () => {
     vi.mocked(useSocialAccountsQuery).mockReturnValue({
       data: { authenticated: true, accounts: [] },
       isLoading: false,
@@ -579,9 +576,7 @@ describe('PostComposer', () => {
       isLoading: false,
     } as never);
     render(<PostComposer />, { wrapper: wrapper() });
-    fireEvent.change(screen.getByLabelText('composer.personaLabel'), {
-      target: { value: 'persona-1' },
-    });
+    await chooseOption('composer.personaLabel', 'Ana');
     expect(screen.getByText('composer.accountsEmptyTitle')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'composer.accountsEmptyAction' })).toHaveAttribute(
       'href',
@@ -589,7 +584,7 @@ describe('PostComposer', () => {
     );
   });
 
-  it('names the image reason when the persona is bound only to video accounts', () => {
+  it('names the image reason when the persona is bound only to video accounts', async () => {
     const bound = emptyPersonaDefaultAccounts();
     bound.youtube = ['ch-1'];
     vi.mocked(usePersonaListQuery).mockReturnValue({
@@ -597,9 +592,7 @@ describe('PostComposer', () => {
       isLoading: false,
     } as never);
     render(<PostComposer />, { wrapper: wrapper() });
-    fireEvent.change(screen.getByLabelText('composer.personaLabel'), {
-      target: { value: 'persona-1' },
-    });
+    await chooseOption('composer.personaLabel', 'Ana');
     expect(screen.getByTestId('account-card-select')).toBeChecked();
     const file = new File(['bytes'], 'photo.png', { type: 'image/png' });
     fireEvent.change(screen.getByTestId('composer-file-input'), { target: { files: [file] } });
@@ -611,7 +604,7 @@ describe('PostComposer', () => {
     expect(screen.queryByText('composer.accountsBoundEmptyTitle')).not.toBeInTheDocument();
   });
 
-  it('names the disconnected reason when the persona is bound to accounts that are not connected', () => {
+  it('names the disconnected reason when the persona is bound to accounts that are not connected', async () => {
     vi.mocked(useSocialAccountsQuery).mockReturnValue({
       data: { authenticated: true, accounts: [INSTAGRAM_ACCOUNT] },
       isLoading: false,
@@ -624,9 +617,7 @@ describe('PostComposer', () => {
       isLoading: false,
     } as never);
     render(<PostComposer />, { wrapper: wrapper() });
-    fireEvent.change(screen.getByLabelText('composer.personaLabel'), {
-      target: { value: 'persona-1' },
-    });
+    await chooseOption('composer.personaLabel', 'Ana');
     chooseVideo();
     expect(screen.getByText('composer.accountsDisconnectedEmptyTitle')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'composer.accountsEmptyAction' })).toHaveAttribute(
@@ -656,9 +647,7 @@ describe('PostComposer', () => {
       isLoading: false,
     } as never);
     render(<PostComposer />, { wrapper: wrapper() });
-    fireEvent.change(screen.getByLabelText('composer.personaLabel'), {
-      target: { value: 'persona-1' },
-    });
+    await chooseOption('composer.personaLabel', 'Ana');
     chooseVideo();
     expect(screen.getByTestId('account-card-select')).toBeChecked();
     fireEvent.click(screen.getByRole('radio', { name: 'composer.modeAsap' }));
@@ -671,7 +660,7 @@ describe('PostComposer', () => {
     expect(plan.accounts).toEqual({ youtube: ['ch-1'] });
   });
 
-  it('shows the accounts error instead of submitting a persona bound only to disconnected accounts', () => {
+  it('shows the accounts error instead of submitting a persona bound only to disconnected accounts', async () => {
     const bound = emptyPersonaDefaultAccounts();
     bound.youtube = ['ch-2'];
     vi.mocked(usePersonaListQuery).mockReturnValue({
@@ -679,9 +668,7 @@ describe('PostComposer', () => {
       isLoading: false,
     } as never);
     render(<PostComposer />, { wrapper: wrapper() });
-    fireEvent.change(screen.getByLabelText('composer.personaLabel'), {
-      target: { value: 'persona-1' },
-    });
+    await chooseOption('composer.personaLabel', 'Ana');
     chooseVideo();
     fillText();
     fireEvent.click(screen.getByTestId('composer-submit'));
@@ -690,7 +677,7 @@ describe('PostComposer', () => {
     expect(publishExisting).not.toHaveBeenCalled();
   });
 
-  it('shows the persona empty state when the chosen persona disappears from the list', () => {
+  it('shows the persona empty state when the chosen persona disappears from the list', async () => {
     const bound = emptyPersonaDefaultAccounts();
     bound.youtube = ['ch-1'];
     vi.mocked(usePersonaListQuery).mockReturnValue({
@@ -699,16 +686,14 @@ describe('PostComposer', () => {
     } as never);
     const wrap = wrapper();
     const { rerender } = render(<PostComposer />, { wrapper: wrap });
-    fireEvent.change(screen.getByLabelText('composer.personaLabel'), {
-      target: { value: 'persona-1' },
-    });
+    await chooseOption('composer.personaLabel', 'Ana');
     expect(screen.getByTestId('account-card-select')).toBeChecked();
     vi.mocked(usePersonaListQuery).mockReturnValue({ data: [], isLoading: false } as never);
     rerender(<PostComposer />);
     expect(screen.getByText('composer.accountsBoundEmptyTitle')).toBeInTheDocument();
   });
 
-  it('clears a stale pinterest board when the boards list no longer has it', () => {
+  it('clears a stale pinterest board when the boards list no longer has it', async () => {
     vi.mocked(useSocialAccountsQuery).mockReturnValue({
       data: { authenticated: true, accounts: [YOUTUBE_ACCOUNT, PINTEREST_ACCOUNT] },
       isLoading: false,
@@ -723,29 +708,27 @@ describe('PostComposer', () => {
     const { rerender } = render(<PostComposer />, { wrapper: wrap });
     const selects = screen.getAllByTestId('account-card-select');
     fireEvent.click(selects[1]);
-    fireEvent.change(screen.getByLabelText('composer.boardLabel'), { target: { value: 'board-1' } });
-    expect(screen.getByLabelText('composer.boardLabel')).toHaveValue('board-1');
+    await chooseOption('composer.boardLabel', 'Board One');
+    expect(screen.getByLabelText('composer.boardLabel')).toHaveTextContent('Board One');
     vi.mocked(usePinterestBoardsQuery).mockReturnValue({
       data: [],
       isLoading: false,
       isError: false,
     } as never);
     rerender(<PostComposer />);
-    expect(screen.getByLabelText('composer.boardLabel')).toHaveValue('');
+    expect(screen.getByLabelText('composer.boardLabel')).toHaveTextContent('composer.boardSelect');
   });
 
-  it('updates the publish time when the timezone changes', () => {
+  it('updates the publish time when the timezone changes', async () => {
     render(<PostComposer />, { wrapper: wrapper() });
     const publishAt = screen.getByLabelText('composer.scheduleAtLabel') as HTMLInputElement;
     const before = publishAt.value;
-    fireEvent.change(screen.getByLabelText('composer.scheduleTimezoneLabel'), {
-      target: { value: 'America/Sao_Paulo' },
-    });
-    expect(screen.getByLabelText('composer.scheduleTimezoneLabel')).toHaveValue('America/Sao_Paulo');
+    await chooseOption('composer.scheduleTimezoneLabel', 'America/Sao_Paulo');
+    expect(screen.getByLabelText('composer.scheduleTimezoneLabel')).toHaveTextContent('America/Sao_Paulo');
     expect((screen.getByLabelText('composer.scheduleAtLabel') as HTMLInputElement).value).not.toBe(before);
   });
 
-  it('updates the publish time when the datetime changes', () => {
+  it('updates the publish time when the datetime changes', async () => {
     render(<PostComposer />, { wrapper: wrapper() });
     fireEvent.change(screen.getByLabelText('composer.scheduleAtLabel'), {
       target: { value: '2026-12-05T18:30' },
@@ -753,10 +736,8 @@ describe('PostComposer', () => {
     expect((screen.getByLabelText('composer.scheduleAtLabel') as HTMLInputElement).value).toBe(
       '2026-12-05T18:30',
     );
-    fireEvent.change(screen.getByLabelText('composer.scheduleTimezoneLabel'), {
-      target: { value: 'UTC' },
-    });
-    expect(screen.getByLabelText('composer.scheduleTimezoneLabel')).toHaveValue('UTC');
+    await chooseOption('composer.scheduleTimezoneLabel', 'UTC');
+    expect(screen.getByLabelText('composer.scheduleTimezoneLabel')).toHaveTextContent('UTC');
     expect((screen.getByLabelText('composer.scheduleAtLabel') as HTMLInputElement).value).toBe(
       '2026-12-05T18:30',
     );

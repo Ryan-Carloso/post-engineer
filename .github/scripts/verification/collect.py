@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Build the verification evidence payload for one diff.
 
 Reads git objects only. Prints finding counts, never file bodies.

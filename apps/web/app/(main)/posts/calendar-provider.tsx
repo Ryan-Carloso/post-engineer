@@ -105,16 +105,19 @@ export function PostsCalendar({
     [router],
   );
 
-  const handleGridClick = useCallback(
-    (event: ReactMouseEvent<HTMLDivElement>) => {
+  useEffect(() => {
+    const el = monthRef.current;
+    if (el === null) return;
+    const selectClickedDay = (event: MouseEvent) => {
       if (muted) return;
-      const target = event.target as HTMLElement;
-      if (target.closest('[data-event-id]')) return;
-      const key = target.closest<HTMLElement>('[data-date]')?.dataset.date;
+      if (!(event.target instanceof Element)) return;
+      if (event.target.closest('[data-event-id]')) return;
+      const key = event.target.closest<HTMLElement>('[data-date]')?.dataset.date;
       if (key) onSelectDay(key);
-    },
-    [muted, onSelectDay],
-  );
+    };
+    el.addEventListener('click', selectClickedDay);
+    return () => el.removeEventListener('click', selectClickedDay);
+  }, [view, muted, onSelectDay]);
 
   const handleEventPointerDownCapture = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     const eventId = (event.target as HTMLElement).closest('[data-event-id]')?.getAttribute('data-event-id') ?? null;
@@ -297,14 +300,12 @@ export function PostsCalendar({
           </>
         ) : (
           <>
-            {/* oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions */}
             <div
               ref={monthRef}
               data-posts-calendar-month
               role="group"
               aria-label={captionLabel}
               className="h-150"
-              onClick={handleGridClick}
               onPointerDownCapture={handleEventPointerDownCapture}
               onClickCapture={handleGridClickCapture}
               onContextMenuCapture={handleEventContextMenuCapture}

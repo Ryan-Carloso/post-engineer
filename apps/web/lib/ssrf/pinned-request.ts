@@ -53,7 +53,6 @@ export function requestPinned(
   const transport = parsed.protocol === 'https:' ? https : http;
   const method = options.method ?? 'GET';
   return new Promise((resolve, reject) => {
-    // codeql[js/request-forgery]
     const req = transport.request(
       parsed,
       {

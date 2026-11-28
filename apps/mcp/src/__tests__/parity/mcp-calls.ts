@@ -1,33 +1,8 @@
 import ts from 'typescript';
 import { calleeName, parseSource, staticText, walk } from './ts-source.js';
 
-//---------------
-// MCP request sites — which web endpoint (method + path) each MCP tool
-// actually calls, read from the MCP sources.
-//
-// Web calls in the MCP go through `<client>.request(path, { method }, …)`,
-// or a raw `fetch(`${client.baseUrl}${path}`, { method })` for binary bodies.
-// A tool reaches an endpoint when its server.tool(...) registration calls,
-// directly or through named functions/methods of apps/mcp/src, a request
-// site with that method and path. This is what makes an ENDPOINT_TOOLS
-// mapping (or an exclusion pointing at a mapped endpoint) a checked claim
-// instead of a label: mapping GET /api/metrics to list_personas fails.
-//
-// Resolution is by name: a plain call `foo()` resolves to top-level
-// functions named foo, a property call `x.foo()` to class methods named foo.
-//
-// Action tools (issue #566): a tool whose callback is `byAction({ list:
-// handleList, create: async (c) => c.createX() })` has one handler per
-// action. Each action is walked on its own, so a mapping can name the action
-// that reaches an endpoint; the tool's own sites are the union of its actions.
-// The `byAction` object literal is the only form the gate reads: an action
-// tool registered any other way has no provable actions, and a mapping that
-// names one fails closed.
-//---------------
-
 export interface RequestSite {
   method: string;
-  /** Path with each `${…}` as `{}` and the query string removed. */
   path: string;
 }
 
@@ -39,15 +14,11 @@ interface Unit {
 }
 
 export interface McpCallGraph {
-  /** Registered tool name → the request sites it reaches (all actions, for an action tool). */
   toolSites: Map<string, RequestSite[]>;
-  /** Action tool name → action name → the request sites that action's handler reaches. */
   toolActions: Map<string, Map<string, RequestSite[]>>;
-  /** Tool names in registration order. */
   tools: string[];
 }
 
-/** `const name = <literal>` declared in the function enclosing `from`. */
 function localLiteral(from: ts.Node, name: string): string | null {
   let scope: ts.Node | undefined = from.parent;
   while (scope !== undefined && !ts.isFunctionLike(scope)) scope = scope.parent;
@@ -67,11 +38,6 @@ function localLiteral(from: ts.Node, name: string): string | null {
   return found;
 }
 
-/**
- * Normalizes a request path: drops the query string, and a trailing `{}`
- * glued to a non-slash character (`/api/x${query}`), which is a query
- * suffix, not a path segment.
- */
 export function normalizePath(raw: string): string {
   const query = raw.indexOf('?');
   let path = query === -1 ? raw : raw.slice(0, query);
@@ -81,10 +47,6 @@ export function normalizePath(raw: string): string {
   return path;
 }
 
-/**
- * The path of a raw `fetch(`${<x>.baseUrl}…`, …)` call: the text after the
- * base-URL span, where a lone `${name}` resolves to a local const.
- */
 function fetchPath(call: ts.CallExpression): string | null {
   const url = call.arguments[0];
   if (!ts.isTemplateExpression(url) || url.head.text !== '') return null;
@@ -134,12 +96,6 @@ function unitOf(node: ts.Node): Unit {
   return unit;
 }
 
-/**
- * The per-action handlers of a `byAction({ name: handler, … })` callback, or
- * null when the callback is anything else. A handler is an arrow/function
- * expression, a method, or an identifier (plain or shorthand) naming a
- * top-level function.
- */
 function actionHandlers(callback: ts.Expression): Array<{ action: string; node: ts.Node }> | null {
   if (!ts.isCallExpression(callback) || !ts.isIdentifier(callback.expression) || callback.expression.text !== 'byAction') return null;
   const map = callback.arguments[0];
@@ -197,7 +153,6 @@ export function buildMcpCallGraph(files: ReadonlyArray<{ file: string; text: str
     });
   }
 
-  /** Request sites reachable from `node`, following named calls across apps/mcp/src. */
   const sitesFrom = (node: ts.Node): RequestSite[] => {
     const seen = new Set<Unit>();
     const queue: Unit[] = [unitOf(node)];
@@ -219,7 +174,6 @@ export function buildMcpCallGraph(files: ReadonlyArray<{ file: string; text: str
   for (const { tool, actions } of actionRegistrations) {
     const bySite = new Map<string, RequestSite[]>();
     for (const { action, node } of actions) {
-      // A handler named by identifier resolves like a call: every top-level function with that name.
       const sites = ts.isIdentifier(node)
         ? (functions.get(node.text) ?? []).flatMap((unit) => sitesFrom(unit.node))
         : sitesFrom(node);
@@ -231,7 +185,6 @@ export function buildMcpCallGraph(files: ReadonlyArray<{ file: string; text: str
   return { toolSites, toolActions, tools: [...registrations.map((r) => r.tool), ...actionRegistrations.map((r) => r.tool)] };
 }
 
-/** `GET /api/posts/[id]` → `{ method: 'GET', path: '/api/posts/{}' }`. */
 export function endpointSite(key: string): RequestSite {
   const [method, ...rest] = key.split(' ');
   const path = rest
@@ -249,7 +202,6 @@ export function toolCallsEndpoint(graph: McpCallGraph, tool: string, key: string
   );
 }
 
-/** Whether the handler of `action` on `tool` reaches the endpoint (same method and path). */
 export function toolActionCallsEndpoint(graph: McpCallGraph, tool: string, action: string, key: string): boolean {
   const wanted = endpointSite(key);
   return (graph.toolActions.get(tool)?.get(action) ?? []).some(

@@ -1,34 +1,15 @@
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-window.HTMLElement.prototype.scrollIntoView = vi.fn();
-window.HTMLElement.prototype.hasPointerCapture = () => false;
-window.HTMLElement.prototype.setPointerCapture = () => {};
-window.HTMLElement.prototype.releasePointerCapture = () => {};
+import { SelectField } from '../select';
 
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../select';
-
-function renderSelect(position?: 'popper' | 'item-aligned'): void {
-  render(
-    <Select>
-      <SelectTrigger>
-        <SelectValue placeholder="Pick a network" />
-      </SelectTrigger>
-      <SelectContent {...(position === undefined ? {} : { position })}>
-        <SelectItem value="youtube">YouTube</SelectItem>
-        <SelectItem value="instagram">Instagram</SelectItem>
-      </SelectContent>
-    </Select>,
-  );
-}
+const NETWORKS = [
+  { value: 'youtube', label: 'YouTube' },
+  { value: 'instagram', label: 'Instagram', disabled: true },
+  { value: 'tiktok', label: 'TikTok' },
+];
 
 async function openSelect(): Promise<HTMLElement> {
   const user = userEvent.setup();
@@ -36,70 +17,109 @@ async function openSelect(): Promise<HTMLElement> {
   return screen.getByRole('listbox');
 }
 
-describe('Select', () => {
-  it('renders the trigger with its base classes and the chevron', () => {
-    renderSelect();
+describe('SelectField styling', () => {
+  it('renders the trigger with its base classes, the placeholder and the chevron', () => {
+    render(<SelectField id="n" value={null} options={NETWORKS} placeholder="Pick a network" onValueChange={vi.fn()} />);
     const trigger = screen.getByRole('combobox');
-    expect(trigger.className).toContain('border-input');
-    expect(trigger.className).toContain('h-10');
+    expect(trigger.className).toContain('border-line');
+    expect(trigger.className).toContain('bg-card');
+    expect(trigger).toHaveTextContent('Pick a network');
     expect(trigger.querySelector('svg.lucide-chevron-down')).not.toBeNull();
   });
 
-  it('carries the popper classes on the content and viewport by default', async () => {
-    renderSelect();
+  it('merges a caller class over the trigger base classes', () => {
+    render(<SelectField id="n" value="youtube" options={NETWORKS} className="px-1" onValueChange={vi.fn()} />);
+    const trigger = screen.getByRole('combobox');
+    expect(trigger.className).toContain('px-1');
+    expect(trigger.className).not.toContain('px-3.5');
+  });
+
+  it('carries the popup classes on the content once opened', async () => {
+    render(<SelectField id="n" value="youtube" options={NETWORKS} onValueChange={vi.fn()} />);
     const listbox = await openSelect();
     expect(listbox.className).toContain('bg-popover');
-    expect(listbox.className).toContain('data-[side=bottom]:translate-y-1');
-    const viewport = listbox.querySelector('[data-radix-select-viewport]') as HTMLElement;
-    expect(viewport.className).toContain('p-1');
-    expect(viewport.className).toContain('h-[var(--radix-select-trigger-height)]');
+    expect(listbox.className).toContain('overflow-y-auto');
   });
 
-  it('drops the popper classes with position="item-aligned"', async () => {
-    renderSelect('item-aligned');
-    const listbox = await openSelect();
-    expect(listbox.className).not.toContain('translate-y-1');
-    const viewport = listbox.querySelector('[data-radix-select-viewport]') as HTMLElement;
-    expect(viewport.className).toContain('p-1');
-    expect(viewport.className).not.toContain('h-[var(--radix-select-trigger-height)]');
-  });
-
-  it('renders items with their base classes and a check indicator once selected', async () => {
-    renderSelect();
+  it('shows a check indicator only on the selected option and disables flagged options', async () => {
+    render(<SelectField id="n" value="youtube" options={NETWORKS} onValueChange={vi.fn()} />);
     await openSelect();
-    const item = screen.getByRole('option', { name: 'YouTube' });
-    expect(item.className).toContain('pl-8');
-    expect(item.className).toContain('focus:bg-sunken');
-    expect(item.className).toContain('focus:text-primary');
-    expect(item.className).not.toContain('focus:bg-accent');
+    expect(screen.getByRole('option', { name: 'YouTube' }).querySelector('svg.lucide-check')).not.toBeNull();
+    expect(screen.getByRole('option', { name: 'TikTok' }).querySelector('svg.lucide-check')).toBeNull();
+    expect(screen.getByRole('option', { name: 'Instagram' })).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('shows the label of a value that changes while closed', () => {
+    const { rerender } = render(<SelectField id="n" value="youtube" options={NETWORKS} onValueChange={vi.fn()} />);
+    rerender(<SelectField id="n" value="tiktok" options={NETWORKS} onValueChange={vi.fn()} />);
+    expect(screen.getByRole('combobox')).toHaveTextContent('TikTok');
+  });
+});
+
+describe('SelectField behavior', () => {
+  const options = [
+    { value: '', label: 'No persona' },
+    { value: 'p1', label: 'Viva Leve' },
+    { value: 'p2', label: 'Other Persona' },
+  ];
+
+  function renderField(overrides: { value?: string | null; disabled?: boolean } = {}) {
+    const onValueChange = vi.fn();
+    render(
+      <div>
+        <label htmlFor="field-id">Persona</label>
+        <SelectField
+          id="field-id"
+          data-testid="field-test"
+          value={overrides.value === undefined ? '' : overrides.value}
+          options={options}
+          disabled={overrides.disabled}
+          placeholder="Choose"
+          onValueChange={onValueChange}
+        />
+      </div>,
+    );
+    return onValueChange;
+  }
+
+  it('names the trigger through its label and shows the selected option, including an empty value', () => {
+    renderField();
+    const trigger = screen.getByRole('combobox', { name: 'Persona' });
+    expect(trigger).toHaveAttribute('id', 'field-id');
+    expect(trigger).toHaveAttribute('data-testid', 'field-test');
+    expect(trigger).toHaveTextContent('No persona');
+  });
+
+  it('shows the placeholder while nothing is selected', () => {
+    renderField({ value: null });
+    expect(screen.getByRole('combobox')).toHaveTextContent('Choose');
+  });
+
+  it('reports the picked value, the empty one too', async () => {
+    const onValueChange = renderField({ value: 'p1' });
     const user = userEvent.setup();
-    await user.click(item);
-    expect(screen.getByRole('combobox')).toHaveTextContent('YouTube');
-    await openSelect();
-    const reopened = screen.getByRole('option', { name: 'YouTube' });
-    expect(reopened.querySelector('svg.lucide-check')).not.toBeNull();
+    await user.click(screen.getByRole('combobox'));
+    await user.click(screen.getByRole('option', { name: 'Other Persona' }));
+    expect(onValueChange).toHaveBeenCalledExactlyOnceWith('p2');
+    await user.click(screen.getByRole('combobox'));
+    await user.click(screen.getByRole('option', { name: 'No persona' }));
+    expect(onValueChange).toHaveBeenLastCalledWith('');
   });
 
-  it('renders the scroll buttons with their chevrons once the list can scroll', async () => {
-    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { get: () => 1000, configurable: true });
-    Object.defineProperty(HTMLElement.prototype, 'clientHeight', { get: () => 100, configurable: true });
-    try {
-      renderSelect();
-      const listbox = await openSelect();
-      const viewport = listbox.querySelector('[data-radix-select-viewport]') as HTMLElement;
-      await waitFor(() => expect(listbox.querySelector('svg.lucide-chevron-down')).not.toBeNull());
-      const downButton = listbox.querySelector('svg.lucide-chevron-down')?.closest('div') as HTMLElement;
-      expect(downButton.className).toContain('justify-center');
-      expect(downButton.className).toContain('py-1');
-      viewport.scrollTop = 10;
-      fireEvent.scroll(viewport);
-      await waitFor(() => expect(listbox.querySelector('svg.lucide-chevron-up')).not.toBeNull());
-      const upButton = listbox.querySelector('svg.lucide-chevron-up')?.closest('div') as HTMLElement;
-      expect(upButton.className).toContain('justify-center');
-      expect(upButton.className).toContain('py-1');
-    } finally {
-      delete (HTMLElement.prototype as unknown as Record<string, unknown>).scrollHeight;
-      delete (HTMLElement.prototype as unknown as Record<string, unknown>).clientHeight;
-    }
+  it('selects the matching option by typing on the focused trigger', async () => {
+    const onValueChange = renderField({ value: 'p1' });
+    const user = userEvent.setup();
+    await user.tab();
+    await user.keyboard('ot');
+    expect(onValueChange).toHaveBeenCalledWith('p2');
+  });
+
+  it('does not open while disabled', async () => {
+    renderField({ disabled: true });
+    const user = userEvent.setup();
+    const trigger = screen.getByRole('combobox');
+    expect(trigger).toBeDisabled();
+    await user.click(trigger);
+    expect(screen.queryByRole('listbox')).toBeNull();
   });
 });

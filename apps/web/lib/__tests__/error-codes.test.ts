@@ -16,7 +16,7 @@ describe('error-codes', () => {
       'PERSONA_NO_BOUND_ACCOUNTS',
       'SCHEDULE_OUT_OF_RANGE',
       'VALIDATION_FAILED',
-      'TRIAL_EXPIRED',
+      'BETA_ACCESS_REQUIRED',
       'SUBSCRIPTION_INACTIVE',
       'SLOT_NOT_AWAITING_APPROVAL',
       'INTERNAL_ERROR',
@@ -65,7 +65,7 @@ describe('error-codes', () => {
   });
 
   it('isErrorCode narrows valid codes only', () => {
-    expect(isErrorCode('TRIAL_EXPIRED')).toBe(true);
+    expect(isErrorCode('BETA_ACCESS_REQUIRED')).toBe(true);
     expect(isErrorCode('SOMETHING_WRONG')).toBe(false);
     expect(isErrorCode(undefined)).toBe(false);
     expect(isErrorCode(42)).toBe(false);

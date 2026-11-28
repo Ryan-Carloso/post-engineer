@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest';
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 
 vi.mock('@/lib/i18n/provider', () => {
@@ -45,36 +46,43 @@ function renderField(overrides: Partial<Parameters<typeof PersonaField>[0]> = {}
 }
 
 describe('PersonaField', () => {
-  it('renders the label, hint and persona options', () => {
+  it('renders the label, hint and the none option as the current value', () => {
     renderField();
     expect(screen.getByText('composer.personaLabel')).toBeInTheDocument();
     expect(screen.getByText('composer.personaHint')).toBeInTheDocument();
-    expect(screen.getByText('composer.personaNone')).toBeInTheDocument();
-    expect(screen.getByText('Ana')).toBeInTheDocument();
-    expect(screen.getByText('Beto')).toBeInTheDocument();
-    expect(screen.getByLabelText('composer.personaLabel')).toHaveValue('');
+    expect(screen.getByLabelText('composer.personaLabel')).toHaveTextContent('composer.personaNone');
   });
 
-  it('selects the current persona value', () => {
+  it('lists the none option and every persona once opened', async () => {
+    renderField();
+    await userEvent.setup().click(screen.getByLabelText('composer.personaLabel'));
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual([
+      'composer.personaNone',
+      'Ana',
+      'Beto',
+    ]);
+  });
+
+  it('shows the current persona as the value', () => {
     renderField({ value: 'persona-2' });
-    expect(screen.getByLabelText('composer.personaLabel')).toHaveValue('persona-2');
+    expect(screen.getByLabelText('composer.personaLabel')).toHaveTextContent('Beto');
     expect(screen.queryByText('composer.personaNoBound')).not.toBeInTheDocument();
   });
 
-  it('calls onChange with the chosen persona id', () => {
+  it('calls onChange with the chosen persona id', async () => {
     const { onChange } = renderField();
-    fireEvent.change(screen.getByLabelText('composer.personaLabel'), {
-      target: { value: 'persona-1' },
-    });
+    const user = userEvent.setup();
+    await user.click(screen.getByLabelText('composer.personaLabel'));
+    await user.click(screen.getByRole('option', { name: 'Ana' }));
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange).toHaveBeenCalledWith('persona-1');
   });
 
-  it('calls onChange with null when the empty option is chosen', () => {
+  it('calls onChange with null when the none option is chosen', async () => {
     const { onChange } = renderField({ value: 'persona-1' });
-    fireEvent.change(screen.getByLabelText('composer.personaLabel'), {
-      target: { value: '' },
-    });
+    const user = userEvent.setup();
+    await user.click(screen.getByLabelText('composer.personaLabel'));
+    await user.click(screen.getByRole('option', { name: 'composer.personaNone' }));
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange).toHaveBeenCalledWith(null);
   });

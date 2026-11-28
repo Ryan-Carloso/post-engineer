@@ -32,16 +32,10 @@ const RUN_ALL_FILES = new Set([
 const ROOT_OUTPUT_DIRS = new Set(['coverage', 'coverage-unit']);
 const SKIP_DIRS = new Set(['node_modules', '.next', 'dist']);
 
-/**
- * @param {string} relativePath
- */
 export function isWebTestFile(relativePath) {
   return WEB_TEST_FILE.test(`/${relativePath}`);
 }
 
-/**
- * @param {string[]} changedPaths
- */
 export function shouldRunAll(changedPaths) {
   for (const file of changedPaths) {
     if (RUN_ALL_FILES.has(file)) return true;
@@ -52,25 +46,12 @@ export function shouldRunAll(changedPaths) {
   return false;
 }
 
-/**
- * @param {string} file
- */
 export function isRelevantSource(file) {
   if (file.endsWith('.d.ts')) return false;
   if (!MODULE_FILE.test(file)) return false;
   return file.startsWith('apps/web/') || file.startsWith('shared/') || file.startsWith('scripts/');
 }
 
-/**
- * @param {object} input
- * @param {string} input.event
- * @param {string[]} input.changedPaths
- * @param {boolean} input.forceAll
- * @param {string[]} input.allFiles
- * @param {string[]} input.listedChanged
- * @param {boolean} input.listChangedFailed
- * @returns {{ mode: 'all' | 'affected' | 'none', files: string[] }}
- */
 export function selectTestFiles({
   event,
   changedPaths,
@@ -90,10 +71,6 @@ export function selectTestFiles({
   return { mode: 'affected', files: listedChanged };
 }
 
-/**
- * @param {string} text
- * @returns {{ changed: string[], forceAll: boolean }}
- */
 export function parseNameStatus(text) {
   const changed = [];
   let forceAll = false;
@@ -113,12 +90,7 @@ export function parseNameStatus(text) {
   return { changed, forceAll };
 }
 
-/**
- * @param {string} appRoot
- * @returns {Promise<string[]>}
- */
 export async function listAllTestFiles(appRoot) {
-  /** @type {string[]} */
   const files = [];
   async function walk(dir) {
     const entries = await readdir(dir, { withFileTypes: true });

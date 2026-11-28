@@ -1,26 +1,34 @@
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react-swc';
 import path from 'path';
+
+const ALL_TESTS = '**/__tests__/**/*.test.{ts,tsx}';
+const NODE_TESTS = '**/__tests__/**/*.node.test.{ts,tsx}';
 
 export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname),
-      // server-only intentionally throws outside Next's server runtime.
-      // Unit tests run in jsdom, so resolve the marker to Next's no-op shim.
       'server-only': path.resolve(__dirname, 'node_modules/next/dist/compiled/server-only/empty.js'),
     },
   },
   test: {
-    environment: 'jsdom',
     globals: true,
-    include: ['**/__tests__/**/*.test.{ts,tsx}'],
     setupFiles: ['./test/setup.ts'],
     coverage: {
-      // Separado do coverage/ usado pelo Cypress (@cypress/code-coverage)
       reportsDirectory: 'coverage-unit',
       reporter: ['text', 'html', 'json-summary'],
     },
+    projects: [
+      {
+        extends: true,
+        test: { name: 'dom', environment: 'jsdom', include: [ALL_TESTS], exclude: [...configDefaults.exclude, NODE_TESTS] },
+      },
+      {
+        extends: true,
+        test: { name: 'node', environment: 'node', include: [NODE_TESTS] },
+      },
+    ],
   },
 });

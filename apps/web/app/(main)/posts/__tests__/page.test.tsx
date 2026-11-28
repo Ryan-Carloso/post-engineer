@@ -19,7 +19,7 @@ vi.mock('@/lib/social-accounts-queries', () => ({
 }));
 
 vi.mock('@/lib/access-query', () => ({
-  useAccessQuery: vi.fn(() => ({ data: { active: true, endsAt: '2030-01-01T00:00:00.000Z', daysLeft: 1, reason: 'trial' } })),
+  useAccessQuery: vi.fn(() => ({ data: { active: true, endsAt: '2030-01-01T00:00:00.000Z', reason: 'beta' } })),
 }));
 vi.mock('@/lib/schedule-range', () => ({
   RANGE_MAX_SLOTS: 1000,
@@ -1378,8 +1378,8 @@ describe('PostsPage calendar date hints', () => {
 });
 
 describe('PostsPage access pause', () => {
-  const access = (active: boolean, reason: 'trial' | 'subscription' | 'none' = 'trial') => ({
-    data: { active, endsAt: '2030-01-01T00:00:00.000Z', daysLeft: active ? 3 : 0, reason },
+  const access = (active: boolean, reason: 'beta' | 'subscription' | 'none' = 'beta') => ({
+    data: { active, endsAt: '2030-01-01T00:00:00.000Z', reason },
     isPending: false,
     isError: false,
     refetch: vi.fn(),

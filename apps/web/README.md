@@ -3,7 +3,7 @@
 Next.js 15 app (TypeScript, strict mode): the Post Engineer dashboard and all
 API routes (`app/**/route.ts`). Owns authentication (Supabase), personas,
 scheduling, OAuth for social accounts (YouTube, Instagram, LinkedIn, Threads, Facebook Pages, Bluesky, 3Speak) and manual-token connect (Rumble, Telegram),
-publish access (trial + subscription), API keys, and the MCP OAuth server.
+publish access (closed beta + subscription), API keys, and the MCP OAuth server.
 
 ## Develop
 
@@ -39,7 +39,14 @@ From the repo root these run via Nx: `pnpm test`, `pnpm lint`, `pnpm typecheck`.
 
 Publishing needs an active account: `user_profiles.access_until` is the
 instant it stops, and `user_profiles.subscription_status` says whether the
-account is on the trial (`null`), a paid subscription, or a lapsed one.
+account is admitted to the closed beta (`beta`), awaiting it (`null`), on a paid subscription, or a lapsed one. A new account starts with `access_until = now()`, so it cannot publish until an operator admits it:
+
+```sql
+update public.user_profiles set access_until = '2099-01-01T00:00:00Z', subscription_status = 'beta' where id = '<uuid>';
+update public.user_profiles set access_until = now() where id = '<uuid>';
+```
+
+The second statement revokes. A blocked account gets `402 BETA_ACCESS_REQUIRED`, naming the Discord invite.
 Cancellations, refunds and exhausted dunning all move `access_until`, so one
 column covers every reason.
 
