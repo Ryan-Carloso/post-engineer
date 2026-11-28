@@ -148,8 +148,9 @@ async function reportApiIssue(
     if (codeStr !== undefined) properties.code = codeStr;
     if (errorIdStr !== undefined) properties.errorId = errorIdStr;
     if (user !== undefined) withUserProperties(properties, user);
-    if (attachedProperties.has(response)) {
-      Object.assign(properties, scrubFreeTextProperties(attachedProperties.get(response) ?? {}));
+    const attached = attachedProperties.get(response);
+    if (attached !== undefined) {
+      Object.assign(properties, scrubFreeTextProperties(attached));
     }
 
     const message = `[${route}] ${status}${codeStr !== undefined ? ` ${codeStr}` : ''}`;

@@ -332,6 +332,25 @@ describe('withApiErrorReporting', () => {
     expect(properties.detail).toBe('x'.repeat(500));
   });
 
+  it('scrubs free text inside nested attached properties on a 4xx warning', async () => {
+    const response = NextResponse.json({ error: 'nope', code: 'BAD_INPUT' }, { status: 400 });
+    attachApiErrorProperties(response, {
+      tags: ['read /var/lib/post-engineer/a.txt failed', 'clean'],
+      nested: { detail: 'read /etc/post-engineer/b.txt failed', count: 3 },
+    });
+    const wrapped = withApiErrorReporting('GET /api/test', async () => response);
+
+    await wrapped(getRequest());
+
+    await vi.waitFor(() => expect(client.capture).toHaveBeenCalledTimes(1));
+    const [, properties] = client.capture.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
+    expect(properties.tags).toEqual(['read <path>/a.txt failed', 'clean']);
+    expect(properties.nested).toEqual({ detail: 'read <path>/b.txt failed', count: 3 });
+  });
+
   it('reports a 500 response via captureException with route, status and code', async () => {
     const wrapped = withApiErrorReporting(
       'POST /api/videos/generate-and-schedule',
