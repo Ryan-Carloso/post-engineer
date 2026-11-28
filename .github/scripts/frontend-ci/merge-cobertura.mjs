@@ -2,21 +2,12 @@ import { readdir, readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-/**
- * @param {string} tag
- * @param {string} name
- */
 function attr(tag, name) {
   const match = new RegExp(`\\b${name}="([^"]*)"`).exec(tag);
   return match === null ? null : match[1];
 }
 
-/**
- * @param {string} xml
- * @returns {Map<string, Map<number, { hits: number, branch: boolean }>>}
- */
 export function parseCoberturaFiles(xml) {
-  /** @type {Map<string, Map<number, { hits: number, branch: boolean }>>} */
   const files = new Map();
   if (typeof xml !== 'string') return files;
   const classRe = /<class\b([^>]*\bfilename="[^"]+"[^>]*)>([\s\S]*?)<\/class>/g;
@@ -57,11 +48,7 @@ export function parseCoberturaFiles(xml) {
   return files;
 }
 
-/**
- * @param {string[]} xmls
- */
 export function mergeCobertura(xmls) {
-  /** @type {Map<string, Map<number, { hits: number, branch: boolean }>>} */
   const files = new Map();
   for (const xml of xmls) {
     for (const [filename, lines] of parseCoberturaFiles(xml)) {
@@ -85,9 +72,6 @@ export function mergeCobertura(xmls) {
   return renderCobertura(files);
 }
 
-/**
- * @param {Map<string, Map<number, { hits: number, branch: boolean }>>} files
- */
 function renderCobertura(files) {
   let linesValid = 0;
   let linesCovered = 0;
@@ -134,14 +118,6 @@ ${classes.join('\n')}
 `;
 }
 
-/**
- * @param {string} value
- */
-/**
- * @param {string | null | undefined} left
- * @param {string | null | undefined} right
- * @returns {string | null}
- */
 function mergeCondition(left, right) {
   if (left === null || left === undefined) return right ?? null;
   if (right === null || right === undefined) return left;
@@ -162,12 +138,7 @@ function escapeXml(value) {
     .replaceAll('"', '&quot;');
 }
 
-/**
- * @param {string} dir
- * @returns {Promise<string[]>}
- */
 async function findReports(dir) {
-  /** @type {string[]} */
   const found = [];
   let entries;
   try {

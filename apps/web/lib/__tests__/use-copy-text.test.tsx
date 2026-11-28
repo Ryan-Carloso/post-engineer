@@ -33,6 +33,21 @@ describe('useCopyText', () => {
     await waitFor(() => expect(result.current.copied).toBe(true));
   });
 
+  it('calls onCopied once after the write resolves and never when it rejects', async () => {
+    const onCopied = vi.fn();
+    stubClipboard({ writeText: vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('denied')) });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { result } = renderHook(() => useCopyText(onCopied));
+
+    act(() => result.current.copy('first'));
+    expect(onCopied).not.toHaveBeenCalled();
+    await waitFor(() => expect(onCopied).toHaveBeenCalledTimes(1));
+
+    act(() => result.current.copy('second'));
+    await waitFor(() => expect(console.error).toHaveBeenCalled());
+    expect(onCopied).toHaveBeenCalledTimes(1);
+  });
+
   it('resets copied after the confirmation window', async () => {
     vi.useFakeTimers();
     stubClipboard({ writeText: vi.fn().mockResolvedValue(undefined) });

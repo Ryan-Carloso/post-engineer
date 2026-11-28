@@ -197,7 +197,7 @@ const LoginTopBar = () => {
             type="button"
             onClick={() => setLocale(option.value)}
             aria-pressed={option.value === locale}
-            className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
+            className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors min-h-0 ${
               option.value === locale
                 ? 'bg-ink text-on-ink'
                 : 'text-muted-text hover:text-ink'

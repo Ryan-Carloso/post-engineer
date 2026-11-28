@@ -1,22 +1,9 @@
 import { z } from 'zod';
 import { toolActionCallsEndpoint, toolCallsEndpoint, type McpCallGraph } from './mcp-calls.js';
 
-//---------------
-// Endpoint → tool mapping of the MCP parity gate (parity-endpoint-tools.json).
-//
-// Capability parity, not tool-per-endpoint (issue #566): an endpoint maps to
-// `{ tool, action? }`, the intent tool (and, for an action tool, the action)
-// that really issues the request. One action may reach several endpoints, an
-// endpoint that is only a step of an intent is mapped to the action that
-// calls it, and no endpoint needs a tool or an action of its own. What stays
-// total is coverage: an endpoint nothing reaches, and that has no typed
-// exclusion, fails.
-//---------------
-
 export const MappingEntrySchema = z
   .object({
     tool: z.string().min(1),
-    /** Omitted for a tool without actions; required for a tool registered with byAction. */
     action: z.string().min(1).optional(),
   })
   .strict();
@@ -26,7 +13,6 @@ export const EndpointMappingSchema = z.record(z.string(), z.array(MappingEntrySc
 export type MappingEntry = z.infer<typeof MappingEntrySchema>;
 export type EndpointMapping = z.infer<typeof EndpointMappingSchema>;
 
-/** Endpoint → distinct tool names behind it (what the exclusion verifier consumes). */
 export function endpointToolNames(mapping: Readonly<EndpointMapping>): Record<string, string[]> {
   return Object.fromEntries(
     Object.entries(mapping).map(([key, entries]) => [key, [...new Set(entries.map((entry) => entry.tool))]]),
@@ -37,7 +23,6 @@ function label(entry: MappingEntry): string {
   return entry.action === undefined ? entry.tool : `${entry.tool} · ${entry.action}`;
 }
 
-/** Violations of the mapping of one endpoint; empty when every entry is true of the MCP sources. */
 export function verifyMapping(key: string, entries: readonly MappingEntry[], graph: McpCallGraph): string[] {
   const errors: string[] = [];
   const seen = new Set<string>();
@@ -70,7 +55,6 @@ export function verifyMapping(key: string, entries: readonly MappingEntry[], gra
   return errors;
 }
 
-/** Discovered endpoints with neither a mapping nor an exclusion: coverage must stay total. */
 export function uncoveredEndpoints(
   discovered: readonly string[],
   mapping: Readonly<Record<string, unknown>>,

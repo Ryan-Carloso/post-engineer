@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Verify that opencode-review findings are mechanically grounded.
 
 The review prompt requires, per finding:

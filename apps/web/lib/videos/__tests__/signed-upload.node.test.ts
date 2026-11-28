@@ -1,0 +1,471 @@
+import { describe, expect, it, vi } from 'vitest';
+
+import {
+  MAX_VIDEO_UPLOAD_BYTES,
+  VideoUploadError,
+  claimUploadForPublish,
+  completeVideoUpload,
+  mintVideoUpload,
+  parseMintBody,
+  sweepExpiredVideoUploads,
+  type VideoUploadRow,
+  type VideoUploadStorage,
+  type VideoUploadStore,
+} from '../signed-upload';
+
+const NOW = new Date('2026-11-12T00:00:00.000Z');
+const USER = 'user-uuid-1';
+const OTHER = 'user-uuid-2';
+
+const MP4 = Buffer.from([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d, 1, 2, 3, 4]);
+const MOV = Buffer.from([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x71, 0x74, 0x20, 0x20, 1, 2, 3, 4]);
+
+function makeStore(
+  rows: VideoUploadRow[] = [],
+  liveSlots: Map<string, string> = new Map(),
+): VideoUploadStore & { rows: Map<string, VideoUploadRow> } {
+  const map = new Map(rows.map((r) => [r.id, { ...r }]));
+  return {
+    rows: map,
+    async listLiveSlotTimes(uploadIds) {
+      return new Map([...liveSlots].filter(([id]) => uploadIds.includes(id)));
+    },
+    async insertUpload(row) {
+      map.set(row.id, { ...row });
+      return { ...row };
+    },
+    async getUpload(id) {
+      const row = map.get(id);
+      return row === undefined ? null : { ...row };
+    },
+    async updateUpload(id, expectedStatus, patch) {
+      const row = map.get(id);
+      if (row === undefined || row.status !== expectedStatus) return false;
+      map.set(id, { ...row, ...patch });
+      return true;
+    },
+    async deleteUpload(id) {
+      map.delete(id);
+    },
+    async listExpired(now, limit) {
+      return [...map.values()]
+        .filter(
+          (row) =>
+            (row.status === 'pending' || row.status === 'ready') && Date.parse(row.expires_at) <= now.getTime(),
+        )
+        .sort((a, b) => Date.parse(a.expires_at) - Date.parse(b.expires_at))
+        .slice(0, limit)
+        .map((row) => ({ id: row.id, storage_path: row.storage_path }));
+    },
+  };
+}
+
+function makeStorage(bytes: Buffer | null = MP4): VideoUploadStorage & { removed: string[][] } {
+  const removed: string[][] = [];
+  return {
+    removed,
+    async createSignedUploadUrl(path) {
+      return { data: { signedUrl: `https://storage.test/upload/${path}?token=t`, token: 'tok', path }, error: null };
+    },
+    async download() {
+      return bytes === null
+        ? { data: null, error: { message: 'Object not found' } }
+        : { data: new Blob([new Uint8Array(bytes)]), error: null };
+    },
+    async remove(paths) {
+      removed.push(paths);
+      return { error: null };
+    },
+  };
+}
+
+function row(overrides: Partial<VideoUploadRow> = {}): VideoUploadRow {
+  return {
+    id: 'upload-1',
+    user_id: USER,
+    storage_path: `${USER}/direct-uploads/upload-1.mp4`,
+    declared_content_type: 'video/mp4',
+    detected_content_type: null,
+    size_bytes: null,
+    status: 'pending',
+    expires_at: new Date(NOW.getTime() + 60_000).toISOString(),
+    created_at: NOW.toISOString(),
+    consumed_at: null,
+    ...overrides,
+  };
+}
+
+describe('parseMintBody', () => {
+  it('accepts an mp4 within the size limit', () => {
+    expect(parseMintBody({ contentType: 'video/mp4', sizeBytes: 1024 })).toEqual({
+      contentType: 'video/mp4',
+      sizeBytes: 1024,
+    });
+  });
+
+  it('accepts a JPEG or PNG image up to 8 MB', () => {
+    expect(parseMintBody({ contentType: 'image/png', sizeBytes: 10 })).toEqual({ contentType: 'image/png', sizeBytes: 10 });
+    expect(parseMintBody({ contentType: 'image/jpeg', sizeBytes: 8 * 1024 * 1024 })).toEqual({ contentType: 'image/jpeg', sizeBytes: 8 * 1024 * 1024 });
+  });
+
+  it('rejects an image declared over 8 MB with 413', () => {
+    expect(() => parseMintBody({ contentType: 'image/jpeg', sizeBytes: 8 * 1024 * 1024 + 1 })).toThrow(
+      expect.objectContaining({ status: 413, code: 'VIDEO_UPLOAD_TOO_LARGE', message: 'Image is too large. Maximum is 8 MB.' }),
+    );
+  });
+
+  it('rejects any other content type', () => {
+    expect(() => parseMintBody({ contentType: 'image/webp', sizeBytes: 10 })).toThrow(
+      expect.objectContaining({ status: 400, code: 'VIDEO_UPLOAD_INVALID_CONTENT_TYPE' }),
+    );
+  });
+
+  it('rejects a size over the 2GB limit', () => {
+    expect(() => parseMintBody({ contentType: 'video/mp4', sizeBytes: MAX_VIDEO_UPLOAD_BYTES + 1 })).toThrow(
+      /2GB|too large/i,
+    );
+  });
+
+  it('rejects zero, fractional and non-object bodies', () => {
+    expect(() => parseMintBody({ contentType: 'video/mp4', sizeBytes: 0 })).toThrow(VideoUploadError);
+    expect(() => parseMintBody({ contentType: 'video/mp4', sizeBytes: 1.5 })).toThrow(VideoUploadError);
+    expect(() => parseMintBody(null)).toThrow(VideoUploadError);
+    expect(() => parseMintBody({ sizeBytes: 10 })).toThrow(VideoUploadError);
+  });
+});
+
+describe('mintVideoUpload', () => {
+  it('creates a pending row bound to the caller and returns the signed upload URL', async () => {
+    const store = makeStore();
+    const storage = makeStorage();
+    const result = await mintVideoUpload(store, storage, USER, { contentType: 'video/quicktime', sizeBytes: 99 }, NOW);
+    expect(result.uploadId).toBeTruthy();
+    expect(result.signedUrl).toContain('token=');
+    expect(result.token).toBe('tok');
+    expect(result.expiresAt).toBe(new Date(NOW.getTime() + 15 * 60 * 1000).toISOString());
+    const stored = [...store.rows.values()][0];
+    expect(stored?.user_id).toBe(USER);
+    expect(stored?.status).toBe('pending');
+    expect(stored?.storage_path.startsWith(`${USER}/direct-uploads/`)).toBe(true);
+    expect(stored?.storage_path.endsWith('.mov')).toBe(true);
+  });
+
+  it('deletes the row when signing fails', async () => {
+    const store = makeStore();
+    const storage = makeStorage();
+    storage.createSignedUploadUrl = async () => ({ data: null, error: { message: 'no bucket' } });
+    await expect(
+      mintVideoUpload(store, storage, USER, { contentType: 'video/mp4', sizeBytes: 1 }, NOW),
+    ).rejects.toMatchObject({ status: 502 });
+    expect(store.rows.size).toBe(0);
+  });
+
+  it('deletes the row when signing returns no url and no error', async () => {
+    const store = makeStore();
+    const storage = makeStorage();
+    storage.createSignedUploadUrl = async () => ({ data: null, error: null });
+    await expect(
+      mintVideoUpload(store, storage, USER, { contentType: 'video/mp4', sizeBytes: 1 }, NOW),
+    ).rejects.toMatchObject({ status: 502 });
+    expect(store.rows.size).toBe(0);
+  });
+
+  it('still mints when the expiry sweep cannot list rows', async () => {
+    const store = makeStore();
+    store.listExpired = async () => {
+      throw new Error('db down');
+    };
+    const result = await mintVideoUpload(store, makeStorage(), USER, { contentType: 'video/mp4', sizeBytes: 4 }, NOW);
+    expect(result.signedUrl).toContain('token=');
+    expect(store.rows.size).toBe(1);
+  });
+});
+
+describe('sweepExpiredVideoUploads', () => {
+  it('removes expired pending and ready objects and leaves the rest', async () => {
+    const store = makeStore([
+      row({ id: 'old-pending', storage_path: 'u/old-pending.mp4', expires_at: new Date(NOW.getTime() - 2_000).toISOString() }),
+      row({
+        id: 'old-ready',
+        status: 'ready',
+        storage_path: 'u/old-ready.mp4',
+        expires_at: new Date(NOW.getTime() - 1_000).toISOString(),
+      }),
+      row({ id: 'fresh', storage_path: 'u/fresh.mp4' }),
+      row({
+        id: 'used',
+        status: 'consumed',
+        storage_path: 'u/used.mp4',
+        expires_at: new Date(NOW.getTime() - 5_000).toISOString(),
+      }),
+    ]);
+    const storage = makeStorage();
+    const removed = await sweepExpiredVideoUploads(store, storage, NOW);
+    expect(removed).toBe(2);
+    expect(storage.removed).toEqual([['u/old-pending.mp4'], ['u/old-ready.mp4']]);
+    expect([...store.rows.keys()].sort()).toEqual(['fresh', 'used']);
+  });
+
+  it('keeps a row when object removal fails or throws, and honors the batch limit', async () => {
+    const store = makeStore([
+      row({ id: 'busy', storage_path: 'u/busy.mp4', expires_at: new Date(NOW.getTime() - 3_000).toISOString() }),
+      row({ id: 'throws', storage_path: 'u/throws.mp4', expires_at: new Date(NOW.getTime() - 2_000).toISOString() }),
+      row({ id: 'ok', storage_path: 'u/ok.mp4', expires_at: new Date(NOW.getTime() - 1_000).toISOString() }),
+    ]);
+    const storage = makeStorage();
+    storage.remove = async (paths) => {
+      if (paths[0] === 'u/busy.mp4') return { error: { message: 'busy' } };
+      if (paths[0] === 'u/throws.mp4') throw new Error('storage down');
+      return { error: null };
+    };
+    expect(await sweepExpiredVideoUploads(store, storage, NOW, 1)).toBe(0);
+    expect(store.rows.has('busy')).toBe(true);
+    expect(await sweepExpiredVideoUploads(store, storage, NOW)).toBe(1);
+    expect([...store.rows.keys()].sort()).toEqual(['busy', 'throws']);
+  });
+});
+
+describe('sweepExpiredVideoUploads with scheduled uploads', () => {
+  const HOUR = 60 * 60 * 1000;
+
+  it('keeps an expired upload a live slot still uses and moves its expiry to 24h after the post time', async () => {
+    const slotAt = new Date(NOW.getTime() + 3 * 24 * HOUR).toISOString();
+    const store = makeStore(
+      [
+        row({ id: 'scheduled', status: 'ready', storage_path: 'u/scheduled.mp4', expires_at: new Date(NOW.getTime() - 1_000).toISOString() }),
+        row({ id: 'abandoned', status: 'ready', storage_path: 'u/abandoned.mp4', expires_at: new Date(NOW.getTime() - 2_000).toISOString() }),
+      ],
+      new Map([['scheduled', slotAt]]),
+    );
+    const storage = makeStorage();
+    expect(await sweepExpiredVideoUploads(store, storage, NOW)).toBe(1);
+    expect(storage.removed).toEqual([['u/abandoned.mp4']]);
+    expect(store.rows.get('scheduled')?.expires_at).toBe(new Date(Date.parse(slotAt) + 24 * HOUR).toISOString());
+    expect(store.rows.has('abandoned')).toBe(false);
+  });
+
+  it('keeps an overdue scheduled upload alive for 24h from now so a late publish still finds it', async () => {
+    const store = makeStore(
+      [row({ id: 'late', status: 'ready', storage_path: 'u/late.mp4', expires_at: new Date(NOW.getTime() - 1_000).toISOString() })],
+      new Map([['late', new Date(NOW.getTime() - 48 * HOUR).toISOString()]]),
+    );
+    const storage = makeStorage();
+    expect(await sweepExpiredVideoUploads(store, storage, NOW)).toBe(0);
+    expect(storage.removed).toEqual([]);
+    expect(store.rows.get('late')?.expires_at).toBe(new Date(NOW.getTime() + 24 * HOUR).toISOString());
+  });
+
+  it('keeps an approval hold past its expiry so a late approval still finds its media', async () => {
+    const store = makeStore(
+      [row({ id: 'held', status: 'ready', storage_path: 'u/held.mp4', expires_at: new Date(NOW.getTime() - 1_000).toISOString() })],
+      new Map([['held', new Date(NOW.getTime() - 25 * HOUR).toISOString()]]),
+    );
+    const storage = makeStorage();
+    expect(await sweepExpiredVideoUploads(store, storage, NOW)).toBe(0);
+    expect(storage.removed).toEqual([]);
+    expect(store.rows.has('held')).toBe(true);
+    expect(store.rows.get('held')?.expires_at).toBe(new Date(NOW.getTime() + 24 * HOUR).toISOString());
+  });
+
+  it('removes nothing when the scheduled-slot lookup fails', async () => {
+    const store = makeStore([
+      row({ id: 'maybe', status: 'ready', storage_path: 'u/maybe.mp4', expires_at: new Date(NOW.getTime() - 1_000).toISOString() }),
+    ]);
+    store.listLiveSlotTimes = async () => {
+      throw new Error('db down');
+    };
+    const storage = makeStorage();
+    await expect(sweepExpiredVideoUploads(store, storage, NOW)).rejects.toThrow('db down');
+    expect(storage.removed).toEqual([]);
+    expect(store.rows.has('maybe')).toBe(true);
+  });
+});
+
+describe('completeVideoUpload', () => {
+  it('marks a verified mp4 ready with the detected type and real size', async () => {
+    const store = makeStore([row()]);
+    const result = await completeVideoUpload(store, makeStorage(MP4), USER, 'upload-1', NOW);
+    expect(result).toMatchObject({ uploadId: 'upload-1', status: 'ready', contentType: 'video/mp4', sizeBytes: MP4.length });
+    expect(store.rows.get('upload-1')?.status).toBe('ready');
+  });
+
+  it('is idempotent for an already-ready upload', async () => {
+    const store = makeStore([row({ status: 'ready', detected_content_type: 'video/mp4', size_bytes: MP4.length })]);
+    const result = await completeVideoUpload(store, makeStorage(), USER, 'upload-1', NOW);
+    expect(result.status).toBe('ready');
+  });
+
+  it('falls back to the declared type, then mp4, when a ready upload has no detected type', async () => {
+    const declared = await completeVideoUpload(
+      makeStore([row({ status: 'ready', detected_content_type: null, declared_content_type: 'video/quicktime', size_bytes: null })]),
+      makeStorage(),
+      USER,
+      'upload-1',
+      NOW,
+    );
+    expect(declared).toMatchObject({ contentType: 'video/quicktime', sizeBytes: 0 });
+
+    const fallback = await completeVideoUpload(
+      makeStore([row({ status: 'ready', detected_content_type: null, declared_content_type: null, size_bytes: null })]),
+      makeStorage(),
+      USER,
+      'upload-1',
+      NOW,
+    );
+    expect(fallback.contentType).toBe('video/mp4');
+  });
+
+  it('returns 404 for unknown and foreign-owned uploads', async () => {
+    const store = makeStore([row()]);
+    await expect(completeVideoUpload(store, makeStorage(), USER, 'nope', NOW)).rejects.toMatchObject({ status: 404 });
+    await expect(completeVideoUpload(store, makeStorage(), OTHER, 'upload-1', NOW)).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('rejects expired, consumed, non-video and mismatched uploads', async () => {
+    const expiredStorage = makeStorage();
+    await expect(
+      completeVideoUpload(makeStore([row({ expires_at: new Date(NOW.getTime() - 1).toISOString() })]), expiredStorage, USER, 'upload-1', NOW),
+    ).rejects.toMatchObject({ status: 410 });
+    expect(expiredStorage.removed).toEqual([[`${USER}/direct-uploads/upload-1.mp4`]]);
+    const junk = makeStorage(Buffer.from('not a video at all......'));
+    await expect(
+      completeVideoUpload(makeStore([row()]), junk, USER, 'upload-1', NOW),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(junk.removed).toEqual([[`${USER}/direct-uploads/upload-1.mp4`]]);
+    await expect(
+      completeVideoUpload(makeStore([row({ status: 'consumed' })]), makeStorage(), USER, 'upload-1', NOW),
+    ).rejects.toMatchObject({ status: 409 });
+    await expect(
+      completeVideoUpload(makeStore([row()]), makeStorage(MOV), USER, 'upload-1', NOW),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('rejects a missing storage object as 400', async () => {
+    await expect(completeVideoUpload(makeStore([row()]), makeStorage(null), USER, 'upload-1', NOW)).rejects.toMatchObject({
+      status: 400,
+    });
+  });
+
+  it('rejects an empty upload and deletes the object', async () => {
+    const storage = makeStorage(Buffer.alloc(0));
+    await expect(completeVideoUpload(makeStore([row()]), storage, USER, 'upload-1', NOW)).rejects.toMatchObject({
+      status: 400,
+      code: 'VIDEO_UPLOAD_FILE_EMPTY',
+    });
+    expect(storage.removed).toEqual([[`${USER}/direct-uploads/upload-1.mp4`]]);
+  });
+
+  it('rejects an upload over 2GB and deletes the object', async () => {
+    const storage = makeStorage(Buffer.from([0xab]));
+    const realFrom = Buffer.from.bind(Buffer);
+    const fromSpy = vi.spyOn(Buffer, 'from').mockImplementation(((input: unknown) => {
+      const buf = realFrom(input as ArrayBuffer);
+      if (buf.length === 1 && buf[0] === 0xab) {
+        Object.defineProperty(buf, 'length', { value: MAX_VIDEO_UPLOAD_BYTES + 1 });
+      }
+      return buf;
+    }) as typeof Buffer.from);
+    try {
+      await expect(completeVideoUpload(makeStore([row()]), storage, USER, 'upload-1', NOW)).rejects.toMatchObject({
+        status: 413,
+        code: 'VIDEO_UPLOAD_TOO_LARGE',
+      });
+      expect(storage.removed).toEqual([[`${USER}/direct-uploads/upload-1.mp4`]]);
+    } finally {
+      fromSpy.mockRestore();
+    }
+  });
+
+  it('rejects a complete that lost the pending-to-ready race', async () => {
+    const store = makeStore([row()]);
+    store.updateUpload = async () => false;
+    await expect(completeVideoUpload(store, makeStorage(MP4), USER, 'upload-1', NOW)).rejects.toMatchObject({
+      status: 409,
+      code: 'VIDEO_UPLOAD_CONFLICT',
+    });
+    expect(store.rows.get('upload-1')?.status).toBe('pending');
+  });
+});
+
+describe('image uploads', () => {
+  const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0x49, 0x46, 0, 1, 2, 3]);
+
+  it('mints an image upload with a .jpg path and the 8 MB ceiling', async () => {
+    const result = await mintVideoUpload(makeStore(), makeStorage(), USER, { contentType: 'image/jpeg', sizeBytes: 14 }, NOW);
+    expect(result.storagePath.endsWith('.jpg')).toBe(true);
+    expect(result.maxBytes).toBe(8 * 1024 * 1024);
+  });
+
+  it('completes an image upload by its magic bytes', async () => {
+    const store = makeStore([row({ declared_content_type: 'image/jpeg', storage_path: `${USER}/direct-uploads/upload-1.jpg` })]);
+    const done = await completeVideoUpload(store, makeStorage(JPEG), USER, 'upload-1', NOW);
+    expect(done).toEqual({ uploadId: 'upload-1', status: 'ready', contentType: 'image/jpeg', sizeBytes: JPEG.length });
+  });
+
+  it('refuses an image object over 8 MB at completion, whatever was declared', async () => {
+    const big = Buffer.alloc(8 * 1024 * 1024 + 1);
+    JPEG.copy(big);
+    const store = makeStore([row({ declared_content_type: 'image/jpeg' })]);
+    await expect(completeVideoUpload(store, makeStorage(big), USER, 'upload-1', NOW)).rejects.toMatchObject({ status: 413 });
+    expect(store.rows.get('upload-1')?.status).toBe('pending');
+  });
+
+  it('refuses to claim an image upload for a video-only network and leaves it ready', async () => {
+    const store = makeStore([row({ status: 'ready', declared_content_type: 'image/jpeg', detected_content_type: 'image/jpeg' })]);
+    const storage = makeStorage(JPEG);
+    await expect(claimUploadForPublish(store, storage, USER, 'upload-1', NOW, ['instagram', 'rumble'])).rejects.toMatchObject({
+      status: 400,
+      code: 'IMAGE_PROVIDER_UNSUPPORTED',
+      message: 'This upload is an image: rumble publishes video only. Images go to instagram, bluesky, linkedin, threads, facebook, pinterest, telegram.',
+    });
+    expect(store.rows.get('upload-1')?.status).toBe('ready');
+    expect(storage.removed).toEqual([]);
+  });
+
+  it('claims an image upload for image networks', async () => {
+    const store = makeStore([row({ status: 'ready', declared_content_type: 'image/jpeg', detected_content_type: 'image/jpeg' })]);
+    const claimed = await claimUploadForPublish(store, makeStorage(JPEG), USER, 'upload-1', NOW, ['bluesky', 'pinterest', 'instagram']);
+    expect(claimed.contentType).toBe('image/jpeg');
+    expect(store.rows.get('upload-1')?.status).toBe('consumed');
+  });
+});
+
+describe('claimUploadForPublish', () => {
+  it('claims a ready upload exactly once and returns its bytes', async () => {
+    const store = makeStore([row({ status: 'ready', detected_content_type: 'video/mp4', size_bytes: MP4.length })]);
+    const first = await claimUploadForPublish(store, makeStorage(MP4), USER, 'upload-1', NOW, ['instagram']);
+    expect(first.buffer.equals(MP4)).toBe(true);
+    expect(first.contentType).toBe('video/mp4');
+    expect(store.rows.get('upload-1')?.status).toBe('consumed');
+    await expect(claimUploadForPublish(store, makeStorage(MP4), USER, 'upload-1', NOW, ['instagram'])).rejects.toMatchObject({
+      status: 409,
+    });
+  });
+
+  it('rejects pending, expired and foreign uploads without consuming them', async () => {
+    const pending = makeStore([row()]);
+    await expect(claimUploadForPublish(pending, makeStorage(), USER, 'upload-1', NOW, ['instagram'])).rejects.toMatchObject({ status: 409 });
+    expect(pending.rows.get('upload-1')?.status).toBe('pending');
+
+    const expired = makeStore([
+      row({ status: 'ready', expires_at: new Date(NOW.getTime() - 1).toISOString(), detected_content_type: 'video/mp4' }),
+    ]);
+    const expiredStorage = makeStorage();
+    await expect(claimUploadForPublish(expired, expiredStorage, USER, 'upload-1', NOW, ['instagram'])).rejects.toMatchObject({ status: 410 });
+    expect(expired.rows.get('upload-1')?.status).toBe('ready');
+    expect(expiredStorage.removed).toEqual([[`${USER}/direct-uploads/upload-1.mp4`]]);
+
+    const ready = makeStore([row({ status: 'ready', detected_content_type: 'video/mp4' })]);
+    await expect(claimUploadForPublish(ready, makeStorage(), OTHER, 'upload-1', NOW, ['instagram'])).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('rejects a claim that lost the ready-to-consumed race', async () => {
+    const store = makeStore([row({ status: 'ready', detected_content_type: 'video/mp4', size_bytes: MP4.length })]);
+    store.updateUpload = async () => false;
+    await expect(claimUploadForPublish(store, makeStorage(MP4), USER, 'upload-1', NOW, ['instagram'])).rejects.toMatchObject({
+      status: 409,
+      code: 'VIDEO_UPLOAD_CONSUMED',
+    });
+    expect(store.rows.get('upload-1')?.status).toBe('ready');
+  });
+});

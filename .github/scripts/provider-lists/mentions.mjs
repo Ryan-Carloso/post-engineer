@@ -1,6 +1,4 @@
-/** @param {readonly string[]} providers @param {Record<string, string>} columns */
 export function buildMentionIndex(providers, columns) {
-  /** @type {Map<string, string>} */
   const index = new Map();
   for (const provider of providers) {
     const column = columns[provider];

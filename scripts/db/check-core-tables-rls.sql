@@ -43,7 +43,7 @@ begin
 end;
 $$;
 
-insert into public.user_profiles (id, trial_ends_at)
+insert into public.user_profiles (id, access_until)
 values
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2099-01-01T00:00:00Z'),
   ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '2099-01-02T00:00:00Z');
@@ -155,8 +155,8 @@ select pg_temp.expect_count(
   $$select count(*) from public.user_profiles where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'$$,
   1, 'own profile readable');
 select pg_temp.expect_count(
-  $$select count(*) from public.user_profiles where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' and trial_ends_at = '2099-01-01T00:00:00Z'$$,
-  1, 'own trial end readable');
+  $$select count(*) from public.user_profiles where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' and access_until = '2099-01-01T00:00:00Z'$$,
+  1, 'own access end readable');
 select pg_temp.expect_count(
   $$select count(*) from public.personas where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01'$$,
   1, 'own persona readable');
@@ -173,10 +173,10 @@ select pg_temp.expect_count(
   $$select count(*) from public.social_accounts where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa04' and needs_reconnect = false$$,
   1, 'own account needs_reconnect readable');
 
--- The trial end is not writable with the user JWT.
+-- The access end is not writable with the user JWT.
 select pg_temp.expect_state(
-  $$update public.user_profiles set trial_ends_at = '2100-01-01T00:00:00Z' where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'$$,
-  '42501', 'trial_ends_at update denied');
+  $$update public.user_profiles set access_until = '2100-01-01T00:00:00Z' where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'$$,
+  '42501', 'access_until update denied');
 select pg_temp.expect_state(
   $$insert into public.user_profiles (id) values ('cccccccc-cccc-cccc-cccc-cccccccccccc')$$,
   '42501', 'user_profiles insert denied');
@@ -267,12 +267,12 @@ select pg_temp.expect_state(
 select pg_temp.expect_state(
   $$select id from public.social_accounts$$, '42501', 'anon account read denied');
 
--- service_role still writes the trial end (it bypasses RLS and keeps its grants).
+-- service_role still writes the access end (it bypasses RLS and keeps its grants).
 reset role;
 set local role service_role;
 select pg_temp.expect_state(
-  $$update public.user_profiles set trial_ends_at = '2099-06-01T00:00:00Z' where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'$$,
-  'ok', 'service_role can write trial_ends_at');
+  $$update public.user_profiles set access_until = '2099-06-01T00:00:00Z' where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'$$,
+  'ok', 'service_role can write access_until');
 select pg_temp.expect_count(
   $$select count(*) from public.social_accounts where id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb04' and encrypted_tokens = 'cipher-b'$$,
   1, 'service_role can read encrypted_tokens');

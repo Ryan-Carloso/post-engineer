@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 
 vi.mock('@/lib/i18n/provider', () => ({
@@ -9,6 +9,7 @@ vi.mock('@/lib/i18n/provider', () => ({
         'landing.pricingContactTitle': 'Talk to us to get tokens',
         'landing.pricingContactText': 'Contact us while in beta.',
         'landing.pricingWhatsappCta': 'Message us on WhatsApp',
+        'landing.pricingDiscordCta': 'Join the Discord',
         'landing.pricingEmailCta': 'Email us',
         'landing.pricingGithubTitle': 'Prefer to self-host?',
         'landing.pricingGithubText': 'Open source.',
@@ -22,31 +23,21 @@ vi.mock('@/lib/i18n/provider', () => ({
 
 import { PricingContactCard } from '../pricing-contact';
 
-const WHATSAPP_ENV = 'NEXT_PUBLIC_WHATSAPP_NUMBER';
-const TEST_NUMBER = '15551234567';
 const SUPPORT_EMAIL_LITERAL = 'madebyryandev@gmail.com';
 const GITHUB_URL_LITERAL = 'https://github.com/Ryan-Carloso/post-engineer';
-const origWhatsappEnv = process.env[WHATSAPP_ENV];
 
 describe('PricingContactCard', () => {
-  beforeEach(() => {
-    process.env[WHATSAPP_ENV] = TEST_NUMBER;
-  });
-
-  afterEach(() => {
-    if (origWhatsappEnv === undefined) delete process.env[WHATSAPP_ENV];
-    else process.env[WHATSAPP_ENV] = origWhatsappEnv;
-  });
-
-  it('links WhatsApp with the beta message, email and GitHub, and shows no price', () => {
+  it('links WhatsApp with the beta message, Discord, email and GitHub, and shows no price', () => {
     const { container } = render(<PricingContactCard />);
     expect(screen.getByTestId('pricing-whatsapp-cta')).toHaveAttribute(
       'href',
-      `https://wa.me/${TEST_NUMBER}?text=${encodeURIComponent('Hi! I would like tokens.')}`,
+      `https://wa.me/351962248268?text=${encodeURIComponent('Hi! I would like tokens.')}`,
     );
     expect(screen.getByTestId('pricing-whatsapp-cta').textContent).toBe(
       'Message us on WhatsApp ↗',
     );
+    expect(screen.getByTestId('pricing-discord-cta')).toHaveAttribute('href', 'https://discord.gg/ukmCXMCDJ');
+    expect(screen.getByTestId('pricing-discord-cta').textContent).toBe('Join the Discord ↗');
     expect(screen.getByTestId('pricing-email-cta')).toHaveAttribute(
       'href',
       `mailto:${SUPPORT_EMAIL_LITERAL}`,
@@ -70,11 +61,10 @@ describe('PricingContactCard', () => {
     expect(container.textContent).not.toMatch(/\$\d/);
   });
 
-  it('still shows email and GitHub when the WhatsApp number is not configured', () => {
-    delete process.env[WHATSAPP_ENV];
+  it('renders the WhatsApp and Discord buttons with the same style', () => {
     render(<PricingContactCard />);
-    expect(screen.queryByTestId('pricing-whatsapp-cta')).toBeNull();
-    expect(screen.getByTestId('pricing-email-cta')).toBeInTheDocument();
-    expect(screen.getByTestId('pricing-github-cta')).toBeInTheDocument();
+    expect(screen.getByTestId('pricing-discord-cta').className).toBe(
+      screen.getByTestId('pricing-whatsapp-cta').className,
+    );
   });
 });

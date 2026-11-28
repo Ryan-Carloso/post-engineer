@@ -1,10 +1,5 @@
 const MIN_PROVIDERS = 3;
 
-/**
- * @param {{ file: string, line: number, kind: 'list'|'chain'|'map'|'text', providers: string[] }} group
- * @param {{ providers: readonly string[], subsets: Record<string, readonly string[]>, home: boolean }} context
- * @returns {string | null}
- */
 export function violationOf(group, context) {
   const named = [...new Set(group.providers)];
   if (named.length < MIN_PROVIDERS) return null;

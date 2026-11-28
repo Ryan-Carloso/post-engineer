@@ -19,8 +19,8 @@ generate media.
 
 Post Engineer is open source under the [Apache License, Version 2.0](LICENSE).
 Self-host the whole platform on your own VPS following
-[docs/SELF_HOSTING.md](docs/SELF_HOSTING.md), or use the hosted version: new
-accounts get a 7-day free trial.
+[docs/SELF_HOSTING.md](docs/SELF_HOSTING.md), or use the hosted version: it is
+in a free closed beta, with access granted through Discord.
 
 > Prefer the hosted version? The same platform runs at
 > [post-engineer.com](https://post-engineer.com) — you can skip the local
@@ -53,7 +53,7 @@ apps/mcp/       MCP server for AI agents (npm package: post-engineer-mcp)
 ```
 
 The web app owns authentication, personas, scheduling, uploads, OAuth, the
-free trial, the API and publishing: an in-process scheduler claims each due
+beta access gate, the API and publishing: an in-process scheduler claims each due
 slot in Postgres and publishes it through the same upload core the API uses.
 The MCP server talks to the web API with a user API key. Postgres (via
 Supabase) is the system of record: personas, schedules, uploads, OAuth tokens

@@ -44,6 +44,7 @@ table['GET /api/schedule/slots/[slotId]'] = 'schedule_slot_fetched';
 table['GET /api/schedule/status'] = 'schedule_status_fetched';
 table['GET /api/tool-config'] = 'tool_config_fetched';
 table['GET /api/version'] = 'version_fetched';
+table['PATCH /api/api-keys/[id]'] = 'api_key_updated';
 table['PATCH /api/persona'] = 'persona_updated';
 table['PATCH /api/prompts/[slug]'] = 'prompt_updated';
 table['PATCH /api/schedule/slots/[slotId]'] = 'schedule_slot_updated';

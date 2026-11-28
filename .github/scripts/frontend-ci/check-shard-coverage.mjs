@@ -3,13 +3,6 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { WEB_SHARD_TOTAL } from './shard-tests.mjs';
 
-/**
- * @param {object} input
- * @param {{ shard: number, selected: number }[]} input.markers
- * @param {number[]} input.coverageShards
- * @param {number} input.total
- * @returns {{ ok: boolean, reason: string }}
- */
 export function assessShardCoverage({ markers, coverageShards, total }) {
   if (!Array.isArray(markers) || markers.length !== total) {
     return { ok: false, reason: `expected ${total} shard markers, found ${markers.length}` };
@@ -40,13 +33,7 @@ export function assessShardCoverage({ markers, coverageShards, total }) {
   };
 }
 
-/**
- * @param {string} dir
- * @param {(name: string) => number | null} shardOf
- * @returns {Promise<string[]>}
- */
 async function filesUnder(dir, shardOf) {
-  /** @type {string[]} */
   const found = [];
   let entries;
   try {
@@ -80,14 +67,13 @@ async function main() {
     process.exit(1);
   }
   const markerFiles = (await filesUnder(markersDir, () => null)).filter((file) => file.endsWith('.shard-marker.json'));
-  /** @type {{ shard: number, selected: number }[]} */
   const markers = [];
   for (const file of markerFiles) {
     const parsed = JSON.parse(await readFile(file, 'utf8'));
     if (typeof parsed !== 'object' || parsed === null) {
       throw new Error(`marker ${file} is not an object`);
     }
-    const row = /** @type {{ shard?: unknown, selected?: unknown }} */ (parsed);
+    const row = (parsed);
     if (typeof row.shard !== 'number' || typeof row.selected !== 'number') {
       throw new Error(`marker ${file} is missing shard or selected`);
     }

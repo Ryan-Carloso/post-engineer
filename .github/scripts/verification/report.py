@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Render the verification evidence table.
 
 The comment is the evidence. Cells are shortened and never include a file

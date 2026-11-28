@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Structural validation for .github/workflows/opencode-review.yml.
 
 Run: python3 .github/scripts/validate-opencode-review.py

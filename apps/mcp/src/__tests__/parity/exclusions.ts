@@ -10,42 +10,6 @@ import {
 import { endpointSite, toolCallsEndpoint, type McpCallGraph } from './mcp-calls.js';
 import { accessChain, calleeName, parseSource, reachableLocalNodes, staticText, topLevelFunctions, walk } from './ts-source.js';
 
-//---------------
-// Typed parity exclusions and their mechanical checks.
-//
-// Every exclusion is one of these kinds; there is no free-text kind. Each
-// check reads the route's syntax tree (route-facts.ts), per exported
-// handler, so comments and string contents never satisfy a check and one
-// handler cannot vouch for another.
-//
-// - session-only: only the browser cookie session authenticates. The
-//   handler calls requireSupabaseSession() with no argument or
-//   <client>.auth.getUser(); it never calls requireSupabaseSession(request),
-//   never reads the authorization/x-api-key header, and the file contains
-//   no bearer marker (isApiKey, isOAuth, resolveApiKey, verifyAccessToken…).
-// - bearer-rejected: the handler resolves bearers (requireSupabaseSession
-//   with the request) and has `if (… .isApiKey === true …) return 403` and
-//   the same for isOAuth (credential management stays off bearers).
-// - secret-auth: the only gate is a shared secret, proven per mechanism:
-//   cron-secret → `const r = rejectUnauthorizedCron(request, …)` returned
-//   when non-null; engine-secret → reads the x-engine-secret header and
-//   gates on secretsMatch(); stripe-signature → reads the stripe-signature
-//   header and calls webhooks.constructEvent(). No session, no bearer.
-// - oauth-redirect: a */start or */callback browser OAuth route that calls
-//   oauthPopupResponse or setOAuthNonceCookie; no bearer handling.
-// - ops-public: listed in the reviewed opsPublic list; no session, no
-//   bearer marker, no bearer header read.
-// - returned-url: the endpoint is only reached through a URL that a mapped
-//   endpoint returns. The referenced endpoint must be mapped to a tool that
-//   calls it, its handler must call an imported lib function whose source
-//   builds this endpoint's path, and this route must accept bearers
-//   (requireSupabaseSession(request)) so an MCP agent can open the URL.
-// - event-stream: an SSE twin of a polled endpoint. The handler answers
-//   text/event-stream from an engine path ending in /events; the polled
-//   endpoint must be mapped to a tool that calls it, and its handler must
-//   fetch the same engine path without /events.
-//---------------
-
 export const ExclusionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('session-only') }).strict(),
   z.object({ kind: z.literal('bearer-rejected') }).strict(),
@@ -73,11 +37,8 @@ export const ParityDataSchema = z
 export type ParityData = z.infer<typeof ParityDataSchema>;
 
 export interface VerifyContext {
-  /** Endpoint key → its route file and handler facts. */
   route: (key: string) => { route: RouteFile; handler: HandlerFacts } | undefined;
-  /** Source text of a web module specifier such as '@/lib/video-urls', or undefined. */
   libSource: (specifier: string) => string | undefined;
-  /** Source for imports reachable from a route; missing modules fail closed. */
   importSource?: (specifier: string, fromFile: string) => { file: string; text: string } | undefined;
   endpointTools: Readonly<Record<string, readonly string[]>>;
   graph: McpCallGraph;
@@ -146,7 +107,6 @@ function mappedAndCalled(ctx: VerifyContext, key: string): string | null {
   return calling.length > 0 ? null : `no tool mapped to ${key} calls it (${tools.join(', ')})`;
 }
 
-/** Violations of one exclusion; empty when the claim holds for the route. */
 export function verifyExclusion(key: string, exclusion: Exclusion, ctx: VerifyContext): string[] {
   const found = ctx.route(key);
   if (found === undefined) return [`${key}: exclusion has no matching route handler`];
@@ -170,9 +130,6 @@ export function verifyExclusion(key: string, exclusion: Exclusion, ctx: VerifyCo
       need(rejectsFlag(h, 'isOAuth', 403), 'bearer-rejected handler must `return …403` when auth.isOAuth === true');
       break;
     case 'secret-auth': {
-      // Cron secrets intentionally arrive in Authorization: Bearer. Reject
-      // API-key/OAuth markers and x-api-key imports, while allowing that
-      // header when the typed mechanism is cron-secret.
       const importedSecretRisk = importedBearerRisk(route, h, ctx).filter(
         (marker) => !(exclusion.mechanism === 'cron-secret' && marker === 'header:authorization'),
       );
@@ -232,22 +189,18 @@ export function verifyExclusion(key: string, exclusion: Exclusion, ctx: VerifyCo
   return errors;
 }
 
-/** `GET /api/persona/video-download/[taskId]/[...path]` → `/api/persona/video-download/`. */
 export function staticPrefix(key: string): string {
   const path = endpointSite(key).path;
   const cut = path.indexOf('{}');
   return cut === -1 ? path : path.slice(0, cut);
 }
 
-/** The engine path of a template like `{}/api/v1/tasks/{}/events`, else null. */
 function enginePath(text: string): string | null {
   const at = text.indexOf('/api/v1/');
   return at === -1 ? null : text.slice(at);
 }
 
 function returnsCronRejection(h: HandlerFacts): boolean {
-  // `const r = rejectUnauthorizedCron(request, …)` and an `if` on r
-  // (`r !== null` or `r`) whose branch is `return r;`.
   const names = new Set<string>();
   for (const root of h.nodes) {
     walk(root, (node) => {

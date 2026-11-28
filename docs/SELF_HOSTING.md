@@ -123,7 +123,7 @@ after adding the `/mcp*` Caddy handle above. The stdio npm package is
 unaffected.
 
 > **Note on `NEXT_PUBLIC_*` vars:** Next.js inlines `NEXT_PUBLIC_*`
-> variables (e.g. `NEXT_PUBLIC_WHATSAPP_NUMBER`) **at build time**. Setting
+> variables (e.g. `NEXT_PUBLIC_POSTHOG_KEY`) **at build time**. Setting
 > them only at runtime has no effect — set them in `.env` and rebuild the
 > web app (`pnpm build` / rebuild the container), otherwise the affected
 > UI elements are silently absent.

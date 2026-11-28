@@ -21,7 +21,7 @@
 /apps/mcp/src/__tests__/parity-verifier.test.ts @Ryan-Carloso
 /apps/mcp/src/__tests__/parity-exclusions.json @Ryan-Carloso
 /apps/mcp/src/__tests__/parity/ @Ryan-Carloso
-/apps/web/app/api/__tests__/parity-exclusion-bearer.test.ts @Ryan-Carloso
+/apps/web/app/api/__tests__/parity-exclusion-bearer.node.test.ts @Ryan-Carloso
 /apps/web/vitest.config.* @Ryan-Carloso
 /apps/web/package.json @Ryan-Carloso
 /apps/web/project.json @Ryan-Carloso

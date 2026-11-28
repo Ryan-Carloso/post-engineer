@@ -34,7 +34,8 @@ const eslintConfig = [
         },
       ],
       'no-unused-vars': 'off',
-      '@typescript-eslint/ban-ts-comment': ['error', { 'ts-expect-error': false }],
+      '@typescript-eslint/ban-ts-comment': ['error', { 'ts-expect-error': true }],
+      '@typescript-eslint/no-namespace': ['error', { allowDeclarations: true }],
       'no-unused-expressions': [
         'error',
         {

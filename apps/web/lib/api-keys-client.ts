@@ -52,6 +52,26 @@ export async function revokeApiKey(id: string): Promise<void> {
   if (!response.ok) throw new HttpStatusError('Failed to revoke API key', response.status);
 }
 
+export interface UpdateApiKeyInput {
+  id: string;
+  approvalMode: ApprovalMode;
+  personaIds: string[] | null;
+}
+
+export async function updateApiKey(input: UpdateApiKeyInput): Promise<ApiKeyItem> {
+  const response = await fetch(`/api/api-keys/${encodeURIComponent(input.id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ approvalMode: input.approvalMode, personaIds: input.personaIds }),
+  });
+  if (!response.ok) throw new HttpStatusError('Failed to update API key', response.status);
+  const data: unknown = await response.json().catch(() => null);
+  if (typeof data !== 'object' || data === null || !('key' in data)) {
+    throw new HttpStatusError('Failed to update API key', response.status);
+  }
+  return (data as { key: ApiKeyItem }).key;
+}
+
 export function useApiKeysQuery() {
   return useQuery<ApiKeyItem[]>({
     queryKey: ['user-api-keys'],
@@ -73,6 +93,16 @@ export function useRevokeApiKeyMutation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => revokeApiKey(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['user-api-keys'] });
+    },
+  });
+}
+
+export function useUpdateApiKeyMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateApiKeyInput) => updateApiKey(input),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['user-api-keys'] });
     },

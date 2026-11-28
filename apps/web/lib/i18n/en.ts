@@ -1,4 +1,5 @@
 import type { Dictionary } from './pt';
+import { apiKeysI18nEn } from './api-keys-i18n-en';
 import { mcpToolDescEn } from './mcp-tools-i18n-en';
 import { accountI18nEn } from './account-i18n-en';
 import { accountsI18nEn } from './accounts-i18n-en';
@@ -121,17 +122,12 @@ export const enDictionary: Dictionary = {
   apiKeys: {
     title: 'API Keys',
     subtitle: 'Generate API keys to connect AI agents, OpenCode CLI, and MCP servers to your account.',
-    generateButton: '+ Generate new API Key',
-    nameLabel: 'Key name',
-    namePlaceholder: 'e.g. MCP Server, Local Agent',
     createSuccess: 'Key generated successfully!',
     warningCopyOnce: 'Copy this key now. For your security, it will not be shown again.',
     copied: 'Copied!',
     copyKey: 'Copy key',
-    noKeys: 'No API keys generated yet.',
     emptyTitle: 'No API keys yet',
     emptyDesc: 'Generate your first key to connect AI agents and MCP servers to your account.',
-    emptyCta: 'Generate API key',
     lastUsed: 'Last used: {date}',
     neverUsed: 'Never used',
     revoked: 'Revoked',
@@ -159,10 +155,10 @@ export const enDictionary: Dictionary = {
     needHelp: 'Need help?',
     docsHelpMessage: 'Hi! I need help connecting my AI agent to Post Engineer via MCP.',
     installPromptTitle: 'Install prompt',
-    copy: 'Copy',
     toolsTitle: 'Available tools',
     toolsSubtitle: 'Here are the tools your AI agent gets access to after connecting.',
     ...mcpToolDescEn,
+    ...apiKeysI18nEn,
   },
   persona: {
     title: 'Create persona',
@@ -248,7 +244,7 @@ export const enDictionary: Dictionary = {
     check2: 'Automatic scheduling',
     check3: 'Social publishing',
     cta: 'Get started',
-    noCard: '7-day free trial · No credit card required',
+    noCard: 'Free during the beta · No credit card',
     statsVideos: 'Videos published',
     statsViews: 'Views',
     statsEngagement: 'Engagement',
@@ -274,9 +270,9 @@ export const enDictionary: Dictionary = {
     featureScheduleHint: 'Pick the times and Post Engineer publishes on its own.',
     featureGrow: 'Consistency that grows',
     featureGrowHint: 'Frequent content to reach more people and grow your channel.',
-    pricingBadge: 'Free trial',
-    pricingTitle: 'Start with a 7-day free trial',
-    pricingSubtitle: 'Every account starts with 7 days free. When the trial ends, contact us on WhatsApp or by email to keep scheduling and publishing.',
+    pricingBadge: 'Closed beta, free',
+    pricingTitle: 'Free closed beta for the first 30 users',
+    pricingSubtitle: 'Publishing is free during the beta. Join through Discord.',
     planStarterFeature1: '30 videos per month',
     planStarterFeature2: 'Up to 3 channels (YouTube, Instagram, etc.)',
     planStarterFeature3: 'All AI tools included',
@@ -291,12 +287,12 @@ export const enDictionary: Dictionary = {
     faq1Q: 'Does Post Engineer make the videos?',
     faq1A: 'No. You make your videos and images with any tool you like. Post Engineer uploads, schedules and publishes them, and measures how each post does.',
     faq2Q: 'Is Post Engineer launched yet?',
-    faq2A: 'We are still in beta: every account gets a 7-day free trial. After it ends, contact us on WhatsApp or by email to continue.',
+    faq2A: 'We are in a closed beta with 30 free spots. Join the Discord to request access: admitted accounts publish for free, up to 100 posts per month during the beta.',
     faq4Q: 'Which platforms are supported?',
     faq4A: 'YouTube, Instagram, LinkedIn, Threads, Facebook Pages, Bluesky, Pinterest, Telegram, 3Speak, Rumble and Fanvue.',
     ctaFinalTitle: 'Your next post could be online tomorrow.',
     ctaFinalSubtitle: 'Join creators already scheduling their content with Post Engineer.',
-    ctaFinalNote: '7-day free trial · No credit card required',
+    ctaFinalNote: 'Free during the beta · No credit card',
   },
 
   footer: {

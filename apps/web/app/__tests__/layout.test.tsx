@@ -53,26 +53,17 @@ describe('app/layout — RootLayout', () => {
     expect(body?.className).toContain('min-h-dvh');
   });
 
-  it('renders the WhatsApp support button when the support number is configured', () => {
-    vi.stubEnv('NEXT_PUBLIC_WHATSAPP_NUMBER', '15551234567');
-    try {
-      render(<RootLayout>content</RootLayout>);
-      const link = screen.getByRole('link', { name: 'WhatsApp' });
-      expect(link).toHaveAttribute('href', expect.stringContaining('https://wa.me/15551234567'));
-      expect(link).toHaveAttribute('target', '_blank');
-    } finally {
-      vi.unstubAllEnvs();
-    }
+  it('renders the WhatsApp support button with the built-in number', () => {
+    render(<RootLayout>content</RootLayout>);
+    const link = screen.getByRole('link', { name: 'WhatsApp' });
+    expect(link).toHaveAttribute('href', expect.stringContaining('https://wa.me/351962248268'));
+    expect(link).toHaveAttribute('target', '_blank');
   });
 
-  it('hides the WhatsApp support button when no support number is configured', () => {
-    vi.stubEnv('NEXT_PUBLIC_WHATSAPP_NUMBER', '');
-    try {
-      render(<RootLayout>content</RootLayout>);
-      expect(screen.queryByRole('link', { name: 'WhatsApp' })).toBeNull();
-    } finally {
-      vi.unstubAllEnvs();
-    }
+  it('opens WhatsApp with the localized help message prefilled', () => {
+    render(<RootLayout>content</RootLayout>);
+    const link = screen.getByRole('link', { name: 'WhatsApp' });
+    expect(link.getAttribute('href')).toMatch(/^https:\/\/wa\.me\/351962248268\?text=.+/);
   });
 });
 

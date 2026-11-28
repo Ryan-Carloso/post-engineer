@@ -5,7 +5,7 @@ import type { TranslationKey } from '@/lib/i18n';
 import { useI18n } from '@/lib/i18n/provider';
 import { buildInstallPrompt } from '@/lib/mcp-install-prompt';
 import { useCopyText } from '@/lib/use-copy-text';
-import { whatsappUrl } from '@/lib/whatsapp';
+import { whatsappUrl } from '@/lib/public-links';
 import { Button } from '@/components/ui/button';
 import {
   AccountsIcon,
@@ -40,25 +40,25 @@ const MCP_TOOL_CARDS: McpToolCard[] = [
   { id: 'prompts', actions: ['list', 'get', 'create', 'update', 'delete', 'versions', 'restore'], descKey: 'apiKeys.toolDescPrompts', Icon: GlobeIcon },
 ];
 
-export default function McpDocsSection({ apiKey }: { apiKey: string | null }): ReactNode {
+export default function McpDocsSection({ onPromptCopied }: { onPromptCopied?: () => void }): ReactNode {
   const { t, locale } = useI18n();
-  const { copied, copy } = useCopyText();
-  const prompt = buildInstallPrompt(locale, apiKey);
+  const { copied, copy } = useCopyText(onPromptCopied);
+  const prompt = buildInstallPrompt(locale);
   const helpHref = whatsappUrl(t('apiKeys.docsHelpMessage'));
 
   return (
     <section className="overflow-hidden rounded-2xl border border-line bg-card shadow-[0_1px_2px_rgba(16,23,40,0.02)]">
       <div className="p-4 lg:p-6">
         <div className="overflow-hidden rounded-xl bg-code shadow-[0_8px_24px_rgba(16,23,40,0.25)]">
-          <div className="flex items-center justify-between border-b border-white/10 px-4 py-2.5">
+          <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
             <span className="text-xs font-semibold text-code-text">{t('apiKeys.installPromptTitle')}</span>
             <Button
               type="button"
               data-testid="copy-mcp-prompt-btn"
               onClick={() => copy(prompt)}
-              className="rounded-lg bg-code-text/20 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-code-text/30"
+              className="h-auto rounded-lg bg-card px-5 py-2.5 text-sm font-bold text-ink shadow-md transition-colors hover:bg-surface"
             >
-              {copied ? t('apiKeys.docsCopied') : t('apiKeys.copy')}
+              {copied ? t('apiKeys.docsCopied') : t('apiKeys.copyPrompt')}
             </Button>
           </div>
           <pre
@@ -108,24 +108,26 @@ export default function McpDocsSection({ apiKey }: { apiKey: string | null }): R
           </div>
         </details>
 
-        <p className="mt-5 rounded-xl border border-warning/30 bg-warning-soft p-3 text-xs leading-5 text-warning">
+        <p data-testid="mcp-prompt-key-note" className="mt-5 rounded-xl border border-warning/30 bg-warning-soft p-3 text-xs leading-5 text-warning">
+          {t('apiKeys.promptKeyNote')}
+        </p>
+
+        <p className="mt-3 rounded-xl border border-warning/30 bg-warning-soft p-3 text-xs leading-5 text-warning">
           {t('apiKeys.docsSecurityNote')}
         </p>
 
-        {helpHref !== null ? (
-          <a
-            href={helpHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            data-testid="mcp-docs-help-cta"
-            className="mt-4 inline-flex items-center gap-2 rounded-xl border border-line bg-card px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-surface"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="size-4" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z" />
-            </svg>
-            {t('apiKeys.needHelp')}
-          </a>
-        ) : null}
+        <a
+          href={helpHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          data-testid="mcp-docs-help-cta"
+          className="mt-4 inline-flex items-center gap-2 rounded-xl border border-line bg-card px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-surface"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="size-4" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z" />
+          </svg>
+          {t('apiKeys.needHelp')}
+        </a>
       </div>
     </section>
   );
