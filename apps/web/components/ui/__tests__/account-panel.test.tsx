@@ -152,6 +152,13 @@ describe('AccountPanel', () => {
     expect(screen.getByRole('button', { name: 'EN' })).toBeInTheDocument();
   });
 
+  it('keeps the locale buttons at their own height instead of the global 2.75rem button minimum', () => {
+    render(<AccountPanel />, { wrapper: createWrapper() });
+    for (const name of ['PT', 'EN']) {
+      expect(screen.getByRole('button', { name }).className.split(' ')).toContain('min-h-0');
+    }
+  });
+
   it('renders the API key row linking to the prompts hub, named like the nav tab', () => {
     render(<AccountPanel />, { wrapper: createWrapper() });
     const link = screen.getByTestId('profile-api-keys-link');
