@@ -1,4 +1,3 @@
-// @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import { dictionaries } from '@/lib/i18n';
 import { ERROR_CODES, errorMessage } from '@/lib/error-codes';
