@@ -14,7 +14,7 @@ export const SCHEDULED_POST_STATUSES = [
   'cancelled',
 ] as const;
 
-export type ScheduledPostStatus = (typeof SCHEDULED_POST_STATUSES)[number];
+type ScheduledPostStatus = (typeof SCHEDULED_POST_STATUSES)[number];
 
 export interface ScheduledSlot {
   id: string;
