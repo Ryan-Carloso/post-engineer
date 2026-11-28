@@ -1,7 +1,3 @@
-/**
- * @param {{ file: string, line: number, name: string, context: string }} c
- * @returns {string}
- */
 function buildPrompt(c) {
   return [
     'You are an API naming reviewer for a JSON API consumed by AI agents.',
@@ -27,13 +23,9 @@ function buildPrompt(c) {
   ].join('\n');
 }
 
-/**
- * @param {unknown} parsed
- * @returns {{ verdict: 'pass' | 'warn' | 'fail', reason: string, alternatives: string[] } | null}
- */
 function normalizeVerdict(parsed) {
   if (typeof parsed !== 'object' || parsed === null) return null;
-  const p = /** @type {Record<string, unknown>} */ (parsed);
+  const p = (parsed);
   if (p.verdict !== 'pass' && p.verdict !== 'warn' && p.verdict !== 'fail') return null;
   if (typeof p.reason !== 'string' || p.reason.trim() === '') return null;
   const alternatives = Array.isArray(p.alternatives)
@@ -49,12 +41,6 @@ function stripFences(text) {
     .trim();
 }
 
-/**
- * @param {{ file: string, line: number, name: string, context: string, renamedFrom: string | null }} c
- * @param {{ llm: { baseUrl: string, model: string, timeoutMs: number } }} config
- * @param {typeof fetch} fetchImpl
- * @param {string} apiKey
- */
 async function reviewOne(c, config, fetchImpl, apiKey) {
   const url = `${config.llm.baseUrl.replace(/\/+$/, '')}/chat/completions`;
   const res = await fetchImpl(url, {
@@ -90,12 +76,6 @@ async function reviewOne(c, config, fetchImpl, apiKey) {
   return verdict;
 }
 
-/**
- * @param {Array<{ file: string, line: number, name: string, context: string, renamedFrom: string | null }>} candidates
- * @param {{ llm: { enabled: boolean, baseUrl: string, model: string, maxNames: number, timeoutMs: number } }} config
- * @param {{ fetchImpl?: typeof fetch, apiKey?: string }} [options]
- * @returns {Promise<{ findings: Array<{ file: string, line: number, name: string, severity: 'error' | 'warn', reason: string, alternatives: string[], source: 'llm', renamedFrom: string | null }>, skipped: number, warnings: string[] }>}
- */
 export async function reviewNames(candidates, config, options = {}) {
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
   const apiKey = options.apiKey ?? process.env.API_NAMING_LLM_API_KEY ?? '';
@@ -116,7 +96,6 @@ export async function reviewNames(candidates, config, options = {}) {
   const max = Math.max(1, config.llm.maxNames);
   const todo = candidates.slice(0, max);
   const skipped = candidates.length - todo.length;
-  /** @type {string[]} */
   const warnings = skipped > 0 ? [`LLM cap reached (maxNames=${max}): ${skipped} name(s) skipped without review.`] : [];
   const findings = [];
   for (const c of todo) {

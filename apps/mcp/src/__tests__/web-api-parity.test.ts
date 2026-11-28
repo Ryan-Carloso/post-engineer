@@ -12,30 +12,6 @@ import { EndpointMappingSchema, endpointToolNames, uncoveredEndpoints, verifyMap
 import { ParityDataSchema, verifyExclusion, type VerifyContext } from './parity/exclusions.js';
 import { readRouteFile, type HandlerFacts, type RouteFile } from './parity/route-facts.js';
 
-// Web -> MCP parity: every web API endpoint (apps/web/app/api/**/route.ts)
-// must either map to an MCP tool that really calls it or carry an exclusion
-// whose typed kind is verified mechanically against the route (see
-// parity/exclusions.ts for the kinds and their checks). A new endpoint with
-// no entry fails, and so does a mapping or exclusion that is not true of
-// the code (issues #209/#245/#256: free-text reasons like "dashboard-only"
-// let agents skip the tool).
-//
-// Sources are read as TypeScript syntax trees (parity/ts-source.ts), so a
-// comment or a string never satisfies a check, and auth is checked per
-// exported handler.
-//
-// Data files:
-// - parity-endpoint-tools.json: endpoint → [{ tool, action? }]. Capability
-//   parity (issue #566): a tool is a complete abstraction of an intent, and
-//   no endpoint needs a tool or an action of its own. Each entry is proven by
-//   the MCP sources (the tool, or for an action tool the named action's
-//   handler, reaches a request site with that method and path) and, for an
-//   action, by invoking it (parity-action-samples.json holds the arguments),
-//   so adding or extending a tool needs no approval. Coverage stays total:
-//   an endpoint no tool reaches and no exclusion covers fails.
-// - parity-exclusions.json: { opsPublic, exclusions }. Guarded: adding or
-//   changing an entry needs code-owner approval (parity-exclusion-guard).
-
 const here = dirname(fileURLToPath(import.meta.url));
 const mcpSrcDir = join(here, '..');
 const webDir = join(here, '..', '..', '..', 'web');
@@ -51,15 +27,6 @@ const ENDPOINT_MAPPING = EndpointMappingSchema.parse(
 );
 const ENDPOINT_TOOLS = endpointToolNames(ENDPOINT_MAPPING);
 
-// Calls that invoke one mapped action: `<tool>.<action>` → one or more
-// samples, each the tool arguments (including `action`) and, when the action
-// must read a listing before it sends its request, the stubbed responses by
-// `METHOD /path`. An action that sends different requests on different calls
-// (preview, then confirm) lists one sample per call. `{{tmp:NAME}}` in a
-// string is the path of a small file the test writes for a local-file action.
-// The confirmToken of personas.delete is the digest of the persona id and of
-// the stubbed preview: it changes when persona-delete.ts changes
-// how the token is built, and that failure says so.
 const SampleSchema = z.object({ args: z.record(z.string(), z.unknown()), responses: z.record(z.string(), z.unknown()).optional() }).strict();
 const ACTION_SAMPLES: Record<string, Array<z.infer<typeof SampleSchema>>> = z
   .record(z.string(), z.array(SampleSchema).min(1))
@@ -72,7 +39,6 @@ function withTempFiles(value: unknown): unknown {
   if (typeof value === 'string') {
     return value.replace(/\{\{tmp:([\w.-]+)\}\}/g, (_match, name: string) => {
       const file = join(TEMP_DIR, name);
-      // A real PNG signature: the media upload checks the content, not the extension.
       writeFileSync(file, name.endsWith('.png') ? Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex') : 'sample');
       return file;
     });
@@ -84,10 +50,6 @@ function withTempFiles(value: unknown): unknown {
   return value;
 }
 
-// Tools with no backing web endpoint. Empty today: every tool calls the
-// web API through the MCP client. A tool registered anywhere in
-// apps/mcp/src must appear here or in parity-endpoint-tools.json — parity
-// discovers registrations in every source file, not only index.ts.
 const WEBLESS_TOOLS: Record<string, string> = {};
 
 function collectFiles(dir: string, accept: (name: string) => boolean): string[] {
@@ -210,9 +172,6 @@ describe('Web -> MCP parity', () => {
     expect(unproven, `Mapping(s) the MCP sources do not back:\n${unproven.join('\n')}`).toEqual([]);
   });
 
-  // The syntax tree proves an action's handler can reach its endpoint; this
-  // proves that invoking the action sends the request. Vacuous while no tool
-  // has actions (the mechanism is pinned in parity/action-mappings.test.ts).
   const mappedActions = Object.entries(ENDPOINT_MAPPING).flatMap(([key, entries]) =>
     entries.flatMap((entry) => (entry.action === undefined ? [] : [{ key, tool: entry.tool, action: entry.action }])),
   );
@@ -250,9 +209,6 @@ describe('Web -> MCP parity', () => {
     expect(unknown).toEqual([]);
   });
 
-  // The exclusion file is parsed by ParityDataSchema above, so an unknown
-  // kind, a free-text reason, or an extra field already fails before this
-  // point. These per-entry checks prove the claim against the route.
   it.each(Object.entries(EXCLUDED_ENDPOINTS))(
     'verifies the %s exclusion against its route',
     (key, exclusion) => {

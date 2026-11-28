@@ -12,6 +12,12 @@ function readPlatformVersion(): string {
   }
 }
 
+const SERVER_ONLY_PACKAGES = ['posthog-node'];
+
+export function emptyServerOnlyPackages(alias: Record<string, unknown> | undefined): Record<string, unknown> {
+  return { ...alias, ...Object.fromEntries(SERVER_ONLY_PACKAGES.map((name) => [name, false])) };
+}
+
 function readBuiltAt(): string {
   const injected = process.env.BUILT_AT?.trim();
   if (injected) return injected;
@@ -31,7 +37,11 @@ const nextConfig: NextConfig = {
     COMMIT: process.env.COMMIT?.trim() ?? '',
     BUILT_AT: readBuiltAt(),
   },
-  serverExternalPackages: ['googleapis', 'google-auth-library'],
+  serverExternalPackages: ['googleapis', 'google-auth-library', ...SERVER_ONLY_PACKAGES],
+  webpack: (config, { nextRuntime }) => {
+    if (nextRuntime !== 'nodejs') config.resolve.alias = emptyServerOnlyPackages(config.resolve.alias);
+    return config;
+  },
   images: {
     remotePatterns: [
       {

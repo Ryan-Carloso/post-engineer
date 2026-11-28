@@ -198,7 +198,7 @@ builds these paths, and the tests pin the shape per writer.
   `node apps/web/scripts/generate-schema-expectations.mjs`. The web checks
   those columns against the live database at startup and reports a missing
   one (a deploy that went out before its migration), and
-  `apps/web/lib/__tests__/schema-expectations-gen.test.ts` fails when the
+  `apps/web/lib/__tests__/schema-expectations-gen.node.test.ts` fails when the
   committed `lib/schema-expectations.gen.ts` is stale.
 - Update the table above. It is the single migration list:
   `docs/SELF_HOSTING.md` links here instead of duplicating it.

@@ -12,18 +12,6 @@ import {
 
 export { WEB_SHARD_TOTAL };
 
-/**
- * @param {object} input
- * @param {string} input.event
- * @param {string[]} input.changedPaths
- * @param {boolean} input.forceAll
- * @param {string[]} input.allFiles
- * @param {string[]} input.listedChanged
- * @param {boolean} input.listChangedFailed
- * @param {unknown} input.timings
- * @param {number} input.shard
- * @param {number} input.total
- */
 export function planShard({
   event,
   changedPaths,
@@ -50,16 +38,11 @@ export function planShard({
   return { mode: selection.mode, files: bins[shard - 1] };
 }
 
-/**
- * @param {string} stdout
- * @param {string} appRoot
- */
 export function parseVitestList(stdout, appRoot) {
   const root = path.resolve(appRoot);
-  /** @type {Set<string>} */
   const files = new Set();
   for (const raw of stdout.split('\n')) {
-    const line = raw.trim();
+    const line = raw.trim().replace(/^\[[^\]]+\]\s+/, '');
     if (!/\.test\.tsx?$/.test(line)) continue;
     const absolute = path.isAbsolute(line) ? line : path.resolve(root, line);
     const relative = path.relative(root, absolute).split(path.sep).join('/');

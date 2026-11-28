@@ -1,8 +1,7 @@
-// @vitest-environment node
-
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import nextConfig, { emptyServerOnlyPackages } from '../../next.config';
 import {
   __resetPostHogServerForTests,
   getPostHogServer,
@@ -47,15 +46,11 @@ describe('getPostHogServer (node runtime)', () => {
     expect(source).not.toMatch(/^\s*import .* from ['"]posthog-node['"]/m);
   });
 
-  it('marks the posthog-node dynamic import with webpackIgnore: true', () => {
-    const source = readFileSync(path.resolve(process.cwd(), 'lib/posthog-server.ts'), 'utf8');
-    const dynamicImports = [...source.matchAll(/import\(([\s\S]*?)\)/g)];
-    const posthogImports = dynamicImports.filter((m) => m[1].includes('posthog-node'));
-    expect(posthogImports.length).toBeGreaterThan(0);
-    for (const m of posthogImports) {
-      expect(m[1]).toMatch(/webpackIgnore:\s*true/);
-    }
+  it('loads posthog-node from node_modules on the server and leaves it out of the client and edge bundles', () => {
+    expect(nextConfig.serverExternalPackages).toContain('posthog-node');
+    expect(emptyServerOnlyPackages(undefined)).toEqual({ 'posthog-node': false });
   });
+
 });
 
 describe('isPostHogServerConfigured', () => {

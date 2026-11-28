@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import nextConfig from '../next.config';
+import nextConfig, { emptyServerOnlyPackages } from '../next.config';
 
 const headersFor = async (env: Record<string, string | undefined>): Promise<Array<{ key: string; value: string }>> => {
   const saved: Record<string, string | undefined> = {};
@@ -90,5 +90,24 @@ describe('next.config images', () => {
     ]) {
       expect(hosts).toContain(host);
     }
+  });
+});
+
+describe('next.config server-only packages', () => {
+  it('resolves posthog-node to an empty module in the client bundle and keeps the other aliases', () => {
+    expect(emptyServerOnlyPackages({ '@': '/app' })).toEqual({ '@': '/app', 'posthog-node': false });
+  });
+
+  it('aliases posthog-node away in the client and edge builds, never in the node server build', () => {
+    const { webpack } = nextConfig;
+    if (typeof webpack !== 'function') throw new Error('next.config has no webpack()');
+    const build = (nextRuntime: 'nodejs' | 'edge' | undefined): unknown => {
+      const config = { resolve: { alias: { '@': '/app' } } };
+      return Reflect.apply(webpack, undefined, [config, { nextRuntime }]);
+    };
+    const emptied = { resolve: { alias: { '@': '/app', 'posthog-node': false } } };
+    expect(build(undefined)).toEqual(emptied);
+    expect(build('edge')).toEqual(emptied);
+    expect(build('nodejs')).toEqual({ resolve: { alias: { '@': '/app' } } });
   });
 });
