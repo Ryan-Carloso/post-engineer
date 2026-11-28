@@ -280,6 +280,58 @@ describe('withApiErrorReporting', () => {
     expect(client.captureExceptionAs).not.toHaveBeenCalled();
   });
 
+  it('scrubs absolute paths out of attached free-text properties on a 4xx warning', async () => {
+    const response = NextResponse.json({ error: 'nope', code: 'BAD_INPUT' }, { status: 400 });
+    attachApiErrorProperties(response, {
+      detail: 'read /var/lib/post-engineer/secrets.txt failed',
+    });
+    const wrapped = withApiErrorReporting('GET /api/test', async () => response);
+
+    await wrapped(getRequest());
+
+    await vi.waitFor(() => expect(client.capture).toHaveBeenCalledTimes(1));
+    const [, properties] = client.capture.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
+    expect(properties.detail).toBe('read <path>/secrets.txt failed');
+    expect(properties.route).toBe('GET /api/test');
+  });
+
+  it('keeps an attached route literal verbatim while scrubbing sibling free text', async () => {
+    const response = NextResponse.json({ error: 'nope', code: 'BAD_INPUT' }, { status: 400 });
+    attachApiErrorProperties(response, {
+      route: 'POST /api/persona',
+      detail: 'read /var/lib/post-engineer/secrets.txt failed',
+    });
+    const wrapped = withApiErrorReporting('GET /api/test', async () => response);
+
+    await wrapped(getRequest());
+
+    await vi.waitFor(() => expect(client.capture).toHaveBeenCalledTimes(1));
+    const [, properties] = client.capture.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
+    expect(properties.route).toBe('POST /api/persona');
+    expect(properties.detail).toBe('read <path>/secrets.txt failed');
+  });
+
+  it('caps long attached free text on a 4xx warning', async () => {
+    const response = NextResponse.json({ error: 'nope', code: 'BAD_INPUT' }, { status: 400 });
+    attachApiErrorProperties(response, { detail: 'x'.repeat(600) });
+    const wrapped = withApiErrorReporting('GET /api/test', async () => response);
+
+    await wrapped(getRequest());
+
+    await vi.waitFor(() => expect(client.capture).toHaveBeenCalledTimes(1));
+    const [, properties] = client.capture.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
+    expect(properties.detail).toBe('x'.repeat(500));
+  });
+
   it('reports a 500 response via captureException with route, status and code', async () => {
     const wrapped = withApiErrorReporting(
       'POST /api/videos/generate-and-schedule',
@@ -315,6 +367,30 @@ describe('withApiErrorReporting', () => {
     expect(await res.json()).toMatchObject({
       success: false,
       code: 'INTERNAL_ERROR',
+    });
+  });
+
+  it('scrubs a body-controlled code carrying an absolute path on a 5xx $exception', async () => {
+    const wrapped = withApiErrorReporting(
+      'GET /api/test',
+      async () =>
+        NextResponse.json(
+          { error: 'x', code: '/etc/post-engineer/config.json' },
+          { status: 500 },
+        ),
+    );
+
+    await wrapped(getRequest());
+
+    await vi.waitFor(() => expect(client.captureException).toHaveBeenCalledTimes(1));
+    const [error, properties] = client.captureException.mock.calls[0] as [
+      Error,
+      Record<string, unknown>,
+    ];
+    expect(error.message).toBe('[GET /api/test] 500 <path>/config.json');
+    expect(properties).toMatchObject({
+      code: '<path>/config.json',
+      $exception_message: '[GET /api/test] 500 <path>/config.json',
     });
   });
 

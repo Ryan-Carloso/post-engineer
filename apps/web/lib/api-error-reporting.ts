@@ -1,6 +1,7 @@
 import { getPostHogServer } from './posthog-server';
 import { rejectionEventName, successEventName } from './api-telemetry-names';
 import { scrubSecrets } from './scrub';
+import { scrubErrorText } from './publisher/scrub-error';
 import { requireSupabaseSession } from './request-auth';
 import { recordMcpToolCall } from './mcp-tool-telemetry';
 
@@ -64,6 +65,28 @@ function asNonEmptyString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
+function asScrubbedString(value: unknown): string | undefined {
+  const text = asNonEmptyString(value);
+  return text === undefined ? undefined : scrubErrorText(text);
+}
+
+function scrubFreeTextValue(value: unknown): unknown {
+  if (typeof value === 'string') return scrubErrorText(value);
+  if (Array.isArray(value)) return value.map((item) => scrubFreeTextValue(item));
+  if (value !== null && typeof value === 'object') {
+    return scrubFreeTextProperties(value as Record<string, unknown>);
+  }
+  return value;
+}
+
+function scrubFreeTextProperties(properties: Record<string, unknown>): Record<string, unknown> {
+  const scrubbed: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(properties)) {
+    scrubbed[key] = key === 'route' ? value : scrubFreeTextValue(value);
+  }
+  return scrubbed;
+}
+
 function asDisplayName(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
@@ -119,14 +142,14 @@ async function reportApiIssue(
     const { code, errorId } = await readErrorDetails(response);
     const user = await resolveUser(request, getUserId);
 
-    const codeStr = asNonEmptyString(code);
-    const errorIdStr = asNonEmptyString(errorId);
+    const codeStr = asScrubbedString(code);
+    const errorIdStr = asScrubbedString(errorId);
     const properties: Record<string, unknown> = { route, status };
     if (codeStr !== undefined) properties.code = codeStr;
     if (errorIdStr !== undefined) properties.errorId = errorIdStr;
     if (user !== undefined) withUserProperties(properties, user);
     if (attachedProperties.has(response)) {
-      Object.assign(properties, attachedProperties.get(response));
+      Object.assign(properties, scrubFreeTextProperties(attachedProperties.get(response) ?? {}));
     }
 
     const message = `[${route}] ${status}${codeStr !== undefined ? ` ${codeStr}` : ''}`;
