@@ -22,11 +22,17 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
   const [preview, setPreview] = useState<DeletePreview | null>(null);
   const [typedName, setTypedName] = useState('');
   const [attempt, setAttempt] = useState(0);
-  const loadedPersonaId = useRef<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   const personaId = persona?.id ?? null;
+  const [prevPersonaId, setPrevPersonaId] = useState<string | null>(personaId);
+  if (prevPersonaId !== personaId) {
+    setPrevPersonaId(personaId);
+    setPhase('loading');
+    setPreview(null);
+    setTypedName('');
+  }
 
   useEffect(() => {
     if (phase === 'ready') {
@@ -62,15 +68,7 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
   }, [onClose, phase, personaId]);
 
   useEffect(() => {
-    if (!personaId) {
-      loadedPersonaId.current = null;
-      return;
-    }
-    const isNewPersona = loadedPersonaId.current !== personaId;
-    loadedPersonaId.current = personaId;
-    setPhase('loading');
-    setPreview(null);
-    if (isNewPersona) setTypedName('');
+    if (!personaId) return;
     let cancelled = false;
     void fetchDeletePreview(personaId)
       .then((result) => {
@@ -138,7 +136,11 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
             <p className="text-sm text-destructive">{t('personas.deleteDialogLoadError')}</p>
             <button
               type="button"
-              onClick={() => setAttempt((n) => n + 1)}
+              onClick={() => {
+                setPhase('loading');
+                setPreview(null);
+                setAttempt((n) => n + 1);
+              }}
               className="mt-3 inline-flex min-h-11 items-center justify-center rounded-lg border border-line px-5 py-2.5 text-sm font-semibold text-ink-soft hover:bg-surface"
             >
               {t('personas.tryAgain')}
