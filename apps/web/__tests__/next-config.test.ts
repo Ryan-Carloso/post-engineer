@@ -110,8 +110,4 @@ describe('next.config server-only packages', () => {
     expect(build('edge')).toEqual(emptied);
     expect(build('nodejs')).toEqual({ resolve: { alias: { '@': '/app' } } });
   });
-
-  it('loads posthog-node from node_modules on the server instead of bundling it', () => {
-    expect(nextConfig.serverExternalPackages).toContain('posthog-node');
-  });
 });

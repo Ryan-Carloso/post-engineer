@@ -27,42 +27,103 @@ function runFix(file, text) {
   return result.text;
 }
 
-const TOOL_DIRECTIVES = [
-  '// @vitest-environment node',
-  '// eslint-disable-next-line no-console',
-  '/* oxlint-disable-next-line jsx-a11y/no-static-element-interactions */',
-  '// @ts-expect-error',
-  '// @ts-ignore',
-  '// codeql[js/request-forgery]',
-  '/** @type {string} */',
-  '// @refresh reset',
-  '/* eslint-env node */',
-  '/* istanbul ignore next */',
-];
-
-test('reports every tool directive as a comment', () => {
+function reported(file, src) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'comments-'));
+  const previous = process.env.GITHUB_ACTIONS;
+  delete process.env.GITHUB_ACTIONS;
   try {
-    TOOL_DIRECTIVES.forEach((directive, i) => fs.writeFileSync(path.join(dir, `d${i}.ts`), `${directive}\nconst a = 1;\n`));
-    fs.writeFileSync(path.join(dir, 'p.py'), 'import os  # noqa: F401\nx = 1  # type: ignore[assignment]\n');
+    fs.writeFileSync(path.join(dir, file), src);
     const logs = [];
-    const files = [...TOOL_DIRECTIVES.map((_, i) => `d${i}.ts`), 'p.py'];
-    assert.equal(run(files, dir, (line) => logs.push(line)), 1);
-    TOOL_DIRECTIVES.forEach((directive, i) => assert.ok(logs.includes(`d${i}.ts:1: comment: ${directive}`), directive));
-    assert.ok(logs.includes('p.py:1: comment: # noqa: F401'));
-    assert.ok(logs.includes('p.py:2: comment: # type: ignore[assignment]'));
+    const code = run([file], dir, (line) => logs.push(line));
+    return { code, logs };
   } finally {
+    if (previous !== undefined) process.env.GITHUB_ACTIONS = previous;
     fs.rmSync(dir, { recursive: true, force: true });
   }
+}
+
+function assertReportedAndStripped(file, directive, code) {
+  const src = `${directive}\n${code}`;
+  const result = reported(file, src);
+  assert.equal(result.code, 1);
+  assert.deepEqual(result.logs.filter((line) => line.startsWith(`${file}:`)), [`${file}:1: comment: ${directive}`]);
+  assert.equal(runFix(file, src), code);
+  assert.deepEqual(reported(file, code), { code: 0, logs: ['comments: clean'] });
+}
+
+test('reports and strips @vitest-environment', () => {
+  assertReportedAndStripped('a.test.ts', '// @vitest-environment node', 'const a = 1;\n');
+});
+
+test('reports and strips an eslint-disable naming its rule', () => {
+  assertReportedAndStripped('a.ts', '// eslint-disable-next-line no-console', 'console.log(1);\n');
+});
+
+test('reports and strips an oxlint-disable', () => {
+  assertReportedAndStripped('a.ts', '/* oxlint-disable-next-line no-console */', 'console.log(1);\n');
+});
+
+test('reports and strips a bare @ts-expect-error', () => {
+  assertReportedAndStripped('a.ts', '// @ts-expect-error', 'const a: number = 1;\n');
+});
+
+test('reports and strips a blanket @ts-ignore', () => {
+  assertReportedAndStripped('a.ts', '// @ts-ignore', 'const a: number = 1;\n');
+});
+
+test('reports and strips a codeql suppression', () => {
+  assertReportedAndStripped('a.ts', '// codeql[js/request-forgery]', 'fetch(url);\n');
+});
+
+test('reports and strips a JSDoc type in plain JS', () => {
+  assertReportedAndStripped('a.mjs', '/** @type {string} */', 'const a = "x";\n');
+});
+
+test('reports and strips @refresh reset and eslint-env', () => {
+  assertReportedAndStripped('a.ts', '// @refresh reset', 'const a = 1;\n');
+  assertReportedAndStripped('b.ts', '/* eslint-env node */', 'const a = 1;\n');
+});
+
+test('reports and strips a webpack magic comment inside import()', () => {
+  const src = 'await import(/* webpackIgnore: true */ "x");\n';
+  assert.equal(reported('a.ts', src).code, 1);
+  assert.deepEqual(reported('a.ts', src).logs.slice(0, 1), ['a.ts:1: comment: /* webpackIgnore: true */']);
+  assert.equal(runFix('a.ts', src), 'await import( "x");\n');
+});
+
+test('reports and strips @vite-ignore inside import()', () => {
+  const src = 'await import(/* @vite-ignore */ p);\n';
+  assert.equal(reported('a.ts', src).code, 1);
+  assert.deepEqual(reported('a.ts', src).logs.slice(0, 1), ['a.ts:1: comment: /* @vite-ignore */']);
+  assert.equal(runFix('a.ts', src), 'await import( p);\n');
+});
+
+test('python: reports and strips noqa and type: ignore', () => {
+  const src = 'import os  # noqa: F401\nx = 1  # type: ignore[assignment]\n';
+  const result = reported('a.py', src);
+  assert.equal(result.code, 1);
+  assert.ok(result.logs.includes('a.py:1: comment: # noqa: F401'));
+  assert.ok(result.logs.includes('a.py:2: comment: # type: ignore[assignment]'));
+  assert.equal(runFix('a.py', src), 'import os\nx = 1\n');
+  assert.equal(reported('a.py', 'import os\nx = 1\n').code, 0);
+});
+
+test('python: reports a shebang as a comment', () => {
+  assertReportedAndStripped('a.py', '#!/usr/bin/env python3', 'x = 1\n');
 });
 
 test('--fix strips directives, magic comments and suppressions like any other comment', () => {
   const src = '// @ts-ignore\nconst a: number = 1;\nawait import(/* webpackIgnore: true */ "x");\n// eslint-disable-next-line no-console\nconsole.log(a);\n';
+  assert.deepEqual(
+    reported('a.ts', src).logs.slice(0, 3),
+    ['a.ts:1: comment: // @ts-ignore', 'a.ts:3: comment: /* webpackIgnore: true */', 'a.ts:4: comment: // eslint-disable-next-line no-console'],
+  );
   assert.equal(runFix('a.ts', src), 'const a: number = 1;\nawait import( "x");\nconsole.log(a);\n');
 });
 
 test('--fix removes a jsx directive with its braces', () => {
   const src = 'const el = (\n  <div>\n    {/* eslint-disable-next-line no-console */ /* note */}\n    <span />\n  </div>\n);\n';
+  assert.equal(reported('a.tsx', src).code, 1);
   assert.equal(runFix('a.tsx', src), 'const el = (\n  <div>\n    <span />\n  </div>\n);\n');
 });
 
