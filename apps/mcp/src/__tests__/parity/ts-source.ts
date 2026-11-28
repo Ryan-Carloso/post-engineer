@@ -1,19 +1,9 @@
 import ts from 'typescript';
 
-//---------------
-// TypeScript AST helpers for the parity verifier.
-//
-// The verifier reads route and MCP sources as syntax trees instead of
-// matching regexes over raw text, so comments never count as code and a
-// string literal is only ever seen as data (issue: a `requireSupabaseSession()`
-// written in a comment used to satisfy the session-only check).
-//---------------
-
 export function parseSource(fileName: string, text: string): ts.SourceFile {
   return ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
 }
 
-/** Every node under `root` (root included), depth first. */
 export function walk(root: ts.Node, visit: (node: ts.Node) => void): void {
   const step = (node: ts.Node): void => {
     visit(node);
@@ -22,10 +12,6 @@ export function walk(root: ts.Node, visit: (node: ts.Node) => void): void {
   step(root);
 }
 
-/**
- * Static text of a string or template literal, with each `${…}` span
- * replaced by `{}`. Null for any other node.
- */
 export function staticText(node: ts.Node): string | null {
   if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text;
   if (ts.isTemplateExpression(node)) {
@@ -36,7 +22,6 @@ export function staticText(node: ts.Node): string | null {
   return null;
 }
 
-/** The name a call expression invokes: `foo()` → foo, `a.b.foo()` → foo. */
 export function calleeName(call: ts.CallExpression): string | null {
   const callee = call.expression;
   if (ts.isIdentifier(callee)) return callee.text;
@@ -44,7 +29,6 @@ export function calleeName(call: ts.CallExpression): string | null {
   return null;
 }
 
-/** `a.b.c` → ['a', 'b', 'c'] for an identifier/property-access chain. */
 export function accessChain(node: ts.Expression): string[] | null {
   if (ts.isIdentifier(node)) return [node.text];
   if (ts.isPropertyAccessExpression(node)) {
@@ -52,7 +36,6 @@ export function accessChain(node: ts.Expression): string[] | null {
     return head === null ? null : [...head, node.name.text];
   }
   if (ts.isCallExpression(node) || ts.isAwaitExpression(node) || ts.isParenthesizedExpression(node)) {
-    // `(await createClient()).auth.getUser()` — the chain continues past a call.
     return [];
   }
   return null;
@@ -64,10 +47,6 @@ export type FunctionLike =
   | ts.ArrowFunction
   | ts.MethodDeclaration;
 
-/**
- * Top-level named functions of a file: `function f() {}` and
- * `const f = (…) => …` / `const f = function …`.
- */
 export function topLevelFunctions(source: ts.SourceFile): Map<string, FunctionLike> {
   const out = new Map<string, FunctionLike>();
   for (const statement of source.statements) {
@@ -88,7 +67,6 @@ export function topLevelFunctions(source: ts.SourceFile): Map<string, FunctionLi
   return out;
 }
 
-/** Top-level `const NAME = 'literal'` bindings of a file. */
 export function topLevelStringConsts(source: ts.SourceFile): Map<string, string> {
   const out = new Map<string, string>();
   for (const statement of source.statements) {
@@ -101,11 +79,6 @@ export function topLevelStringConsts(source: ts.SourceFile): Map<string, string>
   return out;
 }
 
-/**
- * The nodes reachable from `entry` inside one file: the entry itself plus
- * every top-level function of the same file it calls by name, transitively.
- * Calls into other modules are not followed here.
- */
 export function reachableLocalNodes(entry: ts.Node, locals: Map<string, FunctionLike>): ts.Node[] {
   const seen = new Set<ts.Node>([entry]);
   const queue: ts.Node[] = [entry];
@@ -124,7 +97,6 @@ export function reachableLocalNodes(entry: ts.Node, locals: Map<string, Function
   return [...seen];
 }
 
-/** Whether `node` contains a `return` whose expression mentions `status` as a numeric literal. */
 export function returnsStatus(node: ts.Node, status: number): boolean {
   let found = false;
   walk(node, (child) => {

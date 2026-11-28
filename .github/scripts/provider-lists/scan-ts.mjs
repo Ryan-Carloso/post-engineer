@@ -19,7 +19,6 @@ function scriptKind(file) {
   return ts.ScriptKind.JS;
 }
 
-/** @returns {{ file: string, line: number, kind: string, providers: string[] }[]} */
 export function scanTs(file, text, index) {
   const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, scriptKind(file));
   const groups = [];

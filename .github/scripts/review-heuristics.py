@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Deterministic, repo-specific review heuristics (run outside the LLM).
 
 These encode lessons an LLM can miss. Each produces a WARN line the model

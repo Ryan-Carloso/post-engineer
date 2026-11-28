@@ -2,7 +2,6 @@ import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { classifyPy, classifyTs } from './directives.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, '../../..');
@@ -14,11 +13,6 @@ export function loadTypeScript() {
     tsModule = require('typescript');
   }
   return tsModule;
-}
-
-function withVerdict(comment, found) {
-  if (found === null) return { ...comment, directive: false, bare: null, problem: null, detail: null };
-  return { ...comment, directive: true, ...found };
 }
 
 export function scriptKind(ts, file) {
@@ -62,7 +56,7 @@ function tsComments(text, file) {
     .map((c) => {
       const body = text.slice(c.start, c.end);
       const wrapper = emptyJsxExpressions.find(([s, e]) => s < c.start && c.end <= e);
-      return withVerdict({ ...c, text: body, jsxWrapper: wrapper ?? null }, classifyTs(body, file));
+      return { ...c, text: body, jsxWrapper: wrapper ?? null };
     });
 }
 
@@ -72,7 +66,7 @@ function pyComments(text) {
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
   });
-  return JSON.parse(out).map((c) => withVerdict({ ...c, jsxWrapper: null }, classifyPy(c.text, c.start)));
+  return JSON.parse(out).map((c) => ({ ...c, jsxWrapper: null }));
 }
 
 export function pySameAst(before, after) {

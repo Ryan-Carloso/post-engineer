@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Mechanical checks for the opencode-review workflow (run outside the LLM).
 
 Reads the PR diff and the list of changed files and reports:

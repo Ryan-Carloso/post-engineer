@@ -21,11 +21,6 @@ const PY_KEYWORDS = new Set([
   'from',
 ]);
 
-/**
- * @param {string} filePath
- * @param {string} pattern
- * @returns {boolean}
- */
 export function matchesGlob(filePath, pattern) {
   let re = '';
   for (let i = 0; i < pattern.length; i++) {
@@ -67,11 +62,6 @@ function isDestructuringLine(line) {
   return DESTRUCTURING_PATTERNS.some((re) => re.test(line));
 }
 
-/**
- * @param {string} line
- * @param {boolean} inPyClass
- * @returns {string[]}
- */
 function extractNamesFromLine(line, filePath, inPyClass) {
   const names = [];
   if (isTs(filePath)) {
@@ -94,14 +84,6 @@ function extractNamesFromLine(line, filePath, inPyClass) {
   return names;
 }
 
-/**
- * @param {string} diffText
- * @param {{ apiPaths: string[] }} config
- * @returns {{
- *   candidates: Array<{ file: string, line: number, name: string, context: string, renamedFrom: string | null }>,
- *   newEndpoints: Array<{ file: string, kind: 'endpoint' }>,
- * }}
- */
 export function extractFromDiff(diffText, config) {
   const candidates = [];
   const newEndpoints = [];
@@ -128,7 +110,6 @@ export function extractFromDiff(diffText, config) {
       const bodyStart = hunk.index + hunk[0].length;
       const nextHunk = fileDiff.indexOf('\n@@ ', bodyStart);
       const body = fileDiff.slice(bodyStart, nextHunk === -1 ? undefined : nextHunk);
-      /** @type {Array<{ kind: 'add' | 'del' | 'ctx', text: string, newLine: number | null }>} */
       const rows = [];
       for (const raw of body.split('\n')) {
         if (raw.startsWith('+++') || raw.startsWith('---')) continue;

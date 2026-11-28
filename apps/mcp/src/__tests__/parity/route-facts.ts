@@ -11,20 +11,8 @@ import {
   type FunctionLike,
 } from './ts-source.js';
 
-//---------------
-// Route facts — what each exported handler of a web route file actually
-// does, read from the syntax tree.
-//
-// A handler is `export const METHOD = withApiErrorReporting(label, fn, …)`.
-// Facts are collected per handler over the handler body plus every local
-// function of the same file it calls (transitively), so one handler's auth
-// check never vouches for another handler in the same file.
-//---------------
-
 export const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'] as const;
 
-// Anything that resolves or inspects a bearer credential (API key or MCP
-// OAuth token). A session-only route must contain none of these anywhere.
 export const BEARER_MARKERS = [
   'isApiKey',
   'isScopedApiKey',
@@ -41,20 +29,13 @@ const BEARER_HEADERS = ['authorization', 'x-api-key'];
 export interface HandlerFacts {
   method: string;
   label: string;
-  /** requireSupabaseSession calls, by argument count. */
   sessionCallsNoArgs: number;
   sessionCallsWithArgs: number;
-  /** `<x>.auth.getUser()` calls (cookie session via the server client). */
   getUserCalls: number;
-  /** Bearer markers (identifiers/property names) in the reachable code. */
   bearerMarkers: string[];
-  /** Header names read via `<x>.headers.get('<name>')`. */
   headersRead: string[];
-  /** Names of every function/method called. */
   calls: Set<string>;
-  /** Static text of every string/template literal. */
   strings: string[];
-  /** The reachable nodes (handler + local helpers). */
   nodes: ts.Node[];
 }
 
@@ -62,9 +43,7 @@ export interface RouteFile {
   file: string;
   source: ts.SourceFile;
   handlers: HandlerFacts[];
-  /** Bearer markers anywhere in the file (imports included). */
   fileBearerMarkers: string[];
-  /** Imported binding name → module specifier. */
   imports: Map<string, string>;
 }
 
@@ -131,11 +110,6 @@ function collectFacts(method: string, label: string, nodes: ts.Node[]): HandlerF
   return facts;
 }
 
-/**
- * Parses one route file. Throws when an exported HTTP-method binding is not
- * a labelled withApiErrorReporting handler (it would be invisible to
- * discovery) or when the handler function cannot be resolved.
- */
 export function readRouteFile(file: string, text: string): RouteFile {
   const source = parseSource(file, text);
   const locals = topLevelFunctions(source);
@@ -192,10 +166,6 @@ export function readsBearerHeader(facts: HandlerFacts): boolean {
   return facts.headersRead.some((h) => BEARER_HEADERS.includes(h) || h === '<dynamic>');
 }
 
-/**
- * Whether the handler has an `if` whose condition contains
- * `<x>.<flag> === true` and whose branch returns `status`.
- */
 export function rejectsFlag(facts: HandlerFacts, flag: 'isApiKey' | 'isOAuth', status: number): boolean {
   let found = false;
   for (const root of facts.nodes) {

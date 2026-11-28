@@ -1,9 +1,5 @@
 import fs from 'node:fs';
 
-/**
- * @param {string} raw
- * @returns {string}
- */
 function stripComment(raw) {
   let inSingle = false;
   let inDouble = false;
@@ -18,10 +14,6 @@ function stripComment(raw) {
   return raw;
 }
 
-/**
- * @param {string} value
- * @returns {string | number | boolean | null}
- */
 function parseScalar(value) {
   const v = value.trim();
   if (v === '') return null;
@@ -52,20 +44,12 @@ function parseScalar(value) {
   return v;
 }
 
-/**
- * @param {string} text
- * @returns {[string, string]}
- */
 function splitKeyValue(text) {
   const idx = text.indexOf(':');
   if (idx === -1) throw new Error(`Invalid config line (expected "key: value"): ${text}`);
   return [text.slice(0, idx).trim(), text.slice(idx + 1).trim()];
 }
 
-/**
- * @param {string} text
- * @returns {Record<string, unknown>}
- */
 export function parseYamlSubset(text) {
   const lines = [];
   for (const raw of text.split('\n')) {
@@ -136,15 +120,6 @@ function isRecord(v) {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
-/**
- * @param {string} filePath
- * @returns {{
- *   apiPaths: string[],
- *   denylist: Record<string, { severity: 'error' | 'warn', reason: string }>,
- *   allowlist: string[],
- *   llm: { enabled: boolean, baseUrl: string, model: string, maxNames: number, timeoutMs: number },
- * }}
- */
 export function loadConfig(filePath) {
   let text;
   try {
@@ -173,7 +148,6 @@ export function loadConfig(filePath) {
   if (!isRecord(denylistRaw)) {
     throw new Error(`Invalid API naming config: "denylist" must be a map (${filePath})`);
   }
-  /** @type {Record<string, { severity: 'error' | 'warn', reason: string }>} */
   const denylist = {};
   for (const [name, entry] of Object.entries(denylistRaw)) {
     if (!isRecord(entry)) throw new Error(`Invalid denylist entry "${name}": must be a map`);
