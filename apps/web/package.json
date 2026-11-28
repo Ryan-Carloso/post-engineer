@@ -5,7 +5,7 @@
   "description": "Post Engineer API - Next.js with enhanced error logging and timeout management",
   "scripts": {
     "dev": "next dev -p 3434",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "pnpm exec eslint lib/ app/",
     "lint:fix": "pnpm exec eslint --fix lib/ app/",
