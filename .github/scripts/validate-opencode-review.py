@@ -371,6 +371,26 @@ def main() -> int:
     check("removes .env* before review", "-name '.env*'" in text)
 
     check("PR diff built locally, not via gh pr diff", "gh pr diff" not in text)
+    check(
+        "mechanical checks and heuristics scan the full diff",
+        "--diff full.diff --files pr-files.txt" in text
+        and "review-heuristics.py --diff full.diff" in text
+        and "--diff pr.diff" not in text,
+        "the secret scan must see every added line, including lockfiles",
+    )
+    check(
+        "the model diff omits deleted files, lockfiles, snapshots and generated files",
+        'git diff --patch --diff-filter=d "$base" HEAD -- . "${omit[@]}"' in text
+        and "':(exclude,glob)**/pnpm-lock.yaml'" in text
+        and "':(exclude,glob)**/*.snap'" in text
+        and "':(exclude)supabase/schema.snapshot.json'" in text
+        and "':(exclude,glob)**/*.gen.*'" in text,
+    )
+    check(
+        "omitted files are listed above the truncation point",
+        text.find("# Content omitted from this diff") < text.find('git diff --patch --diff-filter=d "$base" HEAD')
+        < text.find("MAX_BYTES=200000"),
+    )
 
     ci_path = Path(__file__).resolve().parent.parent / "workflows" / "ci.yml"
     check(

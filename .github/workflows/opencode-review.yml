@@ -271,8 +271,43 @@ jobs:
           # against the base branch needs no history beyond the two trees,
           # so it works with the default shallow checkout.
           git fetch --quiet origin "${{ github.base_ref }}"
-          git diff --patch "origin/${{ github.base_ref }}" HEAD > pr.diff
-          git diff --name-only "origin/${{ github.base_ref }}" HEAD > pr-files.txt
+          base="origin/${{ github.base_ref }}"
+          # full.diff feeds the mechanical checks and heuristics, so the
+          # secret scan still sees every added line. The model gets pr.diff,
+          # which leaves out what it cannot review but pays for on every
+          # request: deleted files' content (a quarter of recent diffs),
+          # lockfiles, snapshots and generated files. Their names stay in a
+          # header at the top, above the truncation point.
+          git diff --patch "$base" HEAD > full.diff
+          git diff --name-only "$base" HEAD > pr-files.txt
+          omit=(
+            ':(exclude,glob)**/pnpm-lock.yaml'
+            ':(exclude,glob)**/package-lock.json'
+            ':(exclude,glob)**/*.lock'
+            ':(exclude,glob)**/*.snap'
+            ':(exclude)supabase/schema.snapshot.json'
+            ':(exclude,glob)**/*.gen.*'
+          )
+          git diff --name-only --diff-filter=D "$base" HEAD > omitted-deleted.txt
+          comm -23 \
+            <(git diff --name-only --diff-filter=d "$base" HEAD | sort) \
+            <(git diff --name-only --diff-filter=d "$base" HEAD -- . "${omit[@]}" | sort) > omitted-generated.txt
+          {
+            if [ -s omitted-deleted.txt ] || [ -s omitted-generated.txt ]; then
+              echo "# Content omitted from this diff (the files are still part of the PR):"
+              if [ -s omitted-deleted.txt ]; then
+                echo "# Deleted files:"
+                sed 's/^/#   /' omitted-deleted.txt
+              fi
+              if [ -s omitted-generated.txt ]; then
+                echo "# Lockfiles, snapshots and generated files (changed):"
+                sed 's/^/#   /' omitted-generated.txt
+              fi
+              echo
+            fi
+            git diff --patch --diff-filter=d "$base" HEAD -- . "${omit[@]}"
+          } > pr.diff
+          echo "full diff: $(wc -c < full.diff) bytes; model diff: $(wc -c < pr.diff) bytes"
           # Keep the diff within a sane size for the model context.
           MAX_BYTES=200000
           SIZE=$(wc -c < pr.diff)
@@ -295,7 +330,7 @@ jobs:
           # is always posted even when a check fails.
           set +e
           python3 .github/scripts/review-mechanical-checks.py \
-            --diff pr.diff --files pr-files.txt \
+            --diff full.diff --files pr-files.txt \
             --migrations supabase/migrations > mechanical-checks.md
           echo "status=$?" >> "$GITHUB_OUTPUT"
           set -e
@@ -308,7 +343,7 @@ jobs:
           # Heuristics never fail the job. A crash becomes a warning line so
           # the rest of the review still posts.
           set +e
-          python3 .github/scripts/review-heuristics.py --diff pr.diff --root . > heuristics.md
+          python3 .github/scripts/review-heuristics.py --diff full.diff --root . > heuristics.md
           status=$?
           set -e
           if [ "$status" -ne 0 ]; then
