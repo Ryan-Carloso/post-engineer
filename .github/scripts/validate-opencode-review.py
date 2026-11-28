@@ -6,11 +6,8 @@ Run: python3 .github/scripts/validate-opencode-review.py
 Guards the design decisions of the OpenCode review workflow:
 - direct `opencode run` (verified against the installed CLI: there is no
   --standalone flag), no third-party wrapper
-- runtime model chain via select-review-models.py and model-preferences.json
-  (free models first, paid fallbacks last); glm-4.5-flash was dropped
-- OpenRouter free tier uses the special router id (no hardcoded model list
-  to rot), one
-  OPENROUTER_API_KEY serving both tiers
+- static model chain in REVIEW_MODELS: two OpenCode free models measured on
+  the real review prompt, 12 minutes per attempt
 - the job always runs (free OpenCode models need no secret); each paid tier
   is skipped when its key is missing (secret gating via step outputs)
 - both keys masked in logs and scrubbed from review.md before the comment
@@ -21,7 +18,6 @@ Guards the design decisions of the OpenCode review workflow:
 """
 from __future__ import annotations
 
-import json
 import re
 import sys
 from pathlib import Path
@@ -29,6 +25,7 @@ from pathlib import Path
 import yaml
 
 WORKFLOW = Path(__file__).resolve().parent.parent / "workflows" / "opencode-review.yml"
+RACE_SCRIPT = Path(__file__).resolve().parent / "review-race.sh"
 
 FAILURES: list[str] = []
 
@@ -42,6 +39,7 @@ def check(name: str, condition: bool, detail: str = "") -> None:
 
 def main() -> int:
     text = WORKFLOW.read_text()
+    race = RACE_SCRIPT.read_text()
     doc = yaml.safe_load(text)
 
     triggers = doc.get(True, {}).get("pull_request", {}).get("types", [])
@@ -68,7 +66,15 @@ def main() -> int:
         "installs from official sst/opencode releases",
         "github.com/sst/opencode/releases/download" in text,
     )
-    check("uses `opencode run`", "opencode run" in text)
+    check("the race script uses `opencode run`", "opencode run" in race)
+    check(
+        "every opencode run goes through the race script",
+        "opencode run" not in "\n".join(
+            line for line in text.splitlines() if not line.lstrip().startswith("#")
+        )
+        and text.count(".github/scripts/review-race.sh .github/review/") == 2,
+        "pass 1 and pass 2 must both race, a single hung model stalls the job",
+    )
     check(
         "does not use a `--standalone` flag",
         "opencode --standalone run" not in text and "opencode run --standalone" not in text,
@@ -94,58 +100,25 @@ def main() -> int:
         and "OPENCODE_ZEN_API_KEY" in text[text.index("Scrub secrets from review output") :],
     )
     check("no ZHIPU_API_KEY references", "ZHIPU_API_KEY" not in text)
+    chain_match = re.search(r"^  REVIEW_MODELS: \$\{\{ vars\.REVIEW_MODELS \|\| '([^']+)' \}\}$", text, re.M)
+    chain = chain_match.group(1).split(",") if chain_match else []
     check(
-        "OPENCODE_MODEL default is OpenCode free",
-        "OPENCODE_MODEL: opencode/glm-5.3-flash-free" in text,
+        "REVIEW_MODELS default races the measured models across two providers",
+        chain
+        == [
+            "opencode/nemotron-3.5-lightning-free",
+            "opencode/flint-40b-free",
+            "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
+        ],
+        f"chain={chain}",
     )
     check(
-        "REVIEW_MODEL_PRIMARY default is OpenCode free",
-        "opencode/glm-5.3-flash-free" in text
-        and "REVIEW_MODEL_PRIMARY:" in text,
-    )
-    check(
-        "REVIEW_MODEL_VERIFY default is a different OpenCode free model",
-        "REVIEW_MODEL_VERIFY:" in text
-        and "opencode/deepseek-v4.1-flash-free" in text,
-    )
-    env_defaults = [
-        line
-        for line in text.splitlines()
-        if re.match(
-            r"^\s+(REVIEW_MODEL_PRIMARY|REVIEW_MODEL_VERIFY|OPENCODE_MODEL|OPENROUTER_MODEL|ZAI_FREE_MODEL):",
-            line,
-        )
-    ]
-    env_blob = "\n".join(env_defaults)
-    check(
-        "workflow defaults have no zai-coding-plan",
-        "zai-coding-plan" not in env_blob,
-        env_blob,
-    )
-    check(
-        "workflow defaults have no z-ai/glm-5.3-flash",
-        "z-ai/glm-5.3-flash" not in env_blob,
-        env_blob,
-    )
-    check(
-        "no ZAI_FREE_MODEL_FALLBACK references",
-        "ZAI_FREE_MODEL_FALLBACK" not in text,
-        "the second z.ai fallback was removed; no reference may remain",
-    )
-    non_comment_lines = [
-        line for line in text.splitlines() if not line.lstrip().startswith("#")
-    ]
-    check(
-        "no glm-4.5-flash in workflow logic",
-        not any("glm-4.5-flash" in line for line in non_comment_lines),
-        "glm-4.5-flash was dropped from the review chain",
+        "pass 2 races every other REVIEW_MODELS entry, never the pass-1 winner",
+        '[ "$candidate" != "$pass1_model" ]' in text
+        and '"PR #$PR_NUMBER verify" verify "$verify_models"' in text
+        and "REVIEW_MODEL_VERIFY" not in text,
     )
 
-    check(
-        "OPENROUTER_FREE_MODEL default set",
-        "OPENROUTER_FREE_MODEL: openrouter/free" in text,
-        "must use the OpenRouter free router id, not a concrete model",
-    )
     check(
         "no OPENROUTER_MODEL paid z-ai default",
         "OPENROUTER_MODEL: z-ai/glm-5.3-flash" not in text,
@@ -159,64 +132,57 @@ def main() -> int:
         text.count('"npm": "@ai-sdk/openai-compatible"') >= 1,
         "the openrouter provider must use the openai-compatible package",
     )
-    prefs_path = Path(__file__).resolve().parent.parent / "review" / "model-preferences.json"
-    check("model preferences file exists", prefs_path.is_file(), str(prefs_path))
-    prefs = json.loads(prefs_path.read_text()) if prefs_path.is_file() else {}
-    paid_keys = [spec.get("key") for spec in prefs.get("paidFallbacks") or []]
     check(
-        "model preferences have no zai paidFallback keys",
-        "zai" not in paid_keys,
-        f"keys={paid_keys}",
+        "no runtime model discovery",
+        "select-review-models.py" not in text
+        and "model-preferences.json" not in text
+        and "review-model-chain.json" not in text,
+        "the chain is the static REVIEW_MODELS list",
     )
     check(
-        "select-review-models.py invoked in workflow",
-        "select-review-models.py" in text,
+        "pass 1 reads attempts from REVIEW_MODELS",
+        '"PR #$PR_NUMBER review" attempt "$REVIEW_MODELS"' in text,
     )
     check(
-        "pass 1 loads attempts from review-model-chain.json",
-        "review-model-chain.json" in text and "mapfile -t attempts" in text,
-    )
-    check(
-        "free-model banner uses chain freeModels list",
-        "freeModels" in text and "mapfile -t FREE_MODELS" in text,
+        "free-model banner matches free ids",
+        '[[ "$1" == *-free || "$1" == *:free ]]' in text,
     )
     check(
         "opencode run closes stdin",
-        "< /dev/null" in text,
+        "< /dev/null" in race,
         "non-interactive review must not read from stdin",
     )
     check(
-        "attempt order is printed before the first model runs",
-        text.find("Review attempt order:") != -1
-        and text.find("Review attempt order:") < text.find("Attempting review with"),
-    )
-    max_chain = int(prefs.get("maxChainLength") or 8)
-    check(
-        "pass 1 first-attempt timeout is 30m",
-        "limit=30m" in text,
-        "the first attempt needs room for 120 steps",
+        "the race starts every model in parallel",
+        'for i in "${!attempts[@]}"; do' in race
+        and 'start_attempt "$i" "${attempts[$i]}"' in race
+        and race.find('start_attempt "$i"') < race.find("while [ -z \"$chosen\" ]"),
+        "a hung free model must not delay the others",
     )
     check(
-        "pass 1 fallback timeout is 20m",
-        "limit=20m" in text,
-        "fallback attempts need room for 120 steps",
+        "the race stops the losing attempts",
+        'kill -- "-$(cat "$prefix-$i.pid")"' in race
+        and "setsid timeout 12m opencode run" in race,
     )
     check(
-        "pass 2 timeout is 20m",
-        "timeout 20m opencode run" in text,
-        "pass 2 uses the same reviewer agent, so the same budget applies",
+        "parallel attempts use separate OpenCode data dirs",
+        'XDG_DATA_HOME="$work_root/opencode-$prefix-$i/data"' in race,
     )
-    pass1_minutes = 30 + max(max_chain - 1, 0) * 20
-    pass2_minutes = 20
+    check(
+        "each race attempt is capped at 12m",
+        race.count("timeout 12m opencode run") == 1,
+        "a working review finishes in under 10 minutes; a hung model must not hold the job longer",
+    )
+    attempt_minutes = 12
     overhead_minutes = 5
-    required_minutes = pass1_minutes + pass2_minutes + overhead_minutes
+    required_minutes = attempt_minutes + attempt_minutes + overhead_minutes
     timeout_match = re.search(r"^\s*timeout-minutes:\s*(\d+)\s*$", text, re.M)
     timeout_minutes = int(timeout_match.group(1)) if timeout_match else 0
     check(
-        "job timeout covers max chain plus pass 2",
+        "job timeout covers parallel pass 1 plus pass 2",
         timeout_minutes >= required_minutes,
-        f"timeout-minutes is {timeout_minutes}; max chain {max_chain} needs at "
-        f"least {required_minutes}m",
+        f"timeout-minutes is {timeout_minutes}; parallel pass 1 plus pass 2 "
+        f"need at least {required_minutes}m",
     )
     check(
         "review is not skipped when paid keys are missing",
@@ -252,16 +218,6 @@ def main() -> int:
     check(
         "APPROVE requires zero ### headings",
         "zero `###` headings" in prompt and "No material findings." in prompt,
-    )
-    check(
-        "pass 2 OpenCode free needs no paid key",
-        '[[ "$verify" == *-free ]]' in text
-        and "preferredFree" in text
-        and 'grep -F -q "\\"$verify\\""' not in text,
-    )
-    check(
-        "pass 2 paid OpenCode still needs zen key",
-        "OPENCODE_ZEN_API_KEY" in text[text.index("key_ok=false") :],
     )
     verify_prompt = (prompt_path.parent / "verify-prompt.md").read_text()
     check(
@@ -319,6 +275,32 @@ def main() -> int:
         f"if={ifs}",
     )
     check("secret gate uses step outputs", "steps.check.outputs.has_key" in text)
+    step_ids = {
+        step["id"] for step in doc["jobs"]["review"]["steps"] if "id" in step
+    }
+    referenced_ids = set(re.findall(r"steps\.([A-Za-z0-9_-]+)\.", text))
+    check(
+        "the default-agent fallback is detected from stderr only",
+        "grep -q 'Falling back to default agent' \"$prefix-$i.stderr.txt\"; then" in race
+        and "Falling back to default agent' \"$prefix-$i.md\"" not in race,
+        "a review that quotes this workflow contains the phrase",
+    )
+    check(
+        "a bold Verdict line is normalized before the Verdict check",
+        -1
+        < race.find("s/^\\*\\*Verdict: (APPROVE|REQUEST_CHANGES)\\*\\*[[:space:]]*$/Verdict: \\1/")
+        < race.find("grep -qE '^Verdict: (APPROVE|REQUEST_CHANGES)'"),
+    )
+    check(
+        "an attempt without a Verdict line fails",
+        "if ! grep -qE '^Verdict: (APPROVE|REQUEST_CHANGES)' \"$prefix-$i.md\"; then" in race,
+        "narration with no verdict must not be posted as a review",
+    )
+    check(
+        "every referenced step id exists",
+        referenced_ids <= step_ids,
+        f"missing ids: {sorted(referenced_ids - step_ids)}",
+    )
     check(
         "per-tier key outputs recorded",
         "has_zai_key=" in text
@@ -386,6 +368,26 @@ def main() -> int:
     check("removes .env* before review", "-name '.env*'" in text)
 
     check("PR diff built locally, not via gh pr diff", "gh pr diff" not in text)
+    check(
+        "mechanical checks and heuristics scan the full diff",
+        "--diff full.diff --files pr-files.txt" in text
+        and "review-heuristics.py --diff full.diff" in text
+        and "--diff pr.diff" not in text,
+        "the secret scan must see every added line, including lockfiles",
+    )
+    check(
+        "the model diff omits deleted files, lockfiles, snapshots and generated files",
+        'git diff --patch --diff-filter=d "$base" HEAD -- . "${omit[@]}"' in text
+        and "':(exclude,glob)**/pnpm-lock.yaml'" in text
+        and "':(exclude,glob)**/*.snap'" in text
+        and "':(exclude)supabase/schema.snapshot.json'" in text
+        and "':(exclude,glob)**/*.gen.*'" in text,
+    )
+    check(
+        "omitted files are listed above the truncation point",
+        text.find("# Content omitted from this diff") < text.find('git diff --patch --diff-filter=d "$base" HEAD')
+        < text.find("MAX_BYTES=200000"),
+    )
 
     ci_path = Path(__file__).resolve().parent.parent / "workflows" / "ci.yml"
     check(
@@ -394,7 +396,7 @@ def main() -> int:
         "the review-workflows job must run the script unit tests",
     )
 
-    check("review runs with the reviewer agent", "--agent reviewer" in text)
+    check("review runs with the reviewer agent", "--agent reviewer" in race)
     check(
         "project config and root AGENTS.md are not loaded",
         "OPENCODE_DISABLE_PROJECT_CONFIG=1" in text,
@@ -404,8 +406,8 @@ def main() -> int:
         "review-instructions.md" in text,
     )
     check(
-        "primary model comes from a repo variable",
-        "vars.REVIEW_MODEL_PRIMARY" in text,
+        "model chain comes from a repo variable",
+        "vars.REVIEW_MODELS" in text,
     )
     check("heuristic script invoked", "review-heuristics.py" in text)
     check("review context script invoked", "review-context.py" in text)

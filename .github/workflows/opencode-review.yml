@@ -12,28 +12,29 @@ name: opencode-review
 # - The review runs as the `reviewer` agent (`opencode run --agent reviewer`).
 #   That agent is `mode: primary`. A missing agent, or one whose mode is
 #   `subagent`, makes `opencode run` fall back to the default build agent
-#   ("Falling back to default agent"); that attempt is discarded.
+#   ("Falling back to default agent", read from stderr only: a review that
+#   quotes this workflow contains the phrase); that attempt is discarded.
+#   A bold **Verdict: ...** line is normalized to the plain form first.
 # - Project config and the root AGENTS.md are not loaded
 #   (OPENCODE_DISABLE_PROJECT_CONFIG=1). Providers and the short reviewer
 #   instructions live in a temp OPENCODE_CONFIG / OPENCODE_CONFIG_DIR so the
 #   committed opencode.json is not rewritten and the 190KB review-learnings
 #   file is not injected into the prompt.
-# - Review chain, first success wins. At runtime,
-#   select-review-models.py discovers free OpenCode and OpenRouter models,
-#   applies .github/review/model-preferences.json (ranked preferred free list,
-#   denylist, paid fallbacks), caps the chain (default 8), and logs why each
-#   model was included or skipped. Paid tiers run only when their key is set.
-#   Identical model ids are deduped.
-#   glm-4.5-flash was dropped from the chain — its review quality was too
-#   poor. The OpenRouter free tier uses the special router id (no hardcoded
-#   model list to rot); one OPENROUTER_API_KEY secret serves both
-#   tiers (free models cost $0 even on a paid key).
-#   Paid OpenRouter needs OPENROUTER_API_KEY; paid OpenCode Zen needs
-#   OPENCODE_ZEN_API_KEY. Free opencode/*-free models need no secret.
-# - A second pass (REVIEW_MODEL_VERIFY, a different OpenCode free model)
-#   confirms or refutes pass 1. OpenCode free verify runs with no paid key.
-#   It is skipped when the diff is docs/assets-only and pass 1 has no
-#   CRITICAL/MAJOR. If pass 2 drops every finding, the comment keeps pass 1.
+# - Review models (REVIEW_MODELS, comma-separated) run in parallel, each
+#   capped at 12 minutes; the first attempt that ends with a Verdict line
+#   wins and the others are stopped. Free models hang for whole runs at
+#   random (the same model answers one hour and hangs the next), so the
+#   default mixes providers: two OpenCode free models, which need no secret
+#   (nemotron-3.5-lightning-free, about 2.5 minutes on a real review, and
+#   flint-40b-free, about 7), plus OpenRouter's
+#   nvidia/nemotron-3-ultra-550b-a55b:free, which completed a review in CI
+#   while the OpenCode free models hung. An attempt with no Verdict line is
+#   discarded.
+# - A second pass races every REVIEW_MODELS entry except the pass-1 winner,
+#   so a model never verifies its own review, and confirms or refutes pass
+#   1. It is skipped when the diff is docs/assets-only and pass 1 has no
+#   CRITICAL/MAJOR. If pass 2 fails or drops every finding, the comment
+#   keeps pass 1. Both races run .github/scripts/review-race.sh.
 # - Findings are mechanically grounded: verify-review-grounding.py accepts a
 #   backticked Location, re-anchors line numbers from the verbatim quote, and
 #   exits 1 when every finding is unverified. Unmatched findings are still
@@ -54,8 +55,7 @@ name: opencode-review
 # Setup:
 # 1. Optional: OPENROUTER_API_KEY (OpenRouter free/paid) and/or
 #    OPENCODE_ZEN_API_KEY (paid OpenCode Zen). Review still runs with no secrets.
-# 2. Optional repo variables: REVIEW_MODEL_PRIMARY, REVIEW_MODEL_VERIFY,
-#    and REVIEW_MODEL_CHAIN_OVERRIDE (comma-separated attempt list).
+# 2. Optional repo variables: REVIEW_MODELS (comma-separated attempt list)
 
 on:
   pull_request:
@@ -67,23 +67,14 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # REVIEW_MODEL_PRIMARY is the first attempt. Empty repo variable falls
-  # through to OpenCode free. OPENCODE_MODEL is the same default and is
-  # deduped when it matches the primary. VERIFY is a different preferredFree id.
-  REVIEW_MODEL_PRIMARY: ${{ vars.REVIEW_MODEL_PRIMARY || 'opencode/glm-5.3-flash-free' }}
-  REVIEW_MODEL_VERIFY: ${{ vars.REVIEW_MODEL_VERIFY || 'opencode/deepseek-v4.1-flash-free' }}
-  OPENCODE_MODEL: opencode/glm-5.3-flash-free
-  # OpenRouter last-resort free router (needs OPENROUTER_API_KEY when used).
-  OPENROUTER_FREE_MODEL: openrouter/free
-  # Optional comma-separated override of the runtime attempt list.
-  REVIEW_MODEL_CHAIN_OVERRIDE: ${{ vars.REVIEW_MODEL_CHAIN_OVERRIDE || '' }}
+  REVIEW_MODELS: ${{ vars.REVIEW_MODELS || 'opencode/nemotron-3.5-lightning-free,opencode/flint-40b-free,openrouter/nvidia/nemotron-3-ultra-550b-a55b:free' }}
 
 jobs:
   review:
     runs-on: ubuntu-latest
-    # Sized for maxChainLength (8) in model-preferences.json: 30m + 7*20m pass 1,
-    # 20m pass 2, plus install/post overhead. The validator recomputes this.
-    timeout-minutes: 200
+    # Pass 1 (parallel attempts, 12m cap) and pass 2 (12m), plus install/post overhead.
+    # The validator recomputes this from REVIEW_MODELS.
+    timeout-minutes: 30
     permissions:
       contents: read
       pull-requests: write
@@ -166,27 +157,6 @@ jobs:
         if: steps.check.outputs.has_key == 'true'
         run: opencode --version
 
-      - name: Select review models
-        if: steps.check.outputs.has_key == 'true'
-        id: select_models
-        env:
-          ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          OPENCODE_ZEN_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY }}
-          HAS_ZAI_KEY: ${{ steps.check.outputs.has_zai_key }}
-          HAS_OPENROUTER_KEY: ${{ steps.check.outputs.has_openrouter_key }}
-          HAS_OPENCODE_KEY: ${{ steps.check.outputs.has_opencode_key }}
-          REVIEW_MODEL_CHAIN_OVERRIDE: ${{ env.REVIEW_MODEL_CHAIN_OVERRIDE }}
-          REVIEW_MODEL_PRIMARY: ${{ env.REVIEW_MODEL_PRIMARY }}
-          OPENCODE_MODEL: ${{ env.OPENCODE_MODEL }}
-          OPENROUTER_FREE_MODEL: ${{ env.OPENROUTER_FREE_MODEL }}
-        run: |
-          set -euo pipefail
-          python3 .github/scripts/select-review-models.py \
-            --output review-model-chain.json | tee review-model-chain-summary.json
-          echo "Selected chain:"
-          python3 -c "import json; c=json.load(open('review-model-chain.json')); print('\n'.join('  - '+m for m in c['attempts']))"
-
       - name: Configure review providers
         if: steps.check.outputs.has_key == 'true'
         env:
@@ -214,10 +184,8 @@ jobs:
               groups[provider].add(model)
 
           groups = defaultdict(set)
-          chain = json.load(open("review-model-chain.json", encoding="utf-8"))
-          for spec in chain.get("attempts") or []:
-              add(groups, spec)
-          add(groups, os.environ.get("REVIEW_MODEL_VERIFY", ""))
+          for spec in os.environ["REVIEW_MODELS"].split(","):
+              add(groups, spec.strip())
           providers = {}
           endpoints = {
               "openrouter": (
@@ -299,8 +267,43 @@ jobs:
           # against the base branch needs no history beyond the two trees,
           # so it works with the default shallow checkout.
           git fetch --quiet origin "${{ github.base_ref }}"
-          git diff --patch "origin/${{ github.base_ref }}" HEAD > pr.diff
-          git diff --name-only "origin/${{ github.base_ref }}" HEAD > pr-files.txt
+          base="origin/${{ github.base_ref }}"
+          # full.diff feeds the mechanical checks and heuristics, so the
+          # secret scan still sees every added line. The model gets pr.diff,
+          # which leaves out what it cannot review but pays for on every
+          # request: deleted files' content (a quarter of recent diffs),
+          # lockfiles, snapshots and generated files. Their names stay in a
+          # header at the top, above the truncation point.
+          git diff --patch "$base" HEAD > full.diff
+          git diff --name-only "$base" HEAD > pr-files.txt
+          omit=(
+            ':(exclude,glob)**/pnpm-lock.yaml'
+            ':(exclude,glob)**/package-lock.json'
+            ':(exclude,glob)**/*.lock'
+            ':(exclude,glob)**/*.snap'
+            ':(exclude)supabase/schema.snapshot.json'
+            ':(exclude,glob)**/*.gen.*'
+          )
+          git diff --name-only --diff-filter=D "$base" HEAD > omitted-deleted.txt
+          comm -23 \
+            <(git diff --name-only --diff-filter=d "$base" HEAD | sort) \
+            <(git diff --name-only --diff-filter=d "$base" HEAD -- . "${omit[@]}" | sort) > omitted-generated.txt
+          {
+            if [ -s omitted-deleted.txt ] || [ -s omitted-generated.txt ]; then
+              echo "# Content omitted from this diff (the files are still part of the PR):"
+              if [ -s omitted-deleted.txt ]; then
+                echo "# Deleted files:"
+                sed 's/^/#   /' omitted-deleted.txt
+              fi
+              if [ -s omitted-generated.txt ]; then
+                echo "# Lockfiles, snapshots and generated files (changed):"
+                sed 's/^/#   /' omitted-generated.txt
+              fi
+              echo
+            fi
+            git diff --patch --diff-filter=d "$base" HEAD -- . "${omit[@]}"
+          } > pr.diff
+          echo "full diff: $(wc -c < full.diff) bytes; model diff: $(wc -c < pr.diff) bytes"
           # Keep the diff within a sane size for the model context.
           MAX_BYTES=200000
           SIZE=$(wc -c < pr.diff)
@@ -323,7 +326,7 @@ jobs:
           # is always posted even when a check fails.
           set +e
           python3 .github/scripts/review-mechanical-checks.py \
-            --diff pr.diff --files pr-files.txt \
+            --diff full.diff --files pr-files.txt \
             --migrations supabase/migrations > mechanical-checks.md
           echo "status=$?" >> "$GITHUB_OUTPUT"
           set -e
@@ -336,7 +339,7 @@ jobs:
           # Heuristics never fail the job. A crash becomes a warning line so
           # the rest of the review still posts.
           set +e
-          python3 .github/scripts/review-heuristics.py --diff pr.diff --root . > heuristics.md
+          python3 .github/scripts/review-heuristics.py --diff full.diff --root . > heuristics.md
           status=$?
           set -e
           if [ "$status" -ne 0 ]; then
@@ -357,7 +360,7 @@ jobs:
             --extra mechanical-checks.md heuristics.md \
             > pr-context.md
 
-      - name: Run OpenCode review with fallbacks
+      - name: Run OpenCode review (parallel race)
         id: pass1
         if: steps.check.outputs.has_key == 'true'
         env:
@@ -372,69 +375,15 @@ jobs:
           # only as environment variables (never interpolated by GitHub) so
           # they cannot break out of the shell. The prompt itself is the
           # committed review-prompt.md, not an inline string.
-          mapfile -t FREE_MODELS < <(python3 -c "import json; print('\n'.join(json.load(open('review-model-chain.json'))['freeModels']))")
           is_free() {
-            local model="$1"
-            local entry
-            for entry in "${FREE_MODELS[@]}"; do
-              [ "$entry" = "$model" ] && return 0
-            done
-            return 1
+            [[ "$1" == *-free || "$1" == *:free ]]
           }
-          # One review attempt. Fails (so the loop tries the next model) when
-          # OpenCode falls back to the build agent or writes an empty file.
-          review_with_model() {
-            local model="$1"
-            local limit="$2"
-            local rc=0
-            set +e
-            timeout "$limit" opencode run \
-              --agent reviewer \
-              --model "$model" \
-              --file pr.diff \
-              --file pr-context.md \
-              --file .github/review/review-checklist.md \
-              --title "PR #$PR_NUMBER review" \
-              "$(cat .github/review/review-prompt.md)" < /dev/null > review-raw.md 2> review-stderr.txt
-            rc=$?
-            set -e
-            if grep -q 'Falling back to default agent' review-raw.md review-stderr.txt; then
-              echo "OpenCode fell back to the default agent for $model; discarding this attempt." >&2
-              return 1
-            fi
-            [ "$rc" -eq 0 ] && [ -s review-raw.md ]
-          }
-          mapfile -t attempts < <(python3 -c "import json; [print(x) for x in json.load(open('review-model-chain.json'))['attempts']]")
-          if [ "${#attempts[@]}" -eq 0 ]; then
-            echo "No review model can run with the configured keys" >&2
-            exit 1
-          fi
-          echo "Review attempt order:"
-          for attempt in "${attempts[@]}"; do
-            echo "  - $attempt"
-          done
-          success=false
-          chosen=""
-          first=true
-          for attempt in "${attempts[@]}"; do
-            limit=20m
-            if [ "$first" = true ]; then
-              limit=30m
-              first=false
-            fi
-            echo "Attempting review with $attempt (timeout $limit) ..."
-            if review_with_model "$attempt" "$limit"; then
-              echo "Review completed with $attempt."
-              success=true
-              chosen="$attempt"
-              break
-            fi
-            echo "Review with $attempt failed; trying the next fallback."
-          done
-          if [ "$success" != "true" ]; then
-            echo "OpenCode produced no output from any endpoint" >&2
-            exit 1
-          fi
+          .github/scripts/review-race.sh .github/review/review-prompt.md \
+            "PR #$PR_NUMBER review" attempt "$REVIEW_MODELS" \
+            pr.diff pr-context.md .github/review/review-checklist.md
+          chosen=$(cat attempt-winner.txt)
+          cp attempt-winner.md review-raw.md
+          cp attempt-winner.stderr.txt review-stderr.txt
           cp review-raw.md review.md
           free=false
           if is_free "$chosen"; then
@@ -488,14 +437,8 @@ jobs:
               echo "${key}=${value}" >> review-meta.env
             fi
           }
-          mapfile -t FREE_MODELS < <(python3 -c "import json; print('\n'.join(json.load(open('review-model-chain.json'))['freeModels']))")
           is_free() {
-            local model="$1"
-            local entry
-            for entry in "${FREE_MODELS[@]}"; do
-              [ "$entry" = "$model" ] && return 0
-            done
-            return 1
+            [[ "$1" == *-free || "$1" == *:free ]]
           }
           # Docs, images, lockfiles, and docs/* are not code. Workflow YAML,
           # apps/, supabase/, and .github/ still get pass 2.
@@ -514,47 +457,30 @@ jobs:
           if grep -qE '^### (CRITICAL|MAJOR):' pass1.md; then
             has_major=true
           fi
-          verify="$REVIEW_MODEL_VERIFY"
-          provider="${verify%%/*}"
-          key_ok=false
-          case "$provider" in
-            openrouter)
-              [ -n "${OPENROUTER_API_KEY:-}" ] && key_ok=true
-              ;;
-            opencode)
-              if [[ "$verify" == *-free ]] || python3 -c "import json,sys; sys.exit(0 if sys.argv[1] in json.load(open('.github/review/model-preferences.json')).get('preferredFree',[]) else 1)" "$verify"; then
-                key_ok=true
-              elif [ -n "${OPENCODE_ZEN_API_KEY:-}" ]; then
-                key_ok=true
-              fi
-              ;;
-          esac
-          if [ "$key_ok" != true ] || { [ "$code" != true ] && [ "$has_major" != true ]; }; then
-            echo "Skipping pass 2 (key_ok=$key_ok code=$code has_major=$has_major)."
+          pass1_model=$(sed -n 's/^PASS1_MODEL=//p' review-meta.env)
+          verify_models=""
+          IFS=',' read -r -a candidates <<< "$REVIEW_MODELS"
+          for candidate in "${candidates[@]}"; do
+            candidate="${candidate// /}"
+            if [ -n "$candidate" ] && [ "$candidate" != "$pass1_model" ]; then
+              verify_models="${verify_models:+$verify_models,}$candidate"
+            fi
+          done
+          if [ -z "$verify_models" ] || { [ "$code" != true ] && [ "$has_major" != true ]; }; then
+            echo "Skipping pass 2 (other models: ${verify_models:-none}, code=$code, has_major=$has_major)."
             cp pass1.md review.verified.md
             update_meta PASS2_MODEL skipped
             exit 0
           fi
-          set +e
-          timeout 20m opencode run \
-            --agent reviewer \
-            --model "$verify" \
-            --file pr.diff \
-            --file pr-context.md \
-            --file .github/review/review-checklist.md \
-            --file pass1.md \
-            --title "PR #$PR_NUMBER verify" \
-            "$(cat .github/review/verify-prompt.md)" < /dev/null > pass2-raw.md 2> pass2-stderr.txt
-          rc=$?
-          set -e
-          if grep -q 'Falling back to default agent' pass2-raw.md pass2-stderr.txt; then
-            echo "Pass 2 fell back to the default agent." >&2
+          if ! .github/scripts/review-race.sh .github/review/verify-prompt.md \
+            "PR #$PR_NUMBER verify" verify "$verify_models" \
+            pr.diff pr-context.md .github/review/review-checklist.md pass1.md; then
+            echo "Pass 2 produced no verification; keeping pass 1." >&2
             exit 1
           fi
-          if [ "$rc" -ne 0 ] || [ ! -s pass2-raw.md ]; then
-            echo "Pass 2 produced no output." >&2
-            exit 1
-          fi
+          verify=$(cat verify-winner.txt)
+          cp verify-winner.md pass2-raw.md
+          cp verify-winner.stderr.txt pass2-stderr.txt
           set +e
           python3 .github/scripts/verify-review-grounding.py \
             pass2-raw.md pass2.md --context pr-context.md --files pr-files.txt
@@ -586,6 +512,7 @@ jobs:
           sed -i "s|^POSTED_FREE=.*|POSTED_FREE=${pass1_free}|" review-meta.env
 
       - name: Scrub secrets from review output
+        id: scrub
         if: always() && steps.check.outputs.has_key == 'true'
         env:
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
@@ -601,6 +528,7 @@ jobs:
           # public PR comment. Raw pass files are scrubbed too, before the
           # artifact upload.
           python3 - <<'EOF'
+          import glob
           import os
           files = (
               "review.verified.md",
@@ -611,7 +539,16 @@ jobs:
               "pass2.md",
               "pass2-raw.md",
               "review-raw.md",
-              "review-model-chain.json",
+              "review-stderr.txt",
+              "pass2-stderr.txt",
+          )
+          files += tuple(
+              sorted(
+                  glob.glob("attempt-*.md")
+                  + glob.glob("attempt-*.stderr.txt")
+                  + glob.glob("verify-*.md")
+                  + glob.glob("verify-*.stderr.txt")
+              )
           )
           for path in files:
               if not os.path.exists(path):
@@ -644,7 +581,12 @@ jobs:
             pass2-raw.md
             review.verified.md
             heuristics.md
-            review-model-chain.json
+            review-stderr.txt
+            pass2-stderr.txt
+            attempt-*.md
+            attempt-*.stderr.txt
+            verify-*.md
+            verify-*.stderr.txt
 
       - name: Post review as a new PR comment
         if: steps.check.outputs.has_key == 'true' && steps.pass1.outcome == 'success'
