@@ -636,6 +636,60 @@ describe('PostComposer', () => {
     expect(screen.queryByText('composer.accountsBoundEmptyTitle')).not.toBeInTheDocument();
   });
 
+  it('drops a bound account that is no longer connected when submitting', async () => {
+    vi.mocked(publishExisting).mockResolvedValue({
+      mode: 'asap',
+      success: true,
+      replayed: false,
+      publishes: [
+        {
+          provider: 'youtube',
+          success: true,
+          results: [{ accountId: 'ch-1', success: true, videoUrl: 'https://youtu.be/x' }],
+        },
+      ],
+    });
+    const bound = emptyPersonaDefaultAccounts();
+    bound.youtube = ['ch-1', 'ch-2'];
+    vi.mocked(usePersonaListQuery).mockReturnValue({
+      data: [{ id: 'persona-1', name: 'Ana', createdAt: '2026-01-01T00:00:00Z', aiLabel: false, boundAccounts: bound }],
+      isLoading: false,
+    } as never);
+    render(<PostComposer />, { wrapper: wrapper() });
+    fireEvent.change(screen.getByLabelText('composer.personaLabel'), {
+      target: { value: 'persona-1' },
+    });
+    chooseVideo();
+    expect(screen.getByTestId('account-card-select')).toBeChecked();
+    fireEvent.click(screen.getByRole('radio', { name: 'composer.modeAsap' }));
+    fillText();
+    fillTags();
+    fireEvent.click(screen.getByTestId('composer-submit'));
+
+    await waitFor(() => expect(publishExisting).toHaveBeenCalledTimes(1));
+    const [plan] = vi.mocked(publishExisting).mock.calls[0];
+    expect(plan.accounts).toEqual({ youtube: ['ch-1'] });
+  });
+
+  it('shows the accounts error instead of submitting a persona bound only to disconnected accounts', () => {
+    const bound = emptyPersonaDefaultAccounts();
+    bound.youtube = ['ch-2'];
+    vi.mocked(usePersonaListQuery).mockReturnValue({
+      data: [{ id: 'persona-1', name: 'Ana', createdAt: '2026-01-01T00:00:00Z', aiLabel: false, boundAccounts: bound }],
+      isLoading: false,
+    } as never);
+    render(<PostComposer />, { wrapper: wrapper() });
+    fireEvent.change(screen.getByLabelText('composer.personaLabel'), {
+      target: { value: 'persona-1' },
+    });
+    chooseVideo();
+    fillText();
+    fireEvent.click(screen.getByTestId('composer-submit'));
+    expect(screen.getByText('composer.validationAccounts')).toBeInTheDocument();
+    expect(uploadMediaFile).not.toHaveBeenCalled();
+    expect(publishExisting).not.toHaveBeenCalled();
+  });
+
   it('shows the persona empty state when the chosen persona disappears from the list', () => {
     const bound = emptyPersonaDefaultAccounts();
     bound.youtube = ['ch-1'];

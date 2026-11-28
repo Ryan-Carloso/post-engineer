@@ -88,6 +88,20 @@ function pruneAccounts(
   return kept;
 }
 
+function pruneDisconnectedAccounts(
+  accounts: Partial<Record<SocialProvider, string[]>>,
+  connected: ReadonlySet<string>,
+): Partial<Record<SocialProvider, string[]>> {
+  const kept: Partial<Record<SocialProvider, string[]>> = {};
+  for (const provider of SOCIAL_PROVIDERS) {
+    const ids = accounts[provider];
+    if (ids === undefined) continue;
+    const visible = ids.filter((id) => connected.has(`${provider}\0${id}`));
+    if (visible.length > 0) kept[provider] = visible;
+  }
+  return kept;
+}
+
 function preselectedAccounts(
   bound: PersonaDefaultAccounts,
   kind: ComposerMediaKind | null,
@@ -124,6 +138,11 @@ export function PostComposer() {
   const accounts = useMemo<AccountOption[]>(
     () => (accountsQuery.data?.accounts ?? []).map(accountOption),
     [accountsQuery.data],
+  );
+
+  const connectedAccountIds = useMemo(
+    () => new Set(accounts.map((account) => `${account.provider}\0${account.id}`)),
+    [accounts],
   );
 
   const selectedPersona = personas.find((persona) => persona.id === draft.personaId);
@@ -280,11 +299,17 @@ export function PostComposer() {
           accounts:
             persona === undefined
               ? {}
-              : preselectedAccounts(persona.boundAccounts ?? emptyPersonaDefaultAccounts(), current.mediaKind),
+              : pruneDisconnectedAccounts(
+                preselectedAccounts(
+                  persona.boundAccounts ?? emptyPersonaDefaultAccounts(),
+                  current.mediaKind,
+                ),
+                connectedAccountIds,
+              ),
         };
       });
     },
-    [clearFeedback, personas],
+    [clearFeedback, connectedAccountIds, personas],
   );
 
   const issueFor = useCallback(
@@ -298,7 +323,11 @@ export function PostComposer() {
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     if (busy) return;
-    const submission = buildSubmission(draft, { now: new Date(), boundAccounts });
+    const submitDraft: ComposerDraft = {
+      ...draft,
+      accounts: pruneDisconnectedAccounts(draft.accounts, connectedAccountIds),
+    };
+    const submission = buildSubmission(submitDraft, { now: new Date(), boundAccounts });
     if (!submission.ok) {
       setIssues(submission.issues);
       setFailure(null);
