@@ -76,7 +76,7 @@ function LocaleSwitcher() {
             type="button"
             onClick={() => setLocale(option.value)}
             aria-pressed={isActive}
-            className={`flex-1 rounded-lg px-2 py-1 text-[11px] font-semibold transition-colors md:flex-none md:px-3 ${
+            className={`flex-1 rounded-lg px-2 py-1 text-[11px] leading-4 font-semibold transition-colors md:flex-none md:px-3 min-h-0 ${
               isActive
                 ? 'bg-card text-ink shadow-sm'
                 : 'text-muted-text hover:bg-card hover:text-ink'
