@@ -30,12 +30,11 @@ name: opencode-review
 #   nvidia/nemotron-3-ultra-550b-a55b:free, which completed a review in CI
 #   while the OpenCode free models hung. An attempt with no Verdict line is
 #   discarded.
-# - A second pass (REVIEW_MODEL_VERIFY, flint-40b-free; when flint won
-#   pass 1, the next REVIEW_MODELS entry instead, so a model never verifies
-#   its own review) confirms or refutes pass 1. It is skipped when
-#   the diff is docs/assets-only and pass 1 has no CRITICAL/MAJOR, or when
-#   its provider key is missing. If pass 2 fails or drops every finding, the
-#   comment keeps pass 1.
+# - A second pass races every REVIEW_MODELS entry except the pass-1 winner,
+#   so a model never verifies its own review, and confirms or refutes pass
+#   1. It is skipped when the diff is docs/assets-only and pass 1 has no
+#   CRITICAL/MAJOR. If pass 2 fails or drops every finding, the comment
+#   keeps pass 1. Both races run .github/scripts/review-race.sh.
 # - Findings are mechanically grounded: verify-review-grounding.py accepts a
 #   backticked Location, re-anchors line numbers from the verbatim quote, and
 #   exits 1 when every finding is unverified. Unmatched findings are still
@@ -57,7 +56,6 @@ name: opencode-review
 # 1. Optional: OPENROUTER_API_KEY (OpenRouter free/paid) and/or
 #    OPENCODE_ZEN_API_KEY (paid OpenCode Zen). Review still runs with no secrets.
 # 2. Optional repo variables: REVIEW_MODELS (comma-separated attempt list)
-#    and REVIEW_MODEL_VERIFY.
 
 on:
   pull_request:
@@ -70,7 +68,6 @@ concurrency:
 
 env:
   REVIEW_MODELS: ${{ vars.REVIEW_MODELS || 'opencode/nemotron-3.5-lightning-free,opencode/flint-40b-free,openrouter/nvidia/nemotron-3-ultra-550b-a55b:free' }}
-  REVIEW_MODEL_VERIFY: ${{ vars.REVIEW_MODEL_VERIFY || 'opencode/flint-40b-free' }}
 
 jobs:
   review:
@@ -189,7 +186,6 @@ jobs:
           groups = defaultdict(set)
           for spec in os.environ["REVIEW_MODELS"].split(","):
               add(groups, spec.strip())
-          add(groups, os.environ.get("REVIEW_MODEL_VERIFY", ""))
           providers = {}
           endpoints = {
               "openrouter": (
@@ -382,95 +378,12 @@ jobs:
           is_free() {
             [[ "$1" == *-free || "$1" == *:free ]]
           }
-          # Every model starts at once; the first attempt that ends with a
-          # Verdict line wins and the others are stopped. Free models hang
-          # for whole runs at random, so one hung model costs nothing while
-          # another answers. Each attempt gets its own OpenCode data and
-          # cache dirs so the concurrent sessions never share storage, and
-          # its own process group so stopping it also stops its children.
-          start_attempt() {
-            local i="$1"
-            local model="$2"
-            (
-              set +e
-              XDG_DATA_HOME="$RUNNER_TEMP/opencode-attempt-$i/data" \
-              XDG_CACHE_HOME="$RUNNER_TEMP/opencode-attempt-$i/cache" \
-              XDG_STATE_HOME="$RUNNER_TEMP/opencode-attempt-$i/state" \
-              setsid timeout 12m opencode run \
-                --agent reviewer \
-                --model "$model" \
-                --file pr.diff \
-                --file pr-context.md \
-                --file .github/review/review-checklist.md \
-                --title "PR #$PR_NUMBER review" \
-                "$(cat .github/review/review-prompt.md)" < /dev/null > "attempt-$i.md" 2> "attempt-$i.stderr.txt" &
-              echo $! > "attempt-$i.pid"
-              wait "$!"
-              echo $? > "attempt-$i.rc"
-            ) &
-          }
-          attempt_ok() {
-            local i="$1"
-            local model="$2"
-            local rc
-            rc=$(cat "attempt-$i.rc")
-            echo "$model: exit $rc, $(wc -c < "attempt-$i.md") bytes of review output" >&2
-            if grep -q 'Falling back to default agent' "attempt-$i.stderr.txt"; then
-              echo "OpenCode fell back to the default agent for $model; discarding this attempt." >&2
-              return 1
-            fi
-            [ "$rc" -eq 0 ] && [ -s "attempt-$i.md" ] || return 1
-            sed -i -E 's/^\*\*Verdict: (APPROVE|REQUEST_CHANGES)\*\*[[:space:]]*$/Verdict: \1/' "attempt-$i.md"
-            if ! grep -qE '^Verdict: (APPROVE|REQUEST_CHANGES)' "attempt-$i.md"; then
-              echo "$model wrote no Verdict line; discarding this attempt." >&2
-              return 1
-            fi
-          }
-          attempts=()
-          IFS=',' read -r -a requested <<< "$REVIEW_MODELS"
-          for model in "${requested[@]}"; do
-            model="${model// /}"
-            [ -n "$model" ] && attempts+=("$model")
-          done
-          if [ "${#attempts[@]}" -eq 0 ]; then
-            echo "No review model can run with the configured keys" >&2
-            exit 1
-          fi
-          for i in "${!attempts[@]}"; do
-            echo "Starting review with ${attempts[$i]} (timeout 12m) ..."
-            start_attempt "$i" "${attempts[$i]}"
-          done
-          chosen=""
-          chosen_index=""
-          declare -A done_attempts=()
-          while [ -z "$chosen" ] && [ "${#done_attempts[@]}" -lt "${#attempts[@]}" ]; do
-            sleep 5
-            for i in "${!attempts[@]}"; do
-              [ -n "${done_attempts[$i]:-}" ] && continue
-              [ -f "attempt-$i.rc" ] || continue
-              done_attempts[$i]=1
-              if attempt_ok "$i" "${attempts[$i]}"; then
-                chosen="${attempts[$i]}"
-                chosen_index="$i"
-                echo "Review completed with $chosen."
-                break
-              fi
-              echo "Review with ${attempts[$i]} failed." >&2
-              tail -c 2000 "attempt-$i.stderr.txt" >&2 || true
-            done
-          done
-          for i in "${!attempts[@]}"; do
-            if [ ! -f "attempt-$i.rc" ] && [ -f "attempt-$i.pid" ]; then
-              echo "Stopping ${attempts[$i]}." >&2
-              kill -- "-$(cat "attempt-$i.pid")" 2>/dev/null || true
-            fi
-          done
-          if [ -z "$chosen" ]; then
-            echo "OpenCode produced no review from any model" >&2
-            exit 1
-          fi
-          cp "attempt-$chosen_index.md" review-raw.md
-          cp "attempt-$chosen_index.stderr.txt" review-stderr.txt
+          .github/scripts/review-race.sh .github/review/review-prompt.md \
+            "PR #$PR_NUMBER review" attempt "$REVIEW_MODELS" \
+            pr.diff pr-context.md .github/review/review-checklist.md
+          chosen=$(cat attempt-winner.txt)
+          cp attempt-winner.md review-raw.md
+          cp attempt-winner.stderr.txt review-stderr.txt
           cp review-raw.md review.md
           free=false
           if is_free "$chosen"; then
@@ -544,65 +457,30 @@ jobs:
           if grep -qE '^### (CRITICAL|MAJOR):' pass1.md; then
             has_major=true
           fi
-          verify="$REVIEW_MODEL_VERIFY"
           pass1_model=$(sed -n 's/^PASS1_MODEL=//p' review-meta.env)
-          if [ "$verify" = "$pass1_model" ]; then
-            IFS=',' read -r -a candidates <<< "$REVIEW_MODELS"
-            for candidate in "${candidates[@]}"; do
-              candidate="${candidate// /}"
-              if [ -n "$candidate" ] && [ "$candidate" != "$pass1_model" ]; then
-                verify="$candidate"
-                break
-              fi
-            done
-            echo "Pass 1 came from $pass1_model; verifying with $verify instead."
-          fi
-          provider="${verify%%/*}"
-          key_ok=false
-          case "$provider" in
-            openrouter)
-              [ -n "${OPENROUTER_API_KEY:-}" ] && key_ok=true
-              ;;
-            opencode)
-              if [[ "$verify" == *-free ]]; then
-                key_ok=true
-              elif [ -n "${OPENCODE_ZEN_API_KEY:-}" ]; then
-                key_ok=true
-              fi
-              ;;
-          esac
-          if [ "$key_ok" != true ] || { [ "$code" != true ] && [ "$has_major" != true ]; }; then
-            echo "Skipping pass 2 (key_ok=$key_ok code=$code has_major=$has_major)."
+          verify_models=""
+          IFS=',' read -r -a candidates <<< "$REVIEW_MODELS"
+          for candidate in "${candidates[@]}"; do
+            candidate="${candidate// /}"
+            if [ -n "$candidate" ] && [ "$candidate" != "$pass1_model" ]; then
+              verify_models="${verify_models:+$verify_models,}$candidate"
+            fi
+          done
+          if [ -z "$verify_models" ] || { [ "$code" != true ] && [ "$has_major" != true ]; }; then
+            echo "Skipping pass 2 (other models: ${verify_models:-none}, code=$code, has_major=$has_major)."
             cp pass1.md review.verified.md
             update_meta PASS2_MODEL skipped
             exit 0
           fi
-          set +e
-          timeout 12m opencode run \
-            --agent reviewer \
-            --model "$verify" \
-            --file pr.diff \
-            --file pr-context.md \
-            --file .github/review/review-checklist.md \
-            --file pass1.md \
-            --title "PR #$PR_NUMBER verify" \
-            "$(cat .github/review/verify-prompt.md)" < /dev/null > pass2-raw.md 2> pass2-stderr.txt
-          rc=$?
-          set -e
-          if grep -q 'Falling back to default agent' pass2-stderr.txt; then
-            echo "Pass 2 fell back to the default agent." >&2
+          if ! .github/scripts/review-race.sh .github/review/verify-prompt.md \
+            "PR #$PR_NUMBER verify" verify "$verify_models" \
+            pr.diff pr-context.md .github/review/review-checklist.md pass1.md; then
+            echo "Pass 2 produced no verification; keeping pass 1." >&2
             exit 1
           fi
-          if [ "$rc" -ne 0 ] || [ ! -s pass2-raw.md ]; then
-            echo "Pass 2 produced no output (exit $rc)." >&2
-            tail -c 2000 pass2-stderr.txt >&2 || true
-            exit 1
-          fi
-          sed -i -E 's/^\*\*Verdict: (APPROVE|REQUEST_CHANGES)\*\*[[:space:]]*$/Verdict: \1/' pass2-raw.md
-          if ! grep -qE '^Verdict: (APPROVE|REQUEST_CHANGES)' pass2-raw.md; then
-            echo "Pass 2 wrote no Verdict line; keeping pass 1." >&2
-            exit 1
-          fi
+          verify=$(cat verify-winner.txt)
+          cp verify-winner.md pass2-raw.md
+          cp verify-winner.stderr.txt pass2-stderr.txt
           set +e
           python3 .github/scripts/verify-review-grounding.py \
             pass2-raw.md pass2.md --context pr-context.md --files pr-files.txt
@@ -664,7 +542,14 @@ jobs:
               "review-stderr.txt",
               "pass2-stderr.txt",
           )
-          files += tuple(sorted(glob.glob("attempt-*.md") + glob.glob("attempt-*.stderr.txt")))
+          files += tuple(
+              sorted(
+                  glob.glob("attempt-*.md")
+                  + glob.glob("attempt-*.stderr.txt")
+                  + glob.glob("verify-*.md")
+                  + glob.glob("verify-*.stderr.txt")
+              )
+          )
           for path in files:
               if not os.path.exists(path):
                   continue
@@ -700,6 +585,8 @@ jobs:
             pass2-stderr.txt
             attempt-*.md
             attempt-*.stderr.txt
+            verify-*.md
+            verify-*.stderr.txt
 
       - name: Post review as a new PR comment
         if: steps.check.outputs.has_key == 'true' && steps.pass1.outcome == 'success'

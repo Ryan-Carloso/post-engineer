@@ -25,6 +25,7 @@ from pathlib import Path
 import yaml
 
 WORKFLOW = Path(__file__).resolve().parent.parent / "workflows" / "opencode-review.yml"
+RACE_SCRIPT = Path(__file__).resolve().parent / "review-race.sh"
 
 FAILURES: list[str] = []
 
@@ -38,6 +39,7 @@ def check(name: str, condition: bool, detail: str = "") -> None:
 
 def main() -> int:
     text = WORKFLOW.read_text()
+    race = RACE_SCRIPT.read_text()
     doc = yaml.safe_load(text)
 
     triggers = doc.get(True, {}).get("pull_request", {}).get("types", [])
@@ -64,7 +66,15 @@ def main() -> int:
         "installs from official sst/opencode releases",
         "github.com/sst/opencode/releases/download" in text,
     )
-    check("uses `opencode run`", "opencode run" in text)
+    check("the race script uses `opencode run`", "opencode run" in race)
+    check(
+        "every opencode run goes through the race script",
+        "opencode run" not in "\n".join(
+            line for line in text.splitlines() if not line.lstrip().startswith("#")
+        )
+        and text.count(".github/scripts/review-race.sh .github/review/") == 2,
+        "pass 1 and pass 2 must both race, a single hung model stalls the job",
+    )
     check(
         "does not use a `--standalone` flag",
         "opencode --standalone run" not in text and "opencode run --standalone" not in text,
@@ -103,13 +113,10 @@ def main() -> int:
         f"chain={chain}",
     )
     check(
-        "REVIEW_MODEL_VERIFY default is flint-40b-free",
-        "REVIEW_MODEL_VERIFY: ${{ vars.REVIEW_MODEL_VERIFY || 'opencode/flint-40b-free' }}" in text,
-    )
-    check(
-        "pass 2 never verifies with the model that won pass 1",
-        'if [ "$verify" = "$pass1_model" ]; then' in text
-        and '[ "$candidate" != "$pass1_model" ]' in text,
+        "pass 2 races every other REVIEW_MODELS entry, never the pass-1 winner",
+        '[ "$candidate" != "$pass1_model" ]' in text
+        and '"PR #$PR_NUMBER verify" verify "$verify_models"' in text
+        and "REVIEW_MODEL_VERIFY" not in text,
     )
 
     check(
@@ -134,7 +141,7 @@ def main() -> int:
     )
     check(
         "pass 1 reads attempts from REVIEW_MODELS",
-        'read -r -a requested <<< "$REVIEW_MODELS"' in text,
+        '"PR #$PR_NUMBER review" attempt "$REVIEW_MODELS"' in text,
     )
     check(
         "free-model banner matches free ids",
@@ -142,28 +149,28 @@ def main() -> int:
     )
     check(
         "opencode run closes stdin",
-        "< /dev/null" in text,
+        "< /dev/null" in race,
         "non-interactive review must not read from stdin",
     )
     check(
-        "pass 1 starts every model in parallel",
-        'for i in "${!attempts[@]}"; do' in text
-        and 'start_attempt "$i" "${attempts[$i]}"' in text
-        and text.find('start_attempt "$i"') < text.find("while [ -z \"$chosen\" ]"),
+        "the race starts every model in parallel",
+        'for i in "${!attempts[@]}"; do' in race
+        and 'start_attempt "$i" "${attempts[$i]}"' in race
+        and race.find('start_attempt "$i"') < race.find("while [ -z \"$chosen\" ]"),
         "a hung free model must not delay the others",
     )
     check(
-        "pass 1 stops the losing attempts",
-        'kill -- "-$(cat "attempt-$i.pid")"' in text
-        and "setsid timeout 12m opencode run" in text,
+        "the race stops the losing attempts",
+        'kill -- "-$(cat "$prefix-$i.pid")"' in race
+        and "setsid timeout 12m opencode run" in race,
     )
     check(
         "parallel attempts use separate OpenCode data dirs",
-        'XDG_DATA_HOME="$RUNNER_TEMP/opencode-attempt-$i/data"' in text,
+        'XDG_DATA_HOME="$work_root/opencode-$prefix-$i/data"' in race,
     )
     check(
-        "pass 1 attempt timeout is 12m",
-        text.count("timeout 12m opencode run") == 2,
+        "each race attempt is capped at 12m",
+        race.count("timeout 12m opencode run") == 1,
         "a working review finishes in under 10 minutes; a hung model must not hold the job longer",
     )
     attempt_minutes = 12
@@ -211,14 +218,6 @@ def main() -> int:
     check(
         "APPROVE requires zero ### headings",
         "zero `###` headings" in prompt and "No material findings." in prompt,
-    )
-    check(
-        "pass 2 OpenCode free needs no paid key",
-        '[[ "$verify" == *-free ]]' in text,
-    )
-    check(
-        "pass 2 paid OpenCode still needs zen key",
-        "OPENCODE_ZEN_API_KEY" in text[text.index("key_ok=false") :],
     )
     verify_prompt = (prompt_path.parent / "verify-prompt.md").read_text()
     check(
@@ -282,21 +281,19 @@ def main() -> int:
     referenced_ids = set(re.findall(r"steps\.([A-Za-z0-9_-]+)\.", text))
     check(
         "the default-agent fallback is detected from stderr only",
-        "grep -q 'Falling back to default agent' \"attempt-$i.stderr.txt\"; then" in text
-        and "grep -q 'Falling back to default agent' pass2-stderr.txt; then" in text
-        and "Falling back to default agent' \"attempt-$i.md\"" not in text
-        and "Falling back to default agent' pass2-raw.md" not in text,
+        "grep -q 'Falling back to default agent' \"$prefix-$i.stderr.txt\"; then" in race
+        and "Falling back to default agent' \"$prefix-$i.md\"" not in race,
         "a review that quotes this workflow contains the phrase",
     )
     check(
-        "a bold Verdict line is normalized in both passes",
-        text.count("s/^\\*\\*Verdict: (APPROVE|REQUEST_CHANGES)\\*\\*[[:space:]]*$/Verdict: \\1/") == 2,
+        "a bold Verdict line is normalized before the Verdict check",
+        -1
+        < race.find("s/^\\*\\*Verdict: (APPROVE|REQUEST_CHANGES)\\*\\*[[:space:]]*$/Verdict: \\1/")
+        < race.find("grep -qE '^Verdict: (APPROVE|REQUEST_CHANGES)'"),
     )
     check(
-        "an attempt without a Verdict line fails in both passes",
-        text.count("grep -qE '^Verdict: (APPROVE|REQUEST_CHANGES)'") == 2
-        and '"attempt-$i.md"; then' in text
-        and "pass2-raw.md; then" in text,
+        "an attempt without a Verdict line fails",
+        "if ! grep -qE '^Verdict: (APPROVE|REQUEST_CHANGES)' \"$prefix-$i.md\"; then" in race,
         "narration with no verdict must not be posted as a review",
     )
     check(
@@ -399,7 +396,7 @@ def main() -> int:
         "the review-workflows job must run the script unit tests",
     )
 
-    check("review runs with the reviewer agent", "--agent reviewer" in text)
+    check("review runs with the reviewer agent", "--agent reviewer" in race)
     check(
         "project config and root AGENTS.md are not loaded",
         "OPENCODE_DISABLE_PROJECT_CONFIG=1" in text,
