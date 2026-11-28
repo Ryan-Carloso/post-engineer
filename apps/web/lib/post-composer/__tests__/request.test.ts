@@ -390,6 +390,51 @@ describe('publishExisting', () => {
     expect('warnings' in result).toBe(false);
   });
 
+  it('returns the held variant for an approval-required ASAP response', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          success: true,
+          mode: 'asap',
+          approvalRequired: true,
+          slot: { id: 'slot-1', slotAt: '2026-12-02T20:00:00Z', status: 'awaiting_approval' },
+        }),
+      ),
+    );
+    const result = await publishExisting(PLAN, { kind: 'upload', uploadId: 'upload-1' }, 'key-1');
+    expect(result).toEqual({
+      mode: 'asap',
+      held: true,
+      approvalRequired: true,
+      replayed: false,
+      slot: { id: 'slot-1', slotAt: '2026-12-02T20:00:00Z', status: 'awaiting_approval' },
+    });
+  });
+
+  it('returns the replayed-approved variant for an approved hold', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          success: true,
+          mode: 'asap',
+          approvalRequired: false,
+          replayed: true,
+          slot: { id: 'slot-1', slotAt: '2026-12-02T20:00:00Z', status: 'ready' },
+        }),
+      ),
+    );
+    const result = await publishExisting(PLAN, { kind: 'upload', uploadId: 'upload-1' }, 'key-1');
+    expect(result).toEqual({
+      mode: 'asap',
+      held: false,
+      approvalRequired: false,
+      replayed: true,
+      slot: { id: 'slot-1', slotAt: '2026-12-02T20:00:00Z', status: 'ready' },
+    });
+  });
+
   it('raises a publish error carrying the server field and code', async () => {
     vi.stubGlobal(
       'fetch',

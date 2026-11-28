@@ -38,8 +38,28 @@ interface ScheduledSlotSummary {
   status: string;
 }
 
+interface HeldSlotSummary {
+  id: string;
+  slotAt: string;
+  status: string;
+}
+
 export type PublishResult =
   | { mode: 'asap'; success: boolean; replayed: boolean; publishes: ProviderPublish[] }
+  | {
+      mode: 'asap';
+      held: true;
+      approvalRequired: true;
+      replayed: boolean;
+      slot: HeldSlotSummary;
+    }
+  | {
+      mode: 'asap';
+      held: false;
+      approvalRequired: false;
+      replayed: boolean;
+      slot: HeldSlotSummary;
+    }
   | {
       mode: 'scheduled';
       replayed: boolean;
@@ -278,6 +298,15 @@ function parseSlots(value: unknown): ScheduledSlotSummary[] {
   return slots;
 }
 
+function parseHeldSlot(value: unknown): HeldSlotSummary | null {
+  if (!isRecord(value) || typeof value.id !== 'string' || typeof value.slotAt !== 'string') return null;
+  return {
+    id: value.id,
+    slotAt: value.slotAt,
+    status: optionalString(value, 'status') ?? '',
+  };
+}
+
 export async function publishExisting(
   plan: SubmissionPlan,
   media: UploadedMedia,
@@ -319,6 +348,25 @@ export async function publishExisting(
   }
   if (payload.mode !== 'asap') {
     throw new ComposerRequestError('publish', response.status, null, null, null);
+  }
+  const heldSlot = parseHeldSlot(payload.slot);
+  if (heldSlot !== null && (payload.approvalRequired === true || payload.publishes === undefined)) {
+    if (payload.approvalRequired === true) {
+      return {
+        mode: 'asap',
+        held: true,
+        approvalRequired: true,
+        replayed: payload.replayed === true,
+        slot: heldSlot,
+      };
+    }
+    return {
+      mode: 'asap',
+      held: false,
+      approvalRequired: false,
+      replayed: payload.replayed === true,
+      slot: heldSlot,
+    };
   }
   return {
     mode: 'asap',
