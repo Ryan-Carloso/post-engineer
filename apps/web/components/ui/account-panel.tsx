@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { useSessionQuery } from '@/lib/api';
+import { useMounted } from '@/hooks/use-mounted';
 import { useI18n } from '@/lib/i18n/provider';
 import { LOCALES } from '@/lib/i18n';
 import VersionBadge from '@/components/ui/version-badge';
@@ -294,6 +295,7 @@ export function AccountPanel({
 }) {
   const { t } = useI18n();
   const sessionQuery = useSessionQuery();
+  const mounted = useMounted();
   const user = sessionQuery.data;
   const { avatarUrl, userName } = getUserDisplay(user?.user_metadata);
 
@@ -309,7 +311,7 @@ export function AccountPanel({
           <VersionBadge />
         </div>
       )}
-      {user && (
+      {user && mounted && (
         <div className={compact ? 'space-y-1.5 pb-0.5' : 'space-y-3 pb-0.5'}>
           <Link
             href="/account"

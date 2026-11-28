@@ -15,7 +15,12 @@ describe('route loading boundaries', () => {
     const { container } = render(<MainLoading />);
     const skeleton = container.querySelector('[data-page-loading-skeleton]');
     expect(skeleton).toHaveAttribute('aria-busy', 'true');
-    expect(container.querySelectorAll('[data-skeleton-card]')).toHaveLength(6);
+    expect(skeleton).toHaveAttribute('aria-live', 'polite');
+    const cards = container.querySelectorAll('[data-skeleton-card]');
+    expect(cards).toHaveLength(6);
+    for (const card of cards) {
+      expect(card).toHaveClass('skeleton-shimmer');
+    }
   });
 
   it('renders the calendar skeleton for the posts route', () => {

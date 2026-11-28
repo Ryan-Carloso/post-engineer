@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { useState } from 'react';
 import { Check, Clock, Film, Image as ImageIcon, TriangleAlert, X } from 'lucide-react';
 import { useApprovalQueue, isSlotExpired } from '@/lib/approval-queue';
+import { useMounted } from '@/hooks/use-mounted';
 import { useApproveSlotMutation, useRejectSlotMutation } from '@/lib/api-approval';
 import { type ScheduledSlot } from '@/lib/api';
 import { useI18n } from '@/lib/i18n/provider';
@@ -196,8 +197,9 @@ function ApprovalQueueRow({ slot, joins }: { slot: ScheduledSlot; joins: PostJoi
 
 export function ApprovalQueue({ joins }: { joins: PostJoins }) {
   const { t } = useI18n();
+  const mounted = useMounted();
   const queue = useApprovalQueue();
-  if (queue.isLoading || queue.isError || queue.count === 0) return null;
+  if (!mounted || queue.isLoading || queue.isError || queue.count === 0) return null;
   return (
     <section data-testid="approval-queue" aria-label={t('posts.approvalTitle')} className="mt-4 sm:mt-6">
       <div className="flex items-center gap-2">
