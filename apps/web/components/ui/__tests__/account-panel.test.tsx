@@ -1,6 +1,8 @@
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { renderToString } from 'react-dom/server';
+import { hydrateRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
@@ -331,5 +333,44 @@ describe('AccountPanel', () => {
     expect(screen.queryByTestId('profile-user-link')).not.toBeInTheDocument();
     expect(screen.queryByTitle('nav.signOut')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'PT' })).toBeInTheDocument();
+  });
+
+  it('hydrates without a mismatch when the session resolves after the server render', async () => {
+    vi.mocked(useSessionQuery).mockReturnValue({
+      data: null,
+      isLoading: true,
+    } as never);
+    const ServerWrapper = createWrapper();
+    const container = document.createElement('div');
+    container.innerHTML = renderToString(
+      <ServerWrapper>
+        <AccountPanel />
+      </ServerWrapper>,
+    );
+    document.body.appendChild(container);
+    vi.mocked(useSessionQuery).mockReturnValue({
+      data: SESSION_USER,
+      isLoading: false,
+    } as never);
+    const ClientWrapper = createWrapper();
+    const recoverableErrors: unknown[] = [];
+    let root: { unmount: () => void } | undefined;
+    try {
+      root = await act(async () =>
+        hydrateRoot(
+          container,
+          <ClientWrapper>
+            <AccountPanel />
+          </ClientWrapper>,
+          { onRecoverableError: (error) => recoverableErrors.push(error) },
+        ),
+      );
+      expect(recoverableErrors).toEqual([]);
+      expect(container.querySelector('[data-testid="profile-user-link"]')).not.toBeNull();
+    } finally {
+      const mounted = root;
+      if (mounted !== undefined) act(() => mounted.unmount());
+      container.remove();
+    }
   });
 });

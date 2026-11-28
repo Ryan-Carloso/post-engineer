@@ -1,6 +1,8 @@
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
+import { renderToString } from 'react-dom/server';
+import { hydrateRoot } from 'react-dom/client';
 import userEvent from '@testing-library/user-event';
 import type { ScheduledSlot } from '@/lib/api';
 
@@ -146,6 +148,33 @@ describe('ApprovalQueue', () => {
     renderQueue();
 
     expect(screen.queryByTestId('approval-queue')).not.toBeInTheDocument();
+  });
+
+  it('hydrates without a mismatch when the queue resolves after the server render', async () => {
+    queueState.isLoading = true;
+    queueState.slots = [];
+    queueState.count = 0;
+    const container = document.createElement('div');
+    container.innerHTML = renderToString(<ApprovalQueue joins={JOINS} />);
+    document.body.appendChild(container);
+    queueState.isLoading = false;
+    queueState.slots = [slot({ description: 'Edited outside.' })];
+    queueState.count = null;
+    const recoverableErrors: unknown[] = [];
+    let root: { unmount: () => void } | undefined;
+    try {
+      root = await act(async () =>
+        hydrateRoot(container, <ApprovalQueue joins={JOINS} />, {
+          onRecoverableError: (error) => recoverableErrors.push(error),
+        }),
+      );
+      expect(recoverableErrors).toEqual([]);
+      expect(container.querySelector('[data-testid="approval-queue"]')).not.toBeNull();
+    } finally {
+      const mounted = root;
+      if (mounted !== undefined) act(() => mounted.unmount());
+      container.remove();
+    }
   });
 
   it('shows the title, description, accounts, slot time and the decision buttons', () => {
