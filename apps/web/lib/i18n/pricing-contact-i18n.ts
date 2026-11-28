@@ -5,6 +5,7 @@ export const pricingContactStrings = {
       pricingContactText:
         'Send a message on WhatsApp or by email and tell us what you need. We set up your access manually while we are in beta.',
       pricingWhatsappCta: 'Message us on WhatsApp',
+      pricingDiscordCta: 'Join the Discord',
       pricingEmailCta: 'Email us',
       pricingGithubTitle: 'Prefer to self-host?',
       pricingGithubText:
@@ -20,6 +21,7 @@ export const pricingContactStrings = {
       pricingContactText:
         'Manda mensagem no WhatsApp ou por e-mail e conta o que você precisa. A gente libera seu acesso manualmente enquanto estamos em beta.',
       pricingWhatsappCta: 'Chamar no WhatsApp',
+      pricingDiscordCta: 'Entrar no Discord',
       pricingEmailCta: 'Enviar e-mail',
       pricingGithubTitle: 'Prefere rodar você mesmo?',
       pricingGithubText:

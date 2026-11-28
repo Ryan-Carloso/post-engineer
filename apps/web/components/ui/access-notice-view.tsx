@@ -7,12 +7,13 @@ import { AlertIcon } from '@/lib/ui';
 export interface AccessNoticeViewProps {
   status: AccessStatus;
   contactUrl: string;
+  discordUrl: string;
 }
 
 const CONTACT_LINK_CLASS =
   'inline-flex items-center justify-center rounded-xl bg-brand px-4 py-2 text-sm font-bold text-white hover:bg-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand';
 
-export function AccessNoticeView({ status, contactUrl }: AccessNoticeViewProps) {
+export function AccessNoticeView({ status, contactUrl, discordUrl }: AccessNoticeViewProps) {
   const { t } = useI18n();
   if (!status.active) {
     const title = status.reason === 'trial' ? t('trial.expiredTitle') : t('access.inactiveTitle');
@@ -30,9 +31,14 @@ export function AccessNoticeView({ status, contactUrl }: AccessNoticeViewProps) 
           <div className="min-w-0 flex-1">
             <h2 className="text-base font-semibold text-ink">{title}</h2>
             <p className="mt-1 text-sm leading-6 text-muted-text">{body}</p>
-            <a href={contactUrl} target="_blank" rel="noreferrer" data-testid="access-contact-link" className={`mt-4 ${CONTACT_LINK_CLASS}`}>
-              {t('access.contactCta')} ↗
-            </a>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <a href={contactUrl} target="_blank" rel="noreferrer" data-testid="access-contact-link" className={CONTACT_LINK_CLASS}>
+                {t('access.contactCta')} ↗
+              </a>
+              <a href={discordUrl} target="_blank" rel="noreferrer" data-testid="access-discord-link" className={CONTACT_LINK_CLASS}>
+                {t('access.discordCta')} ↗
+              </a>
+            </div>
           </div>
         </div>
       </section>
@@ -49,9 +55,14 @@ export function AccessNoticeView({ status, contactUrl }: AccessNoticeViewProps) 
       <p className="min-w-0 text-ink">
         <span className="font-semibold">{headline}</span> <span className="text-muted-text">{t('trial.bannerHint')}</span>
       </p>
-      <a href={contactUrl} target="_blank" rel="noreferrer" data-testid="access-contact-link" className={`shrink-0 ${CONTACT_LINK_CLASS}`}>
-        {t('trial.contactCta')} ↗
-      </a>
+      <div className="flex shrink-0 flex-wrap gap-2">
+        <a href={contactUrl} target="_blank" rel="noreferrer" data-testid="access-contact-link" className={CONTACT_LINK_CLASS}>
+          {t('trial.contactCta')} ↗
+        </a>
+        <a href={discordUrl} target="_blank" rel="noreferrer" data-testid="access-discord-link" className={CONTACT_LINK_CLASS}>
+          {t('trial.discordCta')} ↗
+        </a>
+      </div>
     </div>
   );
 }

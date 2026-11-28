@@ -115,8 +115,6 @@ import {
 import { ONBOARDING_WIZARD_SEEN_KEY, ONBOARDING_WIZARD_SEEN_METADATA_KEY } from '@/lib/onboarding-wizard-keys';
 import { notifyIfSessionExpired } from '@/lib/session-expiry';
 
-const WHATSAPP_ENV = 'NEXT_PUBLIC_WHATSAPP_NUMBER';
-const TEST_NUMBER = '15551234567';
 const PROVIDERS = ['YouTube', 'Instagram', 'Bluesky', 'LinkedIn', 'Threads', 'Facebook', 'Pinterest', 'Fanvue', '3Speak', 'Rumble'];
 
 function renderWizard() {
@@ -136,7 +134,6 @@ describe('OnboardingWizard first visit', () => {
   beforeEach(() => {
     window.localStorage.clear();
     useOnboardingWizardStore.setState({ isOpen: false, step: 1 });
-    vi.stubEnv(WHATSAPP_ENV, TEST_NUMBER);
     mockGetUser.mockReset();
     mockUpdateUser.mockReset();
     accountMetadata({ name: 'A' });
@@ -333,7 +330,6 @@ describe('OnboardingWizard step 2', () => {
   beforeEach(() => {
     window.localStorage.clear();
     openAtStep(2);
-    vi.stubEnv(WHATSAPP_ENV, TEST_NUMBER);
     installStep2Mocks();
     vi.mocked(notifyIfSessionExpired).mockClear();
   });
@@ -620,7 +616,6 @@ describe('OnboardingWizard step 3', () => {
   beforeEach(() => {
     window.localStorage.clear();
     openAtStep(3);
-    vi.stubEnv(WHATSAPP_ENV, TEST_NUMBER);
   });
 
   afterEach(() => {
@@ -646,22 +641,27 @@ describe('OnboardingWizard step 4', () => {
     vi.unstubAllEnvs();
   });
 
-  it('links Talk to us to WhatsApp and email', async () => {
-    vi.stubEnv(WHATSAPP_ENV, TEST_NUMBER);
+  it('links Talk to us to WhatsApp, Discord and email', async () => {
     renderWizard();
     await screen.findByRole('dialog');
     const wa = screen.getByTestId('onboarding-whatsapp-cta');
-    expect(wa).toHaveAttribute('href', expect.stringContaining(`https://wa.me/${TEST_NUMBER}`));
+    expect(wa).toHaveAttribute('href', expect.stringContaining(`https://wa.me/351962248268`));
     expect(wa.getAttribute('href')).toContain(encodeURIComponent("Hi! I'd like my 3 free Post Engineer tokens."));
+    expect(screen.getByTestId('onboarding-discord-cta')).toHaveAttribute('href', 'https://discord.gg/ukmCXMCDJ');
     expect(screen.getByTestId('onboarding-email-cta')).toHaveAttribute('href', 'mailto:madebyryandev@gmail.com');
   });
+});
 
-  it('hides the WhatsApp button when the support number is not configured', async () => {
-    vi.stubEnv(WHATSAPP_ENV, undefined);
+describe('OnboardingWizard step 4 contact links', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    openAtStep(4);
+  });
+
+  it('always renders the WhatsApp button with the built-in number', async () => {
     renderWizard();
     await screen.findByRole('dialog');
-    expect(screen.queryByTestId('onboarding-whatsapp-cta')).not.toBeInTheDocument();
-    expect(screen.getByTestId('onboarding-email-cta')).toHaveAttribute('href', 'mailto:madebyryandev@gmail.com');
+    expect(screen.getByTestId('onboarding-whatsapp-cta').getAttribute('href')).toMatch(/^https:\/\/wa\.me\/351962248268\?text=/);
   });
 });
 
@@ -669,7 +669,6 @@ describe('OnboardingWizardButton', () => {
   beforeEach(() => {
     window.localStorage.clear();
     useOnboardingWizardStore.setState({ isOpen: false, step: 1 });
-    vi.stubEnv(WHATSAPP_ENV, TEST_NUMBER);
   });
 
   afterEach(() => {
